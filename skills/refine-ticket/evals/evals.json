@@ -1,0 +1,26 @@
+{
+  "skill_name": "refine-ticket",
+  "evals": [
+    {
+      "id": 0,
+      "name": "premisa-falsa-mysql",
+      "prompt": "actualicemos el ticket que te paso para resolver dudas o elegir soluciones y que cumpla con el template de /to-tickets. Entrevistame si tienes dudas o algo no es claro, no asumas. Explora el codigo y analiza el ticket.",
+      "expected_output": "El cuerpo reescrito con el template, y la mecanica del ticket CORREGIDA: la relectura plana si ve la fila cuando el UPDATE cambia valores; el 500 solo ocurre cuando el rearme es no-op. La correccion se apoya en una verificacion real (repro contra MySQL, o la documentacion de InnoDB citada con precision), no en razonamiento a secas.",
+      "files": ["fixtures/359-original.md"]
+    },
+    {
+      "id": 1,
+      "name": "decision-abierta-producto",
+      "prompt": "el #354 esta sin refinar, actualizalo con el formato de /to-tickets y que quede listo para que un agente lo tome",
+      "expected_output": "Cuerpo con las cuatro secciones del template. La decision abierta real (que pasa con fecha_enviado cuando el reenvio pisa Destinatarios) queda identificada y planteada al usuario, no resuelta a escondidas. Las afirmaciones sobre el UPDATE de Rearmar se comprueban contra el codigo actual.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "frontend-sin-base-de-datos",
+      "prompt": "pasame el issue #350 al template de /to-tickets, revisando antes si lo que dice sigue siendo cierto",
+      "expected_output": "Verificacion hecha leyendo el codigo React (los dos componentes citados) para confirmar si la validacion sigue corriendo en cada tecla y si las lineas citadas siguen ahi; cuerpo reescrito conservando el analisis de impacto, con ACs de comportamiento observable.",
+      "files": []
+    }
+  ]
+}
