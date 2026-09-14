@@ -7,6 +7,25 @@ machine — Claude Code, Codex, Cursor, Gemini CLI, opencode, and anything else 
 Skills are **linked, not copied**. One clone is the source of truth: edit a skill here and every
 agent on that machine sees the change immediately. Updating is `git pull`.
 
+## Prerequisites
+
+Some skills here build on [Matt Pocock's skills](https://github.com/mattpocock/skills) — install
+them first, or those references dangle:
+
+| Skill | Uses |
+| --- | --- |
+| `implement-ticket` | `/tdd` (`/mattpocock-skills:tdd`) |
+| `refine-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`) |
+
+In Claude Code:
+
+```
+/plugin install mattpocock-skills@claude-plugins-official
+```
+
+`herdr-implement-spec` also needs the [herdr](https://github.com/herdrdev/herdr) CLI and an
+authenticated `gh`.
+
 ## Install
 
 ```sh
