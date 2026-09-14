@@ -74,6 +74,14 @@ echo "== unknown agent via --target =="
 run install --target "$FAKE/other-agent/skills" >/dev/null
 expect "--target <path> links an unknown agent" yes links_to "$FAKE/other-agent/skills/e2e" "$CLONE/skills/e2e"
 
+echo "== adopt --dry-run changes nothing =="
+mkdir -p "$FAKE/.claude/skills/adoptable"
+printf -- '---\nname: adoptable\ndescription: "A skill waiting to be adopted into the clone"\n---\n' > "$FAKE/.claude/skills/adoptable/SKILL.md"
+expect "adopt --dry-run succeeds"                 yes run adopt adoptable --target claude --dry-run
+expect "adopt --dry-run leaves the skill in place" yes test -f "$FAKE/.claude/skills/adoptable/SKILL.md"
+expect "adopt --dry-run adds nothing to the clone" no  test -e "$CLONE/skills/adoptable"
+rm -rf "$FAKE/.claude/skills/adoptable"
+
 echo "== status =="
 run status > "$FAKE/status.txt" 2>&1
 expect "status reports linked skills" yes grep -q linked "$FAKE/status.txt"

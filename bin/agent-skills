@@ -358,6 +358,12 @@ do_adopt() {
     ok "adopted $_name from $_found"
   done
 
+  # a dry run moved nothing, so there is nothing in the clone to link yet
+  if [ -n "$OPT_DRY" ]; then
+    say "  would link$ARGS into every selected target"
+    return 0
+  fi
+
   # link the newly adopted skills everywhere, then let the user read the diff
   do_install
   say ""
