@@ -37,6 +37,11 @@ A real directory sitting in a target where a link belongs — an older copy of a
 by some other means. Shadows hide the clone's version and must be resolved explicitly.
 _Avoid_: Conflict, duplicate
 
+**Adopt**:
+To move a skill that exists only as a real directory in a target into the clone, then link it
+back — turning what would become a shadow into a link.
+_Avoid_: Import, migrate
+
 **Prune**:
 To remove links in targets that resolve into the clone but no longer name a skill that exists
 there — the residue of a skill deleted or renamed upstream.
