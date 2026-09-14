@@ -16,4 +16,3 @@ description: "Implements the work of a ticket or issue"
 # Commit changes
 
 - Commmit changes with clear and meaningful message including issue
-- Create PR/MR with details of work done and reference the ticket number so it closes it when merged "Closes #<ISSUE_NUMBER>".
