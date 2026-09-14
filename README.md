@@ -34,6 +34,7 @@ behind the one you edit.
 | Skill | What it does |
 | --- | --- |
 | [`e2e`](skills/e2e/SKILL.md) | Bring up the local stack and end-to-end test a change — web app, HTTP API, CLI, or desktop app — driven by the project's root E2E.md. Use it when you need to verify that something actually works, not just that it compiles or that the unit tests pass. |
+| [`herdr-implement-spec`](skills/herdr-implement-spec/SKILL.md) | Implements the issues linked to the PRD/SPEC orchestating new claude instances using herdr |
 | [`implement-ticket`](skills/implement-ticket/SKILL.md) | Implements the work of a ticket or issue |
 | [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrite an existing ticket in place so it matches the /to-tickets format, falsifying its technical claims against the real code before trusting any of them. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands you a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
 
