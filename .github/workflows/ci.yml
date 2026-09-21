@@ -17,7 +17,7 @@ jobs:
             sudo apt-get update -qq
             sudo apt-get install -y -qq shellcheck
           fi
-          shellcheck bin/agent-skills bootstrap.sh tests/smoke.sh
+          shellcheck bin/agent-skills bootstrap.sh tests/smoke.sh skills/herdr-implement-spec/wait-agents.sh
 
       - name: validate skills
         run: bin/agent-skills validate
