@@ -5,7 +5,7 @@ description: "Implement every ticket of a spec/PRD by orchestrating parallel Cla
 
 Implements the spec given, or the spec GitHub issue provided, by orchestrating Claude agents with herdr: implement every ticket wave by wave, then review and E2E-test the spec branch.
 
-Requires: the `herdr` CLI, an authenticated `gh`, Claude Code, and the `/implement-ticket`, `/e2e`, `/code-review` and `/mattpocock-skills:tdd` skills available to the sub-agents.
+Requires: the `herdr` CLI, an authenticated `gh`, Claude Code, and the `/implement-ticket`, `/e2e`, `/code-review`, `/mattpocock-skills:code-review` and `/mattpocock-skills:tdd` skills available to the sub-agents.
 
 - The spec issue is just the spec; the related issues or slices are the work to be implemented.
 - `<N>` is the spec issue number. `<SKILL_DIR>` is this skill's base directory.
@@ -21,7 +21,7 @@ Requires: the `herdr` CLI, an authenticated `gh`, Claude Code, and the `/impleme
 
 # Implementation
 
-Per wave: steps 1–3 for every ticket (fan out), step 4 once, then steps 5–7.
+Per wave: steps 1–3 for every ticket (fan out), steps 4–5 once for the wave, then steps 6–8.
 
 1. Assign the ticket to the current GitHub user.
 2. Create its worktree, based on the spec branch:
@@ -32,15 +32,25 @@ Per wave: steps 1–3 for every ticket (fan out), step 4 once, then steps 5–7.
    - `done`/`idle`: read the summary (`herdr agent read ticket-<ID>`), check the branch has commits (`git log --oneline <SPEC_BRANCH>..ticket-<ID>`) and a clean tree.
    - `blocked`: read the pane; answer routine decisions with `herdr agent prompt`, otherwise hand off to a human. Wait on it again.
    - An acceptance criterion blocked by a classifier-denied outward action (deploy, publish, send, external write): don't retry it; comment on the ticket, leave it open, continue with tickets that don't depend on it.
-5. Merge each ticket branch, one at a time: `git merge --no-ff ticket-<ID>`.
+5. Review each ticket in its own agent. `herdr agent prompt ticket-<ID> "/mattpocock-skills:code-review <SPEC_BRANCH> ..."` — no `--wait`. Add: the spec is ticket #<ID> (`gh issue view <ID>`), part of spec #<N>. Fix every Spec finding that is missing or wrong and every hard Standards violation; fix smells only when cheap and inside the ticket; only report scope creep. Each fix test-first with `/mattpocock-skills:tdd`, one commit each on its branch, no push/merge/branch switch. End the turn with exactly:
+
+   ```
+   ## Review ticket #<ID>
+   Fixed: - [spec|standards] <title> (<commit>)
+   Pending: - [spec|standards] <title> — <reason>
+   Scope creep: - <title>
+   ```
+
+   Then `<SKILL_DIR>/wait-agents.sh ticket-<ID_1> ticket-<ID_2> ...` and handle states as in step 4. Check each `herdr agent read ticket-<ID>` has the report; if not, prompt once more for it.
+6. Merge each ticket branch, one at a time: `git merge --no-ff ticket-<ID>`.
    - On conflict, spawn a built-in `Agent` subagent with `model: "opus"`: tell it to use `/mattpocock-skills:resolving-merge-conflicts`, give it the spec, both tickets and the order the spec defines, and have it finish with `RESOLVED: <summary>` or `ESCALATE: <reason>`. On `ESCALATE` (big chunks, significant logic changes), hand off to a human and wait.
    - After the wave's last merge, run the repo's install, lint/type check, format check, build and full test suite on the spec branch. Fix formatting yourself; hand anything else back to the responsible ticket's agent.
-6. Close the ticket with a comment pointing at its merge commit; `herdr worktree remove --workspace <WORKSPACE_ID>`.
-7. Compute the next wave and repeat.
+7. Close the ticket with a comment pointing at its merge commit and listing any pending review findings. If a pending finding is `[spec]` (missing or wrong), comment but leave the ticket open — its dependents still unblock, since they wait on the merge. `herdr worktree remove --workspace <WORKSPACE_ID>`.
+8. Compute the next wave and repeat.
 
 # Review
 
-When every wave is merged:
+When every wave is merged, review the combined spec branch for integration issues the per-ticket reviews can't see — duplication across tickets, clashing edits to shared files, requirements that fall between tickets:
 
 1. `herdr tab create --cwd "$PWD" --label review-spec-<N>` (prints JSON) → PANE_ID is `result.root_pane.pane_id`.
 2. `herdr agent start review-spec-<N> --kind claude --pane <PANE_ID> --timeout 60000 -- --permission-mode auto --model opus`
@@ -55,7 +65,7 @@ When every wave is merged:
    - `herdr worktree create --cwd "$PWD" --branch "fix-spec-<N>-<k>" --base "<SPEC_BRANCH>" --label "fix-spec-<N>-<k>" --no-focus --json` → PANE_ID and WORKSPACE_ID as in Implementation step 2
    - `herdr agent start fix-spec-<N>-<k> --kind claude --pane <PANE_ID> --timeout 60000 -- --permission-mode auto --model opus`
    - `herdr agent prompt fix-spec-<N>-<k> "<prompt>"`: sub Claude instance, the finding (file, line, failure scenario), spec #<N>; use `/mattpocock-skills:tdd`; commit on its branch, no push/merge/branch switch.
-   - `<SKILL_DIR>/wait-agents.sh fix-spec-<N>-1 fix-spec-<N>-2 ...`, then merge each with `git merge --no-ff` (conflicts as in Implementation step 5), run the test suite, `herdr worktree remove --workspace <WORKSPACE_ID>`.
+   - `<SKILL_DIR>/wait-agents.sh fix-spec-<N>-1 fix-spec-<N>-2 ...`, then merge each with `git merge --no-ff` (conflicts as in Implementation step 6), run the test suite, `herdr worktree remove --workspace <WORKSPACE_ID>`.
 4. End your turn with exactly this report:
 
    ```
@@ -77,4 +87,4 @@ After review, even if blockers are pending (flag them):
 
 - If the next tickets in the graph are HITL, hand them to a human and wait; resume once done.
 - Keep the review and e2e tabs open for inspection.
-- Final report: tickets closed, tickets left open and why, review and e2e results (fixed and pending), and that the spec branch is local — push and open a PR only when asked.
+- Final report: tickets closed, tickets left open and why (including pending `[spec]` review findings), review and e2e results (fixed and pending), and that the spec branch is local — push and open a PR only when asked.
