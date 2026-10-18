@@ -443,6 +443,10 @@ branches or deploy; end your turn by writing the result JSON to `$result_path` (
 | `fix_review` | `spec_branch`, `finding` |
 | `e2e` | `spec_branch` |
 
+Implement, review, fix_implement and fix_review send the agent to the spec issue for its
+spec-wide rules (paths that must not change, off-limits dependencies); review and fix_review
+count a break of one as a Spec finding, so a scope violation is caught before the merge, not
+only by the spec review or E2E.
 Content follows the old skill: implement uses `/implement-ticket <n>`; review uses
 `/mattpocock-skills:code-review <spec_branch>` with the fix policy (fix every missing/wrong spec
 finding and hard standards violation, test-first with `/mattpocock-skills:tdd`, one commit each,

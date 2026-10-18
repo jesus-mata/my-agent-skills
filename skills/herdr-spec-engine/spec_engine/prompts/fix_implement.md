@@ -4,7 +4,7 @@ Finding:
 
 $finding
 
-1. Read spec #$spec (`gh issue view $spec`) for context.
+1. Read spec #$spec (`gh issue view $spec`) for context and its spec-wide rules, such as paths that must not change. They bind this fix too.
 2. Fix the finding test-first with `/mattpocock-skills:tdd`: a failing test that reproduces the failure scenario, then the fix.
 3. Keep the change scoped to this finding. Commit on `$branch` and leave the working tree clean.
 4. If the fix needs an outward action (deploy, publish, send, external write) and the permission classifier denies it, accept the denial and move on: retrying or working around it is off limits. Report status `"outward-denied"` with each action in `denied_actions`. Otherwise report status `"implemented"`.

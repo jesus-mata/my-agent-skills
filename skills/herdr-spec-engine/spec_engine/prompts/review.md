@@ -1,6 +1,6 @@
 You are a sub Claude instance started by herdr-spec-engine for spec #$spec ($spec_title). Review your own work on ticket #$ticket (`gh issue view $ticket`) before the engine integrates it.
 
-1. Run `/mattpocock-skills:code-review $spec_branch`. The spec for the review is ticket #$ticket, part of spec #$spec.
+1. Run `/mattpocock-skills:code-review $spec_branch`. The spec for the review is ticket #$ticket, part of spec #$spec. A change that breaks a spec-wide rule of spec #$spec (`gh issue view $spec`), such as touching paths it says must not change, is a Spec finding.
 2. Fix policy:
    - Fix every Spec finding that is missing or wrong.
    - Fix every hard Standards violation.

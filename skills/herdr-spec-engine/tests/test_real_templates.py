@@ -68,6 +68,9 @@ class RealTemplateScenarioTest(unittest.TestCase):
 
         self.assertEqual(h.templates(), ["implement", "review", "spec_review", "fix_implement",
                                          "fix_review", "e2e"])
+        for name in ("implement", "review", "fix_implement", "fix_review"):
+            self.assertIn("spec-wide rule", h.text_of(name))  # scope rules reach every agent
+            self.assertIn("gh issue view 7", h.text_of(name))
         self.assert_prompt_hygiene(h)
         implement = h.text_of("implement")
         self.assertIn("ticket #1 (Export endpoint) on branch `s7-ticket-1`", implement)
