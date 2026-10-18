@@ -65,6 +65,13 @@ skills/herdr-spec-engine/
 | `out/` | engine | archived copies of every accepted result file, `<run_id>.<stage>.<attempt>.json` |
 | `report.md` | engine | final report |
 
+`store.Store(state_dir, now=time.time)` wraps this directory: `paths` (the files above),
+`state_dir_for(common_dir, spec)`, `load_plan/save_plan`, `load_state/save_state` (None when
+absent), `append_event(run, type, **data)`, `append_resolution(escalation_id, action, note)`,
+`read_resolutions()`, `request_stop/stop_requested/clear_stop`,
+`write_pid/read_pid/clear_pid/engine_alive`, `archive_result(run_id, stage, attempt, data)`,
+`write_report(text)`.
+
 ## Result files (agent → engine handoff)
 
 Agents never get parsed from the terminal. Every agent turn the engine waits on ends with the agent
@@ -141,6 +148,24 @@ review: dict|None (accepted review result), merge_commit: str|None, notes: [str]
 `awaiting` = `{"type": "agent_turn", "agent": str, "result": schema_name, "path": abs_path,
 "prompted_at": float}` or `{"type": "queue"}` or `{"type": "resolver", "agent": str, "path": ...}`
 or `{"type": "escalation"}`.
+
+### Model conventions (`model.py`)
+
+- All enums are `str` enums; JSON holds their values. `Stage` and `Outcome` values are the
+  lowercase names (`Stage.PROVISION_TAB == "provision_tab"`, `Outcome.RESULT_INVALID ==
+  "result_invalid"`); this value is the `<stage>` in result-file and `out/` archive names and the
+  key of `Run.attempts`. Outcomes: `OK, RESULT_INVALID, AGENT_BLOCKED, TIMEOUT, AGENT_UNKNOWN,
+  AGENT_LOST, VERIFY_FAILED, INTEGRATED`.
+- Other enums: `RunKind` (`ticket|human|fix|spec_review|e2e`), `RunStatus`, `Phase`,
+  `EngineStatus` (`running|complete|aborted`), `TicketClass` (`agent|human|unrefined|done`),
+  `EscalationKind` (the kinds below; defined in `model.py`, re-exported by `transitions.py`),
+  `EscalationStatus` (`open|handed_off|resolved`). `STAGES_BY_KIND` holds the stage sequences.
+- `Run.new(kind, run_id, ticket=None, finding=None)` → `pending` run at its kind's first stage.
+  `run_id_for(kind, spec=, ticket=, k=)` and `resolver_agent_name(run_id)` build names.
+- `Settings` = `max_agents=3, model="opus", stage_timeout=7200, retry_budget=1,
+  gate_retry_budget=2, gate_timeout=1800, poll_seconds=10, settle_seconds=15,
+  unknown_grace=120` (seconds); `Settings.agent_args` gives the agent args.
+- Every dataclass has `to_dict()` / `from_dict()` round-tripping through JSON.
 
 ### Readiness and concurrency
 
@@ -390,7 +415,10 @@ engine stop <N>
 engine abort <N>
 ```
 
-- Durations accept `90`, `90s`, `30m`, `2h`.
+- Durations accept `90`, `90s`, `30m`, `2h` (`cli.parse_duration`, also `--poll`).
+- Each subcommand is handled by `cmd_<name>(args) -> int` (exit code). `run` flags default to
+  `None` (dest = the `Settings` field name, `--poll` → `poll_seconds`) so
+  `cli.settings_overrides(args)` returns only the flags given explicitly.
 - `run` needs `plan.json`, refuses if the plan has unrefined tickets or a cycle (exit 1), refuses if
   another engine is alive (exit 1). First `run` stores settings; a resumed `run` overrides only the
   flags given explicitly. Agent args = `["--permission-mode", "auto", "--model", <model>]`.
