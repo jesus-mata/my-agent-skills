@@ -248,6 +248,19 @@ class StagesTest(unittest.TestCase):
         self.assertNotIn("ticket-2", h.herdr.agents)
         self.assertEqual(h.state.phase.value, "spec_review")
 
+    def test_leave_open_survives_a_worktree_that_cannot_be_removed(self):
+        # e.g. herdr refuses to remove a worktree with uncommitted changes.
+        h = self.harness()
+        h.turn("ticket-1", {"status": "outward-denied", "summary": "s", "denied_actions": ["x"]})
+        h.run_until(lambda: h.open_escalations())
+        esc = h.only_escalation()
+        h.herdr.fail_next("remove_worktree", RuntimeError("worktree has modified files"))
+        h.resolve(esc.id, "leave-open")
+        h.tick()
+        self.assertEqual(esc.status, EscalationStatus.RESOLVED)
+        self.assertEqual(h.status("ticket-1"), RunStatus.LEFT_OPEN)
+        self.assertEqual(len(h.github.comments[1]), 1)
+
     def test_outward_denied_retry_reprompts_implement(self):
         h = self.harness()
         h.turn("ticket-1", {"status": "outward-denied", "summary": "s", "denied_actions": ["x"]})

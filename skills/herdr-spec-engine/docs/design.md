@@ -288,7 +288,7 @@ status: open|handed_off|resolved, resolution: str|None, note}`. While a run's es
 | `stage-timeout` | `retry`, `skip-ticket`, `hand-to-human` | retry → reset timer, keep waiting |
 | `budget-exhausted` | `retry`, `skip-ticket`, `hand-to-human` | retry → reset that stage's attempts, re-enter the stage |
 | `resolver-escalated` | `resolved-manually`, `hand-to-human` | resolved-manually → verify the human finished the merge in the worktree (no unmerged paths, clean tree, the queued `base` merged into the run branch); then merge-queue step 2, else stays open with the reason in details |
-| `outward-action-denied` | `leave-open`, `retry`, `hand-to-human` | leave-open → comment on ticket, status `left_open`, remove worktree |
+| `outward-action-denied` | `leave-open`, `retry`, `hand-to-human` | leave-open → comment on ticket, status `left_open`, remove worktree (best effort: a worktree herdr refuses to remove is kept) |
 | `hitl-ticket` | `done`, `hand-to-human` | engine re-reads issue; closed → `done`; open → stays escalated (details updated) |
 | `unrefined-ticket` | `relabeled`, `skip-ticket`, `hand-to-human` | relabeled → re-read labels, reclassify |
 | `external-blocker` | `cleared`, `skip-ticket`, `hand-to-human` | cleared → re-read blockers; all closed → proceed |

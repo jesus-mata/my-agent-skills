@@ -281,7 +281,7 @@ def _screen(ctx: Context, agent: str) -> str:
 
 # best-effort teardown -----------------------------------------------------------------------
 
-def _best_effort(ctx: Context, run: Run, what: str, fn: Callable[[], Any]) -> None:
+def best_effort(ctx: Context, run: Run, what: str, fn: Callable[[], Any]) -> None:
     try:
         fn()
     except PROGRAMMING_ERRORS:
@@ -302,15 +302,15 @@ def remove_worktree(ctx: Context, run: Run, force: bool = False) -> None:
 def close_resolver(ctx: Context, run: Run) -> None:
     aw = run.awaiting or {}
     if aw.get("type") == "resolver" and aw.get("pane_id"):
-        _best_effort(ctx, run, "close resolver pane", lambda: ctx.herdr.close_pane(aw["pane_id"]))
+        best_effort(ctx, run, "close resolver pane", lambda: ctx.herdr.close_pane(aw["pane_id"]))
 
 
 def teardown(ctx: Context, run: Run) -> None:
     """Interrupt the agent, close a resolver pane, remove the worktree, leave the queue."""
     close_resolver(ctx, run)
     if run.agent:
-        _best_effort(ctx, run, "interrupt", lambda: ctx.herdr.interrupt_agent(run.agent))
-    _best_effort(ctx, run, "remove worktree", lambda: remove_worktree(ctx, run))
+        best_effort(ctx, run, "interrupt", lambda: ctx.herdr.interrupt_agent(run.agent))
+    best_effort(ctx, run, "remove worktree", lambda: remove_worktree(ctx, run))
     if run.id in ctx.state.queue:
         ctx.state.queue.remove(run.id)
 
@@ -320,7 +320,7 @@ def reenter(ctx: Context, run: Run) -> None:
     aw = run.awaiting or {}
     if aw.get("type") == "resolver":
         close_resolver(ctx, run)
-        _best_effort(ctx, run, "merge --abort", lambda: ctx.git.merge_abort(run.worktree))
+        best_effort(ctx, run, "merge --abort", lambda: ctx.git.merge_abort(run.worktree))
     run.attempts[run.stage] = 0
     run.status = RunStatus.ACTIVE
     run.stage_started_at = ctx.now()

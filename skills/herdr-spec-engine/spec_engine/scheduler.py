@@ -423,7 +423,10 @@ class Engine:
             if esc.note:
                 body += f"\n\nSupervisor note: {esc.note}"
             self.ctx.github.comment(run.ticket, body)
-        stages.remove_worktree(self.ctx, run)
+        # Best effort: a worktree with uncommitted work is refused (and kept) by herdr; failing
+        # here would leave the escalation open and re-post the comment on the next attempt.
+        stages.best_effort(self.ctx, run, "remove worktree",
+                            lambda: stages.remove_worktree(self.ctx, run))
         run.status = RunStatus.LEFT_OPEN
         run.awaiting = None
         run.notes.append("left open: outward action denied")
