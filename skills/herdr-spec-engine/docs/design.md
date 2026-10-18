@@ -130,6 +130,9 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
    pass `--gate`. The printed gate names its source (`--gate`, `spec #<N> body` or
    `discovered from repository files`). The spec issue is read once for both the gate and the
    tickets.
+   A gate command containing `unittest discover` adds a warning: Python ≥ 3.12 exits 5 when no
+   tests are found, so a ticket without tests can fail the gate before a sibling's tests land;
+   it suggests a guard mapping exit 5 to 0.
 6. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
    there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
