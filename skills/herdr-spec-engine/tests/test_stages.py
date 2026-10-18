@@ -251,6 +251,24 @@ class StagesTest(unittest.TestCase):
         self.assertEqual(len(h.herdr.calls_to("create_worktree")), 1)
         self.assertEqual(h.run("ticket-1").stage, Stage.IMPLEMENT)
 
+    def test_agent_started_despite_a_start_error_is_adopted_not_started_twice(self):
+        # e.g. the socket timed out (or Ctrl-C) while herdr went on starting the agent; a
+        # second agent.start with the same name would collide.
+        h = self.harness()
+        real_start = h.herdr.start_agent
+
+        def start_then_fail(name, pane_id, args):
+            real_start(name, pane_id, args)
+            h.herdr.start_agent = real_start
+            raise RuntimeError("connection_failed: timed out")
+
+        h.herdr.start_agent = start_then_fail
+        h.herdr.on_prompt("ticket-1", working)
+        h.tick(2)
+        self.assertEqual(len(h.herdr.calls_to("start_agent")), 1)
+        self.assertEqual(h.run("ticket-1").stage, Stage.IMPLEMENT)
+        self.assertEqual(len(h.herdr.prompts["ticket-1"]), 1)
+
     def test_outward_denied_leave_open_and_dependents_skipped(self):
         h = self.harness([ticket(1), ticket(2, blockers=[1]), ticket(3)])
         h.turn("ticket-1", {"status": "outward-denied", "summary": "needs a deploy",

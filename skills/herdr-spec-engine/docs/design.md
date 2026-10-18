@@ -241,6 +241,9 @@ Implementation notes (`stages.py`):
   internal types: `sync`, `verify`, `close` (CLOSE records finished steps so a retry — including
   `retry` on its `budget-exhausted` — never comments twice), `queue`, `integrated`. `{"type": "escalation"}` marks runs escalated before
   holding an agent (hitl, unrefined, external blocker).
+- PROVISION / PROVISION_TAB start the agent only when `agent_status(run_id)` is `missing`;
+  otherwise they adopt it (an earlier `agent.start` raised on the engine's side — socket timeout,
+  Ctrl-C — after herdr had started it), so a retry never starts a second agent with the name.
 - AWAIT_HUMAN re-reads the issue first: already closed → `done` without escalating.
 - SPEC_REVIEW / E2E store their accepted result in `run.review`.
 

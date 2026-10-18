@@ -387,6 +387,16 @@ def _enter_claim(ctx: Context, run: Run) -> None:
     run.awaiting = dict(SYNC)
 
 
+def start_run_agent(ctx: Context, run: Run) -> None:
+    """Start the run's own agent in its pane, or adopt it when herdr already has it (an earlier
+    ``agent.start`` failed on our side — socket timeout, Ctrl-C — after herdr started it)."""
+    if ctx.herdr.agent_status(run.id) == "missing":
+        ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
+    else:
+        event(ctx, run, "agent_adopted", agent=run.id)
+    run.agent = run.id
+
+
 def _enter_provision(ctx: Context, run: Run) -> None:
     if run.workspace_id is None:
         if ctx.git.branch_exists(ctx.repo_root, run.id):
@@ -395,8 +405,7 @@ def _enter_provision(ctx: Context, run: Run) -> None:
             wt = ctx.herdr.create_worktree(ctx.repo_root, run.id, ctx.spec_branch, run.id)
         run.workspace_id, run.pane_id, run.worktree = wt.workspace_id, wt.pane_id, wt.path
     if run.agent is None:
-        ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
-        run.agent = run.id
+        start_run_agent(ctx, run)
     run.awaiting = dict(SYNC)
 
 
@@ -405,8 +414,7 @@ def _enter_provision_tab(ctx: Context, run: Run) -> None:
         run.pane_id = ctx.herdr.create_tab(ctx.repo_root, run.id)
         run.worktree = ctx.repo_root
     if run.agent is None:
-        ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
-        run.agent = run.id
+        start_run_agent(ctx, run)
     run.awaiting = dict(SYNC)
 
 
