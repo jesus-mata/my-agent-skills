@@ -22,6 +22,9 @@ jobs:
       - name: validate skills
         run: bin/agent-skills validate
 
+      - name: herdr-spec-engine unit tests
+        run: python3 -m unittest discover -s skills/herdr-spec-engine/tests -t skills/herdr-spec-engine
+
       - name: smoke test (fake HOME)
         run: tests/smoke.sh
 
