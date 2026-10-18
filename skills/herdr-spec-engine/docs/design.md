@@ -220,8 +220,27 @@ Generic outcomes, any agent-turn stage:
 - `TIMEOUT` → escalate `stage-timeout`. `AGENT_UNKNOWN` → escalate `agent-unknown`.
 - `AGENT_LOST` → re-provision once (open worktree, start agent, re-send the stage prompt, counts as
   an attempt); if attempts exhausted escalate `budget-exhausted`.
-- An exception from a port in `enter` → counts as an attempt; retry next tick; exhausted →
-  `budget-exhausted` with the exception text.
+- An exception from a port in `enter` (or `poll`) → counts as an attempt; retry next tick;
+  exhausted → `budget-exhausted` with the exception text. Programming errors (`KeyError`,
+  `TypeError`, `AttributeError`, `NameError`, `AssertionError`) propagate instead.
+
+Implementation notes (`stages.py`):
+- `Context(herdr, git, github, shell, clock, plan, settings, store, repo_root, common_dir,
+  render=prompts.render, state=None)`; `Engine.startup()` sets `state`. `advance(ctx, run)`
+  enters/polls/transitions an active run and chains synchronous stages within one call.
+- Every attempt check is `attempts[stage] < retry_budget` → attempts += 1 and retry, else
+  escalate. `stage_started_at` is reset whenever a prompt is sent (the timeout is per turn).
+- Re-provisioning happens lazily: before any prompt to the run's own agent, a `missing` agent is
+  re-provisioned (`open_worktree` or a new tab for spec runs, then `start_agent`). AGENT_LOST
+  re-sends the turn's original prompt (kept in `awaiting.text`).
+- Result names: the stage value, except turns inside a stage — `verify` (verify_failed turn),
+  `gate_fix` and `resolve` (merge queue) — so `<run_id>.<name>.json` never collides.
+- `awaiting` keeps the turn while the run is escalated (so `answered` resumes it); further
+  internal types: `sync`, `verify`, `close` (CLOSE records finished steps so a retry never
+  comments twice), `queue`, `integrated`. `{"type": "escalation"}` marks runs escalated before
+  holding an agent (hitl, unrefined, external blocker).
+- AWAIT_HUMAN re-reads the issue first: already closed → `done` without escalating.
+- SPEC_REVIEW / E2E store their accepted result in `run.review`.
 
 ### Merge queue (`merge_queue.py`)
 
@@ -242,6 +261,18 @@ FIFO of run ids persisted in state. Only the head is processed. For the head run
 
 The repo root must have the spec branch checked out and be clean (ignoring `.herdr-spec/`);
 otherwise raise `budget-exhausted`-style escalation kind `repo-dirty` (actions `retry`).
+
+Implementation notes (`merge_queue.py`):
+- "Head" = the first queued run that is `active`. An escalated run keeps its place but does not
+  block the runs behind it; this is safe because step 3 always re-checks the spec branch base.
+- The step and its `base` live in `run.awaiting` (`{"type": "queue", "resume": "gate"|"final",
+  "base"}`), so `resolved-manually` resumes at step 2 and `repo-dirty` → `retry` at step 3
+  without re-running the gate. `budget-exhausted` → `retry` resets `gate_attempts` and restarts
+  at step 1 (aborting an in-progress resolver merge).
+- A resolver that goes `missing` → `resolver-escalated`; its other non-OK outcomes use the
+  generic agent-turn handling (attempts counted on INTEGRATE).
+- A non-conflict merge failure in the worktree counts as a port failure; a failed final merge
+  in the repo root is aborted and raises `repo-dirty`.
 
 ## Escalations (`transitions.py`)
 
@@ -265,6 +296,12 @@ status: open|handed_off|resolved, resolution: str|None, note}`. While a run's es
 `hand-to-human` sets status `handed_off`: the escalation stays unresolved, `watch` stops reporting
 it, and the supervisor resolves it later with one of the other actions. `skip-ticket` → status
 `skipped`, remove worktree if any, interrupt agent. Any action not in the list → `resolve` exits 2.
+
+Engine notes: a resolution line is consumed once, keyed `<escalation_id>@<ts>` in
+`consumed_resolutions` (so `hitl-ticket` → `done` can be sent again while the issue is still
+open; such an escalation goes back to `open`). A resolution whose port call fails leaves the
+escalation open with the error appended to `details`. `relabeled` / `cleared` put the run back
+to `pending`; the scheduler re-reads the issue when it next tries to start it.
 
 ## Scheduler (`scheduler.py`)
 
@@ -290,6 +327,17 @@ seq: int, fix_seq: int, phase: tickets|spec_review|fixes|e2e|complete, started_a
 Resume: `engine run <N>` with existing state reconciles every active run: agent missing →
 `AGENT_LOST` path; otherwise continue polling. Never re-sends a prompt to a live agent that is
 `working`.
+
+Implementation notes (`scheduler.py`): `Engine(ctx)` exposes `startup()`, `tick() -> bool`
+(False = exit: complete or stopped), `run_forever() -> int`, `persist()`, `event()`,
+`apply_resolution()`, `run_for_ticket()`. Tick order: resolutions → advance active runs → merge
+queue → spec phases → start ready runs → completion / stop file. `startup` uses `ctx.settings`
+as-is (the CLI merges stored settings with explicit flags) and clears a stale stop file.
+Unrefined / externally blocked tickets are re-read from GitHub only when a slot is free; an
+external blocker escalates only if it is still open (a `blocked_by` not among the plan's
+tickets); a ticket closed on GitHub before it starts → `done`; one relabeled `ready-for-human`
+is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec review → phase
+`fixes` with no fix runs; a non-`done` e2e → phase `complete`.
 
 ## Spec phases (`spec_phases.py`)
 
