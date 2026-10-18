@@ -95,6 +95,10 @@ class ResultsTest(unittest.TestCase):
                            bad("spec_review", fixed=[{"severity": "low", "title": "t",
                                                       "commit": "c"}]),
                            "spec_review.fixed[0].severity")
+        self.assertInvalid("spec_review",
+                           bad("spec_review", not_fixed=[{"severity": "low", "title": "t",
+                                                          "reason": 1}]),
+                           "spec_review.not_fixed[0].reason", "string")
         no_scenario = {k: v for k, v in hard.items() if k != "failure_scenario"}
         self.assertInvalid("spec_review", bad("spec_review", hard=[no_scenario]),
                            "spec_review.hard[0].failure_scenario", "missing")

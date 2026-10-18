@@ -137,7 +137,8 @@ class ContentTest(unittest.TestCase):
                            "/mattpocock-skills:tdd", "`dismissed`", "is not a finding"],
             "resolver": ["/mattpocock-skills:resolving-merge-conflicts", "ESCALATE", "RESOLVED"],
             "spec_review": ["/code-review high", "against `<base-value>`",
-                            "/mattpocock-skills:tdd", "Never create worktrees"],
+                            "/mattpocock-skills:tdd", "Never create worktrees",
+                            "scope rule", "out of scope"],
             "fix_implement": ["/mattpocock-skills:tdd", "outward-denied", "denied_actions"],
             "e2e": ["/e2e", "2 fix rounds", "Never create worktrees"],
         }

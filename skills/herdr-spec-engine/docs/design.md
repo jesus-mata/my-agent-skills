@@ -90,7 +90,9 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
   positives or not applicable. Only a pending `spec` finding keeps the ticket open.
 - **gate_fix** — `{"summary": str}`
 - **resolve** — `{"verdict": "RESOLVED" | "ESCALATE", "summary": str}`
-- **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "medium"|"low", "title": str}]}`
+- **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "medium"|"low", "title": str, "reason": str (optional)}]}`.
+  A finding whose fix would break an explicit scope rule of the spec is out of scope: `not_fixed`,
+  `low`, with `reason` naming the rule.
 - **e2e** — `{"passed": [str], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason": str}]}`
 
 `results.SCHEMAS: dict[str, Validator]` keyed by the names above; `results.example(name) -> str`
@@ -368,7 +370,8 @@ is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec re
   from `run.notes`, pending review findings (`[spec]` ones flagged as keeping the issue open) and
   dismissed review findings),
   tickets already closed before the run, spec review fixed / hard findings still pending (their
-  fix run not `done`) / not fixed (medium/low), fix runs (merge commit, finding, pending and
+  fix run not `done`) / not fixed (medium/low, with reasons, followed by a one-line suggestion to
+  open follow-up issues for them), fix runs (merge commit, finding, pending and
   dismissed review findings), e2e passed / fixed / pending, open or handed-off escalations, and
   "Spec branch `<b>` is local; nothing was pushed." A spec review or e2e that did not finish is
   reported as such.
@@ -413,7 +416,9 @@ the merge commit, ESCALATE for big chunks or significant logic changes — leavi
 merge in progress (never `git merge --abort`) so the human finishes it in the worktree and
 `resolved-manually` resumes at the gate; spec review runs
 `/code-review high` against `$base`, fixes easy blocker/high findings inline test-first (1–2 files,
-no design/API change), lists the rest as `hard`, **never creates worktrees or agents**; e2e runs
+no design/API change), lists the rest as `hard`, grades findings that would break an explicit
+spec scope rule as out of scope (`not_fixed`, with the reason), **never creates worktrees or
+agents**; e2e runs
 `/e2e`, fixes issues test-first with built-in subagents, max 2 fix rounds.
 
 ## Ports (`ports.py`)

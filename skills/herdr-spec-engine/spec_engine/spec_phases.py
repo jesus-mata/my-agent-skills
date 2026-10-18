@@ -162,10 +162,15 @@ def _spec_review_section(runs: list[Run]) -> list[str]:
         if fix is None or fix.status is not RunStatus.DONE:
             state = f"{fix.id} {fix.status.value}{_reason(fix)}" if fix else "no fix run"
             pending.append(f"{_finding_line(f)} — {state}")
-    not_fixed = [f"[{f['severity']}] {f['title']}" for f in review.get("not_fixed", [])]
+    not_fixed = [f"[{f['severity']}] {f['title']}"
+                 + (f" — {f['reason']}" if f.get("reason") else "")
+                 for f in review.get("not_fixed", [])]
+    follow_up = (["Suggestion: open follow-up issues for the not-fixed findings worth keeping."]
+                 if not_fixed else [])
     return out + [f"Fixed in review ({len(fixed)}):", *_bullets(fixed),
                   "", f"Hard findings still pending ({len(pending)}):", *_bullets(pending),
-                  "", f"Not fixed, medium/low ({len(not_fixed)}):", *_bullets(not_fixed), ""]
+                  "", f"Not fixed, medium/low ({len(not_fixed)}):", *_bullets(not_fixed),
+                  *follow_up, ""]
 
 
 def _fix_runs_section(runs: list[Run]) -> list[str]:

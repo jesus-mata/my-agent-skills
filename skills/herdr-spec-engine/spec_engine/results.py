@@ -151,6 +151,8 @@ def _spec_review(d: dict, w: str) -> None:
     def not_fixed(e: dict, p: str) -> None:
         _enum(e, "severity", p, ("medium", "low"))
         _str(e, "title", p)
+        if "reason" in e:
+            _str(e, "reason", p)
 
     _obj_list(d, "fixed", w, fixed)
     _obj_list(d, "hard", w, hard)
@@ -205,7 +207,9 @@ _EXAMPLES: dict[str, dict] = {
         "fixed": [{"severity": "high", "title": "Off-by-one in pagination", "commit": "abc1234"}],
         "hard": [{"severity": "blocker", "title": "Race on concurrent save", "file": "src/save.py",
                   "line": 42, "failure_scenario": "Two saves at once lose the first write."}],
-        "not_fixed": [{"severity": "low", "title": "Inconsistent log wording"}],
+        "not_fixed": [{"severity": "low", "title": "Inconsistent log wording"},
+                      {"severity": "low", "title": "CI does not run the new tests",
+                       "reason": "Out of scope: the spec allows no changes outside src/"}],
     },
     "e2e": {
         "passed": ["User can export a report"],
