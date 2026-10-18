@@ -596,7 +596,10 @@ engine abort <N>
   - status aborted → `ABORTED`; exit 0;
   - open escalations → `<n> open escalation(s) for spec #N:` then one `ESCALATION <id>` block
     each (oldest first) with `run` (+ `#ticket`), `kind`, `stage`, `summary`, indented `details`,
-    `actions`, and `resolve: <SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`; exit 0.
+    `actions`, and `resolve: <ENGINE> resolve <N> <id> <action> [--note TEXT]`; exit 0.
+    `<ENGINE>` (also in `ENGINE NOT RUNNING`) is the launcher path as invoked
+    (`os.path.abspath(sys.argv[0])`, not resolved through a symlinked skill dir), falling back to
+    `<SKILL_DIR>/engine` when not run through the launcher.
     Skipped: `handed_off` escalations and escalations with a `resolutions.jsonl` line whose
     `<id>@<ts>` key is not yet in `consumed_resolutions` (the supervisor already answered; it is
     reported again only if the engine re-opens it);

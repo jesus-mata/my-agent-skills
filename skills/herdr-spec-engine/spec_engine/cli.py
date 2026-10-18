@@ -41,6 +41,18 @@ def settings_overrides(args: argparse.Namespace) -> dict[str, Any]:
 
 SKILL_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ENGINE_CMD = os.path.join(SKILL_DIR, "engine")
+
+
+def invoked_engine_cmd(argv0: str | None = None) -> str:
+    """The launcher path as the supervisor invoked it (``sys.argv[0]`` made absolute).
+
+    Not resolved through symlinks, so a skill dir symlinked into a checkout prints the path the
+    supervisor typed. Falls back to ``ENGINE_CMD`` when not run through the ``engine`` launcher.
+    """
+    argv0 = sys.argv[0] if argv0 is None else argv0
+    if argv0 and os.path.basename(argv0) == "engine":
+        return os.path.abspath(argv0)
+    return ENGINE_CMD
 WATCH_INTERVAL = 5.0
 ABORT_WAIT = 60.0
 
@@ -257,7 +269,7 @@ def cmd_watch(args: argparse.Namespace) -> int:
     import time
 
     return watch_command(_cwd_store(args.spec), args.spec, args.timeout, sys.stdout,
-                         now=time.time, sleep=time.sleep)
+                         now=time.time, sleep=time.sleep, engine_cmd=invoked_engine_cmd())
 
 
 # resolve --------------------------------------------------------------------------------------

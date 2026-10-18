@@ -3,7 +3,9 @@ import contextlib
 import io
 import json
 import os
+import tempfile
 import unittest
+from unittest import mock
 
 from spec_engine import cli
 from spec_engine.adapters import Ports
@@ -217,6 +219,37 @@ class WatchCommandTest(CliTestBase):
 
 
 # resolve --------------------------------------------------------------------------------------
+
+class InvokedEngineCmdTest(unittest.TestCase):
+    def test_keeps_the_symlinked_path_the_supervisor_typed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            real = os.path.join(tmp, "checkout", "herdr-spec-engine")
+            os.makedirs(real)
+            open(os.path.join(real, "engine"), "w").close()
+            link = os.path.join(tmp, "skills", "herdr-spec-engine")
+            os.makedirs(os.path.dirname(link))
+            os.symlink(real, link)
+            typed = os.path.join(link, "engine")
+            self.assertEqual(cli.invoked_engine_cmd(typed), typed)
+            self.assertNotEqual(cli.invoked_engine_cmd(typed), os.path.realpath(typed))
+
+    def test_relative_path_is_made_absolute(self):
+        self.assertEqual(cli.invoked_engine_cmd("skill/engine"),
+                         os.path.join(os.getcwd(), "skill", "engine"))
+
+    def test_falls_back_when_not_run_through_the_launcher(self):
+        self.assertEqual(cli.invoked_engine_cmd("/x/spec_engine/cli.py"), cli.ENGINE_CMD)
+        self.assertEqual(cli.invoked_engine_cmd(""), cli.ENGINE_CMD)
+
+    def test_cmd_watch_passes_the_invoked_path(self):
+        args = cli.build_parser().parse_args(["watch", "7"])
+        typed = "/home/u/.claude/skills/x/engine"
+        with mock.patch.object(cli.sys, "argv", [typed, "watch", "7"]), \
+                mock.patch.object(cli, "_cwd_store", return_value=None), \
+                mock.patch.object(cli, "watch_command", return_value=0) as watch:
+            self.assertEqual(cli.cmd_watch(args), 0)
+        self.assertEqual(watch.call_args.kwargs["engine_cmd"], typed)
+
 
 class ResolveCommandTest(CliTestBase):
     def resolve(self, esc_id, action, note=""):
