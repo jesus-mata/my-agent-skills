@@ -5,7 +5,7 @@ description: "Implements the work of a ticket or issue"
 
 - Read or pull the plan/issue and work on implementing it
 - Follow YAGNI principles, and one-liner solutions
-- Use /tdd to implement it
+- Use /mattpocock-skills:tdd to implement it
 
 # Validation:
 
