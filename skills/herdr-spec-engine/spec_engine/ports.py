@@ -40,6 +40,7 @@ class Issue:
     url: str
     sub_issues: tuple[IssueRef, ...]
     blocked_by: tuple[IssueRef, ...]
+    body: str = ""
 
 
 @dataclass(frozen=True)

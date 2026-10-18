@@ -8,7 +8,7 @@ from typing import Any
 
 from ..ports import Issue, IssueRef
 
-ISSUE_FIELDS = "number,title,state,labels,url,subIssues,blockedBy"
+ISSUE_FIELDS = "number,title,state,labels,url,subIssues,blockedBy,body"
 REPO_RE = re.compile(r"^https?://[^/]+/([^/]+/[^/]+)/(?:issues|pull)/\d+")
 NOT_FOUND_MARKERS = ("could not resolve to an issue", "not found", "no issue")
 
@@ -35,12 +35,13 @@ def _refs(value: Any) -> tuple[IssueRef, ...]:
 
 
 def parse_issue(data: dict) -> Issue:
-    """An Issue from ``gh issue view --json number,title,state,labels,url,subIssues,blockedBy``."""
+    """An Issue from ``gh issue view --json <ISSUE_FIELDS>``."""
     labels = tuple(l["name"] if isinstance(l, dict) else str(l) for l in data.get("labels") or [])
     return Issue(
         number=int(data["number"]), title=str(data.get("title", "")),
         state=str(data.get("state", "OPEN")).upper(), labels=labels, url=str(data.get("url", "")),
         sub_issues=_refs(data.get("subIssues")), blocked_by=_refs(data.get("blockedBy")),
+        body=str(data.get("body") or ""),
     )
 
 

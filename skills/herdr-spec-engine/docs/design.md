@@ -116,13 +116,20 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
 3. Classify each **open** ticket: `ready-for-agent` only → `agent`; `ready-for-human` only →
    `human`; neither or both → `unrefined`. Closed tickets → `done` (they satisfy blockers).
 4. Validate: acyclic (report the cycle); no blocker points at a ticket missing from the plan.
-5. Gate: `--gate` values if given, else `discover_gate(repo_root)`: from `package.json` scripts
+5. Gate (`choose_gate`): `--gate` values if given, else the gate declared in the spec issue body
+   (`gate_from_spec`): a `Gate` heading of any level whose section holds a fenced code block —
+   each non-blank line of the first such block not starting with `#` is a command (a leading
+   `$ ` is dropped) — else every line ``Gate: `cmd` `` (optionally bulleted or bold) adds its code
+   spans; else `discover_gate(repo_root)`: from `package.json` scripts
    (install by lockfile: `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` /
    `bun install` / `npm ci` (`npm install` without any lockfile); then scripts present among `lint`, `typecheck`|`type-check`,
    `format:check`, `build`, `test` as `<pm> run <script>`), else `Makefile` targets among
    `lint test build` (a Makefile with none of them falls through), else `go.mod` → `go vet ./...`, `go build ./...`, `go test ./...`, else
    `Cargo.toml` → `cargo build`, `cargo test`, else `pyproject.toml` → `python3 -m pytest`.
-   Empty gate is allowed but printed as a warning.
+   Empty gate is allowed but printed as a warning, with a hint to declare it in the spec body or
+   pass `--gate`. The printed gate names its source (`--gate`, `spec #<N> body` or
+   `discovered from repository files`). The spec issue is read once for both the gate and the
+   tickets.
 6. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
    there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
@@ -455,6 +462,7 @@ AgentStatus = Literal["idle", "working", "blocked", "done", "unknown", "missing"
 @dataclass(frozen=True) class Issue:     number: int; title: str; state: str  # "OPEN"|"CLOSED"
                                          labels: tuple[str, ...]; url: str
                                          sub_issues: tuple[IssueRef, ...]; blocked_by: tuple[IssueRef, ...]
+                                         body: str = ""
 @dataclass(frozen=True) class MergeResult: ok: bool; conflict: bool; commit: str | None; output: str
 @dataclass(frozen=True) class ShellResult: code: int; output: str   # stdout+stderr merged
 
@@ -525,7 +533,7 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   pane_id}…, {type: "pane.closed"}, {type: "pane.exited"}]}`, read the ack, return at the first
   pushed line (an event, or an `events_lost` error) or at timeout. No named agents, or any error
   before the ack (e.g. a pane vanished, which rejects the whole request) → sleep out the timeout.
-- **gh_cli**: `gh issue view <n> --json number,title,state,labels,url,subIssues,blockedBy`, run in
+- **gh_cli**: `gh issue view <n> --json number,title,state,labels,url,subIssues,blockedBy,body`, run in
   the repo root. `labels` is a list of `{name, …}`; `subIssues` / `blockedBy` are connections
   `{"nodes": [{id, number, state, title, url}], "totalCount": n}`; the repo of a ref is parsed from
   its `url` (`https://<host>/<owner>/<name>/issues/<n>`). A "could not resolve"/"not found" failure

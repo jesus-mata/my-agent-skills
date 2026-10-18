@@ -1,4 +1,5 @@
 import contextlib
+import dataclasses
 import io
 import json
 import os
@@ -8,7 +9,8 @@ import unittest
 from spec_engine.cli import plan_command
 from spec_engine.model import Plan, PlanTicket, TicketClass
 from spec_engine.plan import (
-    build_plan, depths, discover_gate, format_plan, plan_runnable, validate_plan,
+    build_plan, choose_gate, depths, discover_gate, format_plan, gate_from_spec, plan_runnable,
+    validate_plan,
 )
 from spec_engine.store import Store, state_dir_for
 from tests.fakes import FakeGit, FakeGitHub, make_issue, ref
@@ -185,7 +187,60 @@ class FormatPlanTest(unittest.TestCase):
         self.assertIn("Plan is runnable.", text)
 
     def test_empty_gate_warns(self):
-        self.assertIn("WARNING: the gate is empty", format_plan(self.plan(gate=()), []))
+        text = format_plan(self.plan(gate=()), [])
+        self.assertIn("WARNING: the gate is empty", text)
+        self.assertIn("Hint: declare the gate in the spec issue body (a `## Gate` section", text)
+        self.assertIn("or pass --gate", text)
+
+    def test_gate_source_shown(self):
+        text = format_plan(self.plan(), [], "spec #7 body")
+        self.assertIn("Gate (spec #7 body):\n  npm test", text)
+        self.assertNotIn("Hint:", text)
+
+
+class GateFromSpecTest(unittest.TestCase):
+    def test_gate_section_fenced_block(self):
+        body = ("Intro\n\n## Gate\n\nRun these:\n\n```sh\n# comment\n"
+                "python3 -m unittest discover -s tests\n\n$ ruff check .\n```\n\n## Notes\n"
+                "```\nnot a gate\n```\n")
+        self.assertEqual(gate_from_spec(body),
+                         ["python3 -m unittest discover -s tests", "ruff check ."])
+
+    def test_gate_heading_any_level_and_tilde_fence(self):
+        self.assertEqual(gate_from_spec("#### Gate commands\n~~~\nmake check\n~~~\n"),
+                         ["make check"])
+
+    def test_fence_outside_the_gate_section_is_ignored(self):
+        self.assertEqual(gate_from_spec("## Usage\n```\nmake run\n```\n## Gate\nTBD\n"), [])
+
+    def test_gate_line(self):
+        body = "Scope: only src/\n\nGate: `pnpm test`\n- **Gate:** `pnpm lint` and `pnpm build`\n"
+        self.assertEqual(gate_from_spec(body), ["pnpm test", "pnpm lint", "pnpm build"])
+
+    def test_gate_section_wins_over_gate_line(self):
+        self.assertEqual(gate_from_spec("Gate: `a`\n## Gate\n```\nb\n```\n"), ["b"])
+
+    def test_no_gate(self):
+        self.assertEqual(gate_from_spec(""), [])
+        self.assertEqual(gate_from_spec("The gate is decided later.\n```\nx\n```"), [])
+
+
+class ChooseGateTest(unittest.TestCase):
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = tmp.name
+        with open(os.path.join(self.root, "Cargo.toml"), "w"):
+            pass
+
+    def test_precedence(self):
+        body = "Gate: `make spec`"
+        self.assertEqual(choose_gate(["make x"], body, 7, self.root), (["make x"], "--gate"))
+        self.assertEqual(choose_gate(None, body, 7, self.root), (["make spec"], "spec #7 body"))
+        self.assertEqual(choose_gate([], "", 7, self.root),
+                         (["cargo build", "cargo test"], "discovered from repository files"))
+        os.remove(os.path.join(self.root, "Cargo.toml"))
+        self.assertEqual(choose_gate(None, "", 7, self.root), ([], ""))
 
 
 class DiscoverGateTest(unittest.TestCase):
@@ -281,6 +336,24 @@ class PlanCommandTest(unittest.TestCase):
         self.assertEqual([t.blockers for t in plan.tickets], [[], [1]])
         self.assertIn("Plan is runnable.", out)
         self.assertIn(self.store.paths.plan, out)
+
+    def test_gate_from_spec_body_beats_repo_discovery(self):
+        with open(os.path.join(self.root, "Cargo.toml"), "w"):
+            pass
+        gh = spec_with(make_issue(1, labels=AGENT))
+        gh.add(dataclasses.replace(gh.issues[100], body="## Gate\n```\nmake smoke\n```\n"))
+        code, out = self.run_plan(gh)
+        self.assertEqual(code, 0)
+        self.assertEqual(self.store.load_plan().gate, ["make smoke"])
+        self.assertIn("Gate (spec #100 body):\n  make smoke", out)
+        self.assertEqual(len(gh.calls_to("issue")), 2)  # the spec is read once
+
+    def test_explicit_gate_beats_spec_body(self):
+        gh = spec_with(make_issue(1, labels=AGENT))
+        gh.add(dataclasses.replace(gh.issues[100], body="Gate: `make smoke`"))
+        code, out = self.run_plan(gh, gate=["make check"])
+        self.assertEqual(self.store.load_plan().gate, ["make check"])
+        self.assertIn("Gate (--gate):", out)
 
     def test_explicit_gate_and_branch(self):
         gh = spec_with(make_issue(1, labels=AGENT))

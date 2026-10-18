@@ -64,10 +64,14 @@ def _is_int(value: Any) -> bool:
 
 
 def build_plan(
-    github: GitHub, spec: int, branch: str, gate: list[str], from_file: str | None = None
+    github: GitHub, spec: int, branch: str, gate: list[str], from_file: str | None = None,
+    spec_issue: Issue | None = None,
 ) -> Plan:
-    """Read spec ``spec`` and its tickets into an (unvalidated) Plan."""
-    spec_issue = github.issue(spec)
+    """Read spec ``spec`` and its tickets into an (unvalidated) Plan.
+
+    ``spec_issue`` is the already-read spec issue, if the caller has it.
+    """
+    spec_issue = spec_issue or github.issue(spec)
     repo = _repo_of(spec_issue)
 
     if from_file is not None:
@@ -164,6 +168,63 @@ def plan_runnable(plan: Plan) -> bool:
 # gate -------------------------------------------------------------------------------------------
 
 _MAKE_TARGET_RE = re.compile(r"^([A-Za-z0-9_.-]+)\s*:(?!=)", re.MULTILINE)
+_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+(.*?)\s*#*\s*$")
+_FENCE_RE = re.compile(r"^\s*(```+|~~~+)")
+_GATE_LINE_RE = re.compile(r"^\s*(?:[-*]\s+)?(?:\*\*|__)?gate(?:\*\*|__)?\s*:", re.IGNORECASE)
+_CODE_SPAN_RE = re.compile(r"`([^`]+)`")
+
+GATE_HINT = ("declare the gate in the spec issue body (a `## Gate` section with the commands in a "
+             "fenced code block, or a line Gate: `cmd`), or pass --gate.")
+
+
+def gate_from_spec(body: str) -> list[str]:
+    """Gate commands declared in a spec issue body, or ``[]``.
+
+    A ``Gate`` heading (any level) whose section holds a fenced code block: each non-blank,
+    non-comment line of the first such block is a command. Otherwise every line ``Gate: `cmd```
+    adds the code spans on it.
+    """
+    lines = (body or "").splitlines()
+    in_section = False
+    for i, line in enumerate(lines):
+        heading = _HEADING_RE.match(line)
+        if heading:
+            in_section = re.match(r"gate\b", heading.group(1), re.IGNORECASE) is not None
+            continue
+        fence = _FENCE_RE.match(line)
+        if in_section and fence:
+            cmds = []
+            for inner in lines[i + 1:]:
+                if inner.strip().startswith(fence.group(1)):
+                    break
+                cmd = inner.strip()
+                if cmd.startswith("$ "):
+                    cmd = cmd[2:].strip()
+                if cmd and not cmd.startswith("#"):
+                    cmds.append(cmd)
+            if cmds:
+                return cmds
+            in_section = False
+    cmds = []
+    for line in lines:
+        if _GATE_LINE_RE.match(line):
+            cmds.extend(c.strip() for c in _CODE_SPAN_RE.findall(line) if c.strip())
+    return cmds
+
+
+def choose_gate(explicit: list[str] | None, spec_body: str, spec: int,
+                repo_root: str) -> tuple[list[str], str]:
+    """The gate and where it came from: ``--gate`` > the spec issue body > repository discovery.
+
+    The source is ``""`` when the gate is empty.
+    """
+    if explicit:
+        return list(explicit), "--gate"
+    from_spec = gate_from_spec(spec_body)
+    if from_spec:
+        return from_spec, f"spec #{spec} body"
+    discovered = discover_gate(repo_root)
+    return discovered, "discovered from repository files" if discovered else ""
 
 
 def discover_gate(repo_root: str) -> list[str]:
@@ -262,8 +323,8 @@ def _ticket_line(t: PlanTicket) -> str:
     return line
 
 
-def format_plan(plan: Plan, problems: list[str]) -> str:
-    """The plan as readable text: waves, unrefined tickets, branch, gate, problems."""
+def format_plan(plan: Plan, problems: list[str], gate_source: str = "") -> str:
+    """The plan as text: waves, unrefined tickets, branch, gate with its source, problems."""
     lines = [f"Spec #{plan.spec}: {plan.title}", f"Spec branch: {plan.branch} (base {plan.base})", ""]
     waves = depths(plan)
     if not plan.tickets:
@@ -283,12 +344,13 @@ def format_plan(plan: Plan, problems: list[str]) -> str:
         lines.extend(f"  #{t.number} {t.title}  labels: {', '.join(t.labels) or '(none)'}"
                      for t in unrefined)
 
-    lines += ["", "Gate:"]
+    lines += ["", f"Gate ({gate_source}):" if plan.gate and gate_source else "Gate:"]
     if plan.gate:
         lines.extend(f"  {cmd}" for cmd in plan.gate)
     else:
         lines.append("  (none)")
         lines.append("WARNING: the gate is empty; runs will integrate without any checks.")
+        lines.append(f"Hint: {GATE_HINT}")
 
     lines.append("")
     if problems:

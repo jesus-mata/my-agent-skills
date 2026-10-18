@@ -11,9 +11,9 @@ You are the **supervisor** of a spec run. The engine owns every transition: it c
 
 # 1. Plan
 
-1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--base B` (default `main`, or `master` if there is no `main`), `--gate CMD` repeatable, `--from FILE` for specs without sub-issues — keep that file outside the repo, an untracked file in the repo root blocks every merge as `repo-dirty`; see design.md "Plan").
-2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands. Get their confirmation.
-3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` if the discovered gate is wrong, then re-run `plan` until it exits 0 and the user confirms.
+1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--base B` (default `main`, or `master` if there is no `main`), `--gate CMD` repeatable (else the gate declared in the spec issue body — a `## Gate` section with a fenced block of commands, or a line ``Gate: `cmd` `` — else one discovered from the repo's build files), `--from FILE` for specs without sub-issues — keep that file outside the repo, an untracked file in the repo root blocks every merge as `repo-dirty`; see design.md "Plan").
+2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands with their source. Get their confirmation.
+3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` (or add a `## Gate` section to the spec body) if the gate is wrong or empty, then re-run `plan` until it exits 0 and the user confirms.
 
 # 2. Start the engine
 

@@ -46,7 +46,7 @@ class CliGitHubTest(unittest.TestCase):
         self.run.return_value = completed(json.dumps(ISSUE_JSON))
         issue = self.gh.issue(12)
         self.assertEqual(self.argv(), ["gh", "issue", "view", "12", "--json",
-                                       "number,title,state,labels,url,subIssues,blockedBy"])
+                                       "number,title,state,labels,url,subIssues,blockedBy,body"])
         self.assertEqual(self.run.call_args.kwargs["cwd"], "/repo")
         self.assertEqual(issue.number, 12)
         self.assertEqual(issue.title, "Spec: payments")
@@ -66,6 +66,12 @@ class CliGitHubTest(unittest.TestCase):
         self.run.return_value = completed(json.dumps(data))
         issue = self.gh.issue(12)
         self.assertEqual((issue.labels, issue.sub_issues, issue.blocked_by), ((), (), ()))
+
+    def test_issue_body_is_read_and_defaults_to_empty(self):
+        self.run.return_value = completed(json.dumps({**ISSUE_JSON, "body": "## Gate\n"}))
+        self.assertEqual(self.gh.issue(12).body, "## Gate\n")
+        self.run.return_value = completed(json.dumps({**ISSUE_JSON, "body": None}))
+        self.assertEqual(self.gh.issue(12).body, "")
 
     def test_issue_not_found_raises_lookup_error(self):
         self.run.return_value = completed(

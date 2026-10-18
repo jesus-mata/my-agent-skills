@@ -61,9 +61,11 @@ def plan_command(
 
     repo_root = git.repo_root(cwd)
     common_dir = os.path.join(cwd, git.common_dir(cwd))  # absolute stays absolute
-    gate_cmds = list(gate) if gate else planner.discover_gate(repo_root)
     try:
-        plan = planner.build_plan(github, spec, branch or f"spec-{spec}", gate_cmds, from_file)
+        spec_issue = github.issue(spec)
+        gate_cmds, gate_source = planner.choose_gate(gate, spec_issue.body, spec, repo_root)
+        plan = planner.build_plan(github, spec, branch or f"spec-{spec}", gate_cmds, from_file,
+                                  spec_issue=spec_issue)
     except (OSError, ValueError, LookupError) as e:
         _err("plan", str(e))
         return 2
@@ -74,7 +76,7 @@ def plan_command(
     problems = planner.validate_plan(plan)
     store = Store(state_dir_for(common_dir, spec))
     store.save_plan(plan)
-    out.write(planner.format_plan(plan, problems))
+    out.write(planner.format_plan(plan, problems, gate_source))
     out.write(f"Plan written to {store.paths.plan}\n")
     return 0 if not problems else 1
 
