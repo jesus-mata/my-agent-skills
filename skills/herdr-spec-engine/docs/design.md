@@ -388,25 +388,47 @@ class Clock(Protocol):
     def sleep(self, seconds: float) -> None: ...
 ```
 
-Adapter notes:
-- **herdr_socket**: socket path = `HERDR_SOCKET_PATH`, else `~/.config/herdr/herdr.sock`. One
-  connection per request: send `{"id","method","params"}\n`, read one line; `error` → raise
-  `HerdrError(code, message)`. Methods: `ping`, `worktree.create {cwd, branch, base, label,
-  focus: false}`, `worktree.open`, `worktree.remove {workspace_id}`, `tab.create {cwd, label,
-  focus: false}`, `pane.split {target_pane_id, direction: "right", cwd, focus: false}`,
-  `pane.close`, `agent.start {name, kind: "claude", pane_id, args, timeout_ms: 60000}`,
-  `agent.prompt {target, text}`, `agent.get {target}` (agent not found → `missing`),
-  `agent.read {target, source: "recent", lines, format: "text", strip_ansi: true}`,
-  `agent.send_keys {target, keys: ["ctrl+c"]}`. `wait_for_change`: open a connection,
-  `events.subscribe` to `pane.agent_status_changed` for the panes of live agents (or no pane
-  filter if unsupported), return at first event or timeout; any error → sleep(timeout). Response
-  shapes follow the CLI JSON (`result.root_pane.pane_id`, `result.workspace.workspace_id`); the
-  worktree path is read from the result if present, else from `git worktree list --porcelain` by
-  branch. Verify field names against `herdr api schema --json` when writing it.
-- **gh_cli**: `gh issue view <n> --json number,title,state,labels,url,subIssues,blockedBy`; repo of
-  a ref parsed from its `url`; `gh issue edit <n> --add-assignee @me`; `gh issue comment <n>
-  --body-file -`; `gh issue close <n>`.
-- **git_cli**: plain `git -C <cwd> …`; `is_clean` = `git status --porcelain` empty.
+Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protocol 22):
+- **herdr_socket**: socket path = `HERDR_SOCKET_PATH`, else `~/.config/herdr/sessions/$HERDR_SESSION/herdr.sock`
+  if `HERDR_SESSION` is set, else `~/.config/herdr/herdr.sock`. One connection per request: send
+  `{"id","method","params"}\n`, read one line; `error {code, message}` → raise
+  `HerdrError(code, message)`; transport failures (no socket, closed connection, timeout) → raise
+  `HerdrError("connection_failed", …)`. Methods (raw `cwd` values must be absolute):
+  `ping`; `worktree.create {cwd, branch, base, label, focus: false}` and `worktree.open {cwd,
+  branch, label, focus: false}` → `result.workspace.workspace_id`, `result.root_pane.pane_id`,
+  `result.worktree.path` (always present, no git fallback needed); `worktree.remove
+  {workspace_id}`; `tab.create {cwd, label, focus: false}` → `result.root_pane.pane_id`;
+  `pane.split {target_pane_id, direction: "right", cwd, focus: false}` → `result.pane.pane_id`;
+  `pane.close {pane_id}`; `agent.start {name, kind: "claude", pane_id, args, timeout_ms: 60000}`
+  (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text}`; `agent.get {target}` →
+  `result.agent.agent_status` (error code `agent_not_found` → `missing`; any status outside the
+  enum → `unknown`); `agent.read {target, source: "recent", lines, format: "text", strip_ansi:
+  true}` → `result.read.text`; `agent.send_keys {target, keys: ["ctrl+c"]}`. `agent.prompt`,
+  `agent.read` and `agent.send_keys` on a missing agent raise `HerdrError("agent_not_found")`.
+  `wait_for_change`: `agent.list`, take the `pane_id`s of agents with a `name` (the schema
+  requires a `pane_id` on every `pane.agent_status_changed` entry — there is no unfiltered form),
+  open a connection, `events.subscribe {subscriptions: [{type: "pane.agent_status_changed",
+  pane_id}…, {type: "pane.closed"}, {type: "pane.exited"}]}`, read the ack, return at the first
+  pushed line (an event, or an `events_lost` error) or at timeout. No named agents, or any error
+  before the ack (e.g. a pane vanished, which rejects the whole request) → sleep out the timeout.
+- **gh_cli**: `gh issue view <n> --json number,title,state,labels,url,subIssues,blockedBy`, run in
+  the repo root. `labels` is a list of `{name, …}`; `subIssues` / `blockedBy` are connections
+  `{"nodes": [{id, number, state, title, url}], "totalCount": n}`; the repo of a ref is parsed from
+  its `url` (`https://<host>/<owner>/<name>/issues/<n>`). A "could not resolve"/"not found" failure
+  raises `LookupError` (like `FakeGitHub`), other failures `GhError` (a `RuntimeError`).
+  `gh issue edit <n> --add-assignee @me`; `gh issue comment <n> --body-file -` (body on stdin);
+  `gh issue close <n>`.
+- **git_cli**: plain `git -C <cwd> …`, failures raise `GitError` (a `RuntimeError`).
+  `common_dir` = `rev-parse --git-common-dir` made absolute against `cwd`; `is_clean` =
+  `git status --porcelain` empty (honours `.gitignore` and `info/exclude`); `unmerged_paths` =
+  `diff --name-only --diff-filter=U`; `merge` = `merge --no-edit [--no-ff] [-m msg] <ref>` →
+  `ok` with `commit` = new `HEAD`, or not ok with `conflict` = any unmerged paths;
+  `current_branch` is `"HEAD"` when detached.
+- **system**: `SubprocessShell.run` = `shell=True` in its own process group, stdout+stderr merged;
+  on timeout the whole group is killed and it returns code 124 with the partial output plus a
+  `command timed out` note. `SystemClock` = `time.time` / `time.sleep`.
+- **factory**: `adapters.real_ports(cwd, socket_path=None) -> Ports(herdr, git, github, shell,
+  clock)`; `gh` runs in `cwd`.
 
 ## CLI (`cli.py`)
 
