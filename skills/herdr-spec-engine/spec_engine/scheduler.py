@@ -405,7 +405,8 @@ class Engine:
             run.awaiting.pop("unknown_since", None)
 
     def _retry_resend(self, esc: Escalation, run: Run) -> None:
-        stages.resend_turn(self.ctx, run)
+        # The next poll re-sends the prompt, waiting (uncharged) if the agent is not ready.
+        run.awaiting["resend"] = True
         run.status = RunStatus.ACTIVE
 
     def _retry_timer(self, esc: Escalation, run: Run) -> None:

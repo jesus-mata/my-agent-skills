@@ -17,13 +17,18 @@ from . import prompts, results
 from .model import (
     Escalation, EscalationKind, Outcome, Plan, Run, RunKind, RunState, RunStatus, Settings, Stage,
 )
-from .ports import Clock, Git, GitHub, Herdr, Shell
+from .ports import Clock, Git, GitHub, Herdr, HerdrError, Shell
 from .store import Store
 from .transitions import ACTIONS, next_stage
 
 RESULT_DIR = ".herdr-spec"
 BLOCKED_SCREEN_LINES = 60
 TAB_KINDS = frozenset({RunKind.SPEC_REVIEW, RunKind.E2E})
+# herdr errors meaning "the agent is not ready yet": the pane's shell is still booting
+# (agent.start) or the agent is not registered as active yet (agent.prompt). Waited for, never
+# charged to the retry budget, until ``Settings.agent_ready_timeout``.
+NOT_READY_CODES = frozenset({"agent_pane_busy", "agent_not_ready"})
+READY_POLL_SECONDS = 2.0
 
 # Errors that are bugs in the engine, never a port failing: they propagate instead of being
 # counted as attempts.
@@ -85,6 +90,8 @@ def escalate(
     state.escalations[esc.id] = esc
     run.status = RunStatus.ESCALATED
     run.escalation = esc.id
+    run.retry_at = 0.0  # a resolution acts at once, with a fresh readiness window
+    run.ready_wait = None
     if awaiting is not None:
         run.awaiting = awaiting
     event(ctx, run, "escalation", id=esc.id, kind=kind.value, summary=summary)
@@ -100,15 +107,61 @@ def bump(run: Run) -> None:
     run.attempts[run.stage] = run.attempts.get(run.stage, 0) + 1
 
 
+def is_not_ready(exc: BaseException) -> bool:
+    return isinstance(exc, HerdrError) and exc.code in NOT_READY_CODES
+
+
+def not_ready(agent: str, why: str) -> HerdrError:
+    return HerdrError("agent_not_ready", f"agent {agent} {why}")
+
+
+def backoff(ctx: Context, attempt: int) -> float:
+    """Delay before retry number ``attempt`` (1-based): doubling from ``retry_backoff``, capped."""
+    s = ctx.settings
+    return min(s.retry_backoff_max, s.retry_backoff * 2 ** max(0, attempt - 1))
+
+
+def ready_waiting(ctx: Context, run: Run) -> bool:
+    """True while ``run`` must not be stepped yet (backoff or readiness poll pending)."""
+    return ctx.now() < run.retry_at
+
+
+def agent_ready(ctx: Context, run: Run) -> None:
+    """A step went through: end the run's readiness wait, if any."""
+    if run.ready_wait is not None:
+        event(ctx, run, "agent_ready", stage=run.stage.value,
+              waited=round(ctx.now() - run.ready_wait["since"], 3))
+        run.ready_wait = None
+
+
 def port_failure(ctx: Context, run: Run, exc: BaseException) -> None:
-    """A port raised: count an attempt and retry next tick, or escalate when exhausted."""
+    """A port raised. "Not ready yet" errors are polled again shortly, uncharged, until
+    ``agent_ready_timeout``; anything else (or readiness past the deadline) counts an attempt
+    retried after a backoff, or escalates when the budget is spent."""
+    now = ctx.now()
+    error = str(exc)
+    if is_not_ready(exc):
+        wait = run.ready_wait or {"since": now}
+        first = run.ready_wait is None
+        wait.update(code=exc.code, error=error)
+        run.ready_wait = wait
+        waited = now - wait["since"]
+        if waited < ctx.settings.agent_ready_timeout:
+            run.retry_at = now + READY_POLL_SECONDS
+            if first:
+                event(ctx, run, "agent_not_ready", stage=run.stage.value, error=error)
+            persist(ctx)
+            return
+        error = f"agent not ready after {waited:g}s: {exc}"
     if can_retry(ctx, run):
         bump(run)
-        event(ctx, run, "port_error", stage=run.stage.value, error=str(exc))
+        delay = backoff(ctx, run.attempts[run.stage])
+        run.retry_at = now + delay
+        event(ctx, run, "port_error", stage=run.stage.value, error=error, retry_in=delay)
         persist(ctx)
         return
     escalate(ctx, run, EscalationKind.BUDGET_EXHAUSTED,
-             f"{run.stage.value} failed after {run.attempts.get(run.stage, 0) + 1} attempts: {exc}",
+             f"{run.stage.value} failed after {run.attempts.get(run.stage, 0) + 1} attempts: {error}",
              details=f"{type(exc).__name__}: {exc}")
 
 
@@ -127,22 +180,34 @@ def _remove(path: str) -> None:
 
 
 def reprovision(ctx: Context, run: Run) -> None:
-    """Give ``run`` a fresh agent: reopen its worktree (or a new tab) and start the agent."""
-    if run.kind in TAB_KINDS:
-        run.pane_id = ctx.herdr.create_tab(ctx.repo_root, run.id)
-        run.worktree = ctx.repo_root
-    else:
-        wt = ctx.herdr.open_worktree(ctx.repo_root, run.id, run.id)
-        run.workspace_id, run.pane_id, run.worktree = wt.workspace_id, wt.pane_id, wt.path
-    ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
-    run.agent = run.id
+    """Give ``run`` a fresh agent: reopen its worktree (or a new tab) and start the agent.
+
+    Resumable: once the new pane exists ``run.agent`` is None, so a start that fails (e.g. the
+    pane's shell is still booting) is retried in that pane, not in yet another one."""
+    if run.agent is not None:
+        if run.kind in TAB_KINDS:
+            run.pane_id = ctx.herdr.create_tab(ctx.repo_root, run.id)
+            run.worktree = ctx.repo_root
+        else:
+            wt = ctx.herdr.open_worktree(ctx.repo_root, run.id, run.id)
+            run.workspace_id, run.pane_id, run.worktree = wt.workspace_id, wt.pane_id, wt.path
+        run.agent = None
+        persist(ctx)
+    start_run_agent(ctx, run)
     event(ctx, run, "reprovisioned", pane=run.pane_id)
 
 
 def ensure_agent(ctx: Context, run: Run) -> None:
-    """Re-provision the run's own agent when herdr no longer knows it."""
-    if run.agent and ctx.herdr.agent_status(run.agent) == "missing":
-        reprovision(ctx, run)
+    """Re-provision the run's own agent when herdr no longer knows it. A just-started agent
+    herdr has not registered yet is waited for (``agent_ready_timeout``) instead."""
+    if run.agent is not None:
+        if ctx.herdr.agent_status(run.agent) != "missing":
+            run.agent_pending_since = None
+            return
+        if run.agent_pending_since is not None and \
+                ctx.now() - run.agent_pending_since < ctx.settings.agent_ready_timeout:
+            raise not_ready(run.agent, "is not registered yet")
+    reprovision(ctx, run)
 
 
 def common_vars(ctx: Context, path: str, schema: str) -> dict[str, Any]:
@@ -155,9 +220,9 @@ def send_turn(
     extra: dict | None = None, **vars: Any,
 ) -> None:
     """Prompt an agent with ``template`` and await its ``schema`` result at ``name``'s path."""
-    agent = agent or run.agent
-    if agent == run.agent:
+    if agent is None or agent == run.id:
         ensure_agent(ctx, run)
+        agent = run.agent
     path = result_path(run, name)
     text = ctx.render(template, **common_vars(ctx, path, schema), **vars)
     _remove(path)
@@ -170,12 +235,17 @@ def send_turn(
 
 
 def resend_turn(ctx: Context, run: Run) -> None:
-    """Re-send the awaited turn's original prompt (re-provisioning the run's agent if gone)."""
+    """Re-send the awaited turn's original prompt (re-provisioning the run's agent if gone).
+
+    ``awaiting["resend"]`` marks the resend as pending until the prompt went through, so a
+    resend interrupted by a not-ready agent is completed by the next ``poll_turn``."""
     aw = run.awaiting
-    if aw["agent"] == run.agent:
+    aw["resend"] = True
+    if aw["agent"] == run.id:
         ensure_agent(ctx, run)
     _remove(aw["path"])
     ctx.herdr.prompt_agent(aw["agent"], aw["text"])
+    aw.pop("resend", None)
     _restart_turn_clock(ctx, run)
     event(ctx, run, "prompt_resent", agent=aw["agent"])
 
@@ -208,6 +278,9 @@ def _archive(ctx: Context, run: Run, name: str, value: dict) -> None:
 def poll_turn(ctx: Context, run: Run) -> Outcome | None:
     """The outcome of the awaited agent turn, or None while it is still running."""
     aw = run.awaiting
+    if aw.get("resend"):
+        resend_turn(ctx, run)
+        return None
     now = ctx.now()
     status = ctx.herdr.agent_status(aw["agent"])
     if status != "unknown":
@@ -246,8 +319,8 @@ def handle_turn_outcome(ctx: Context, run: Run, outcome: Outcome) -> None:
     stage = run.stage.value
     if outcome is Outcome.RESULT_INVALID:
         if can_retry(ctx, run):
-            bump(run)
             _retry_result(ctx, run)
+            bump(run)
         else:
             escalate(ctx, run, EscalationKind.BUDGET_EXHAUSTED,
                      f"{stage}: result file still invalid after retries", details=aw.get("error", ""))
@@ -396,6 +469,7 @@ def start_run_agent(ctx: Context, run: Run) -> None:
     else:
         ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
     run.agent = run.id
+    run.agent_pending_since = ctx.now()
 
 
 def _enter_provision(ctx: Context, run: Run) -> None:
@@ -407,7 +481,21 @@ def _enter_provision(ctx: Context, run: Run) -> None:
         run.workspace_id, run.pane_id, run.worktree = wt.workspace_id, wt.pane_id, wt.path
     if run.agent is None:
         start_run_agent(ctx, run)
-    run.awaiting = dict(SYNC)
+    run.awaiting = {"type": "agent_ready"}
+
+
+def _poll_agent_ready(ctx: Context, run: Run) -> Outcome | None:
+    """Provision is done once herdr has registered the started agent; until then (bounded by
+    ``agent_ready_timeout``) the first prompt would fail with ``agent_not_ready``."""
+    status = ctx.herdr.agent_status(run.agent)
+    if status != "missing":
+        run.agent_pending_since = None
+        return Outcome.OK
+    if ctx.now() - (run.agent_pending_since or 0.0) < ctx.settings.agent_ready_timeout:
+        raise not_ready(run.agent, "is not registered yet")
+    run.agent = None  # gone: start it again on re-entry
+    run.awaiting = None
+    raise not_ready(run.id, f"not registered {ctx.settings.agent_ready_timeout:g}s after start")
 
 
 def _enter_provision_tab(ctx: Context, run: Run) -> None:
@@ -416,7 +504,7 @@ def _enter_provision_tab(ctx: Context, run: Run) -> None:
         run.worktree = ctx.repo_root
     if run.agent is None:
         start_run_agent(ctx, run)
-    run.awaiting = dict(SYNC)
+    run.awaiting = {"type": "agent_ready"}
 
 
 def _enter_implement(ctx: Context, run: Run) -> None:
@@ -473,12 +561,12 @@ def _verify_failed(ctx: Context, run: Run) -> None:
         escalate(ctx, run, EscalationKind.BUDGET_EXHAUSTED,
                  f"{run.id} still fails verification", details=problem)
         return
-    bump(run)
     work = (f"ticket #{run.ticket}" if run.ticket is not None
             else f"the spec review finding \"{(run.finding or {}).get('title', '')}\"")
     send_turn(ctx, run, template="verify_failed", schema="implement", name="verify",
               ticket=work, branch=run.id,
               spec_branch=ctx.spec_branch, problem=problem)
+    bump(run)  # after the prompt went through: a not-ready agent is not an attempt
 
 
 def _enter_review(ctx: Context, run: Run) -> None:
@@ -579,14 +667,14 @@ class Handler(NamedTuple):
 
 HANDLERS: dict[Stage, Handler] = {
     Stage.CLAIM: Handler(_enter_claim, _poll_sync),
-    Stage.PROVISION: Handler(_enter_provision, _poll_sync),
+    Stage.PROVISION: Handler(_enter_provision, _poll_agent_ready),
     Stage.IMPLEMENT: Handler(_enter_implement, poll_turn, _complete_implement),
     Stage.VERIFY: Handler(_enter_verify, _poll_verify),
     Stage.REVIEW: Handler(_enter_review, poll_turn, _store_result),
     Stage.INTEGRATE: Handler(_enter_integrate, _poll_integrate),
     Stage.CLOSE: Handler(_enter_close, _poll_close),
     Stage.AWAIT_HUMAN: Handler(_enter_await_human, _poll_await_human),
-    Stage.PROVISION_TAB: Handler(_enter_provision_tab, _poll_sync),
+    Stage.PROVISION_TAB: Handler(_enter_provision_tab, _poll_agent_ready),
     Stage.SPEC_REVIEW: Handler(_enter_spec_review, poll_turn, _store_result),
     Stage.E2E: Handler(_enter_e2e, poll_turn, _store_result),
 }
@@ -634,9 +722,11 @@ def _step(ctx: Context, run: Run) -> bool:
             if run.status is not RunStatus.ACTIVE:
                 return False
         outcome = handler.poll(ctx, run)
+        if outcome is not None:
+            apply_outcome(ctx, run, outcome)
+        agent_ready(ctx, run)
         if outcome is None:
             return False
-        apply_outcome(ctx, run, outcome)
     except PROGRAMMING_ERRORS:
         raise
     except Exception as exc:  # noqa: BLE001 - any port failure counts as an attempt
@@ -648,5 +738,5 @@ def _step(ctx: Context, run: Run) -> bool:
 def advance(ctx: Context, run: Run, max_steps: int = 10) -> None:
     """Advance an active run until it waits; synchronous stages chain within one call."""
     for _ in range(max_steps):
-        if run.status is not RunStatus.ACTIVE or not _step(ctx, run):
+        if run.status is not RunStatus.ACTIVE or ready_waiting(ctx, run) or not _step(ctx, run):
             return

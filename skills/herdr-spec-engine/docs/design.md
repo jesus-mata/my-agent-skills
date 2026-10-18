@@ -161,7 +161,10 @@ ready), `active`, `escalated`.
 `Run` fields (all JSON-serialisable): `id, kind, ticket: int|None, finding: dict|None, status,
 stage, attempts: dict[stage,int], gate_attempts: int, agent: str|None, pane_id, workspace_id,
 worktree: str|None (abs path), awaiting: dict|None, stage_started_at: float, escalation: str|None,
-review: dict|None (accepted review result), merge_commit: str|None, notes: [str]`.
+review: dict|None (accepted review result), merge_commit: str|None, notes: [str],
+retry_at: float (not stepped before this time: port-error backoff or readiness poll), ready_wait:
+dict|None (`{code, error, since}` while waiting for the agent to be ready), agent_pending_since:
+float|None (agent started, not yet seen registered by herdr)`.
 
 `awaiting` = `{"type": "agent_turn", "agent": str, "result": schema_name, "path": abs_path,
 "prompted_at": float}` or `{"type": "queue"}` or `{"type": "resolver", "agent": str, "path": ...}`
@@ -182,7 +185,8 @@ or `{"type": "escalation"}`.
   `run_id_for(kind, spec=, ticket=, k=)` and `resolver_agent_name(run_id)` build names.
 - `Settings` = `max_agents=3, model="opus", stage_timeout=7200, retry_budget=1,
   gate_retry_budget=2, gate_timeout=1800, poll_seconds=10, settle_seconds=15,
-  unknown_grace=120` (seconds); `Settings.agent_args` gives the agent args.
+  unknown_grace=120, agent_ready_timeout=120, retry_backoff=5, retry_backoff_max=60` (seconds);
+  `Settings.agent_args` gives the agent args.
 - Every dataclass has `to_dict()` / `from_dict()` round-tripping through JSON.
 
 ### Readiness and concurrency
@@ -214,14 +218,14 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | Stage | enter | outcomes → next |
 | --- | --- | --- |
 | CLAIM | `GitHub.assign_self(n)` | OK → PROVISION |
-| PROVISION | `Herdr.create_worktree(branch=id, base=spec_branch)` (or `open_worktree` if the branch exists), `Herdr.start_agent(id, pane, agent_args)` | OK → IMPLEMENT |
+| PROVISION | `Herdr.create_worktree(branch=id, base=spec_branch)` (or `open_worktree` if the branch exists), `Herdr.start_agent(id, pane, agent_args)`; awaits `agent_ready` | OK once `agent_status(id)` ≠ `missing` → IMPLEMENT |
 | IMPLEMENT | prompt `implement` (fix runs: `fix_implement`) | OK+implemented → VERIFY; OK+outward-denied → escalate `outward-action-denied` |
 | VERIFY | none (synchronous) | `Git.commits_ahead(spec_branch, id) > 0` and `Git.is_clean(worktree)` → OK → REVIEW; else `VERIFY_FAILED` → prompt `verify_failed`, wait turn (schema `implement`), re-VERIFY |
 | REVIEW | prompt `review` (fix runs: `fix_review`) | OK → INTEGRATE (store `review`) |
 | INTEGRATE | enqueue in merge queue | see Merge queue; `INTEGRATED` → CLOSE |
 | CLOSE | ticket: `GitHub.comment` (merge commit, pending findings), `GitHub.close` unless a pending `spec` finding exists (then comment only, status `done` anyway — dependents unblock on merge); remove worktree; fix: remove worktree. Removal is forced (the branch is merged; leftovers are gate artifacts such as build output, which a plain `git worktree remove` refuses) | OK → status `done` |
 | AWAIT_HUMAN | raise `hitl-ticket` | resolved `done` → status `done` |
-| PROVISION_TAB | `Herdr.create_tab(cwd=repo_root, label=id)`, `start_agent` | OK → next |
+| PROVISION_TAB | `Herdr.create_tab(cwd=repo_root, label=id)`, `start_agent`; awaits `agent_ready` | OK once registered → next |
 | SPEC_REVIEW | prompt `spec_review` | OK → `spec_phases.on_spec_review(result)` |
 | E2E | prompt `e2e` | OK → status `done`, then report |
 
@@ -232,23 +236,39 @@ Generic outcomes, any agent-turn stage:
 - `TIMEOUT` → escalate `stage-timeout`. `AGENT_UNKNOWN` → escalate `agent-unknown`.
 - `AGENT_LOST` → re-provision once (open worktree, start agent, re-send the stage prompt, counts as
   an attempt); if attempts exhausted escalate `budget-exhausted`.
-- An exception from a port in `enter` (or `poll`) → counts as an attempt; retry next tick;
-  exhausted → `budget-exhausted` with the exception text. Programming errors (`KeyError`,
-  `TypeError`, `AttributeError`, `NameError`, `AssertionError`) propagate instead.
+- An exception from a port in `enter` (or `poll`) → counts as an attempt, retried after a backoff
+  (`retry_at = now + min(retry_backoff_max, retry_backoff · 2^(attempt-1))`, persisted, so an
+  event-woken tick or a resume cannot retry early); exhausted → `budget-exhausted` with the
+  exception text. Programming errors (`KeyError`, `TypeError`, `AttributeError`, `NameError`,
+  `AssertionError`) propagate instead.
+- Agent readiness: `HerdrError` codes `agent_pane_busy` (`agent.start` while the new pane's
+  shell is still booting) and `agent_not_ready` (`agent.prompt` before herdr registered the
+  agent; also raised by the engine while a just-started agent is still `missing`) mean "not ready
+  yet": never charged to `retry_budget`, the step is retried every 2 s (`retry_at`) with the wait
+  recorded in `run.ready_wait` (event `agent_not_ready` once, `agent_ready` when a step goes
+  through). Only once the wait exceeds `agent_ready_timeout` does a not-ready error count as an
+  attempt (then `budget-exhausted`). An escalation clears `retry_at`/`ready_wait`, so a
+  resolution acts at once with a fresh window. This covers PROVISION, PROVISION_TAB (spec review,
+  E2E), every prompt, re-provisioning and resolver agents. The engine never sleeps for it.
 
 Implementation notes (`stages.py`):
 - `Context(herdr, git, github, shell, clock, plan, settings, store, repo_root, common_dir,
   render=prompts.render, state=None)`; `Engine.startup()` sets `state`. `advance(ctx, run)`
   enters/polls/transitions an active run and chains synchronous stages within one call.
 - Every attempt check is `attempts[stage] < retry_budget` → attempts += 1 and retry, else
-  escalate. `stage_started_at` is reset whenever a prompt is sent (the timeout is per turn).
+  escalate. Retries that prompt an agent (`result_retry`, `verify_failed`, `gate_failed`) count
+  the attempt only after the prompt went through. `stage_started_at` is reset whenever a prompt is sent (the timeout is per turn).
 - Re-provisioning happens lazily: before any prompt to the run's own agent, a `missing` agent is
-  re-provisioned (`open_worktree` or a new tab for spec runs, then `start_agent`). AGENT_LOST
-  re-sends the turn's original prompt (kept in `awaiting.text`).
+  re-provisioned (`open_worktree` or a new tab for spec runs, then `start_agent`) — unless it was
+  started less than `agent_ready_timeout` ago and never seen registered (`agent_pending_since`),
+  which is a not-ready wait. Re-provisioning is resumable: after the new pane exists `run.agent`
+  is None, so a failed start is retried in that pane. AGENT_LOST re-sends the turn's original
+  prompt (kept in `awaiting.text`); `awaiting.resend` marks the resend pending until the prompt
+  went through, and `poll_turn` completes it first (also how `agent-unknown` → `retry` resends).
 - Result names: the stage value, except turns inside a stage — `verify` (verify_failed turn),
   `gate_fix` and `resolve` (merge queue) — so `<run_id>.<name>.json` never collides.
 - `awaiting` keeps the turn while the run is escalated (so `answered` resumes it); further
-  internal types: `sync`, `verify`, `close` (CLOSE records finished steps so a retry — including
+  internal types: `sync`, `agent_ready` (PROVISION / PROVISION_TAB until herdr registered the agent), `verify`, `close` (CLOSE records finished steps so a retry — including
   `retry` on its `budget-exhausted` — never comments twice), `queue`, `integrated`. `{"type": "escalation"}` marks runs escalated before
   holding an agent (hitl, unrefined, external blocker).
 - PROVISION / PROVISION_TAB adopt an agent herdr already runs under the run id *in the run's
@@ -288,7 +308,11 @@ Implementation notes (`merge_queue.py`):
   without re-running the gate. `budget-exhausted` → `retry` resets `gate_attempts` and restarts
   at step 1 (aborting an in-progress resolver merge).
 - A resolver that goes `missing` → `resolver-escalated`; its other non-OK outcomes use the
-  generic agent-turn handling (attempts counted on INTEGRATE).
+  generic agent-turn handling (attempts counted on INTEGRATE). The resolver launch is resumable:
+  `{"type": "resolver", agent, pane_id, base, conflicts, started}` is recorded right after the
+  split, and until the prompt went through (no `path`) each step starts the agent (unless already
+  in that pane) and prompts it, so a not-ready or failed start never splits another pane. A queue
+  head inside its `retry_at` is not stepped.
 - A non-conflict merge failure in the worktree counts as a port failure; a failed final merge
   in the repo root is aborted (only when it stopped on conflicts; otherwise git left nothing
   to abort) and raises one `repo-dirty`.

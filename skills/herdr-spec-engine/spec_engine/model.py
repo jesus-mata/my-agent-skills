@@ -240,6 +240,12 @@ class Settings(_Serialisable):
     poll_seconds: float = 10
     settle_seconds: float = 15
     unknown_grace: float = 120
+    # How long a freshly started agent may stay "not ready" (pane shell still booting, agent not
+    # yet registered) before that counts as a failed attempt.
+    agent_ready_timeout: float = 120
+    # Spacing of port-error retries: retry_backoff, doubling per attempt, capped.
+    retry_backoff: float = 5
+    retry_backoff_max: float = 60
 
     @property
     def agent_args(self) -> list[str]:
@@ -271,6 +277,12 @@ class Run(_Serialisable):
     review: dict | None = None
     merge_commit: str | None = None
     notes: list[str] = field(default_factory=list)
+    # Not before this time (a port-error backoff or a readiness poll); survives a resume.
+    retry_at: float = 0.0
+    # {"code", "error", "since"} while waiting for the run's agent to be ready.
+    ready_wait: dict | None = None
+    # When the run's agent was started, until herdr is seen to know it (then None).
+    agent_pending_since: float | None = None
 
     @classmethod
     def new(
@@ -306,6 +318,9 @@ class Run(_Serialisable):
             review=d.get("review"),
             merge_commit=d.get("merge_commit"),
             notes=list(d.get("notes", [])),
+            retry_at=float(d.get("retry_at", 0.0)),
+            ready_wait=d.get("ready_wait"),
+            agent_pending_since=d.get("agent_pending_since"),
         )
 
 

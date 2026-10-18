@@ -6,7 +6,8 @@ run is in the three steps lives in ``run.awaiting``:
 
 - ``{"type": "queue"}`` — start at step 1 (merge the spec branch into the worktree);
   ``"resume": "gate"|"final"`` with ``"base"`` restarts at step 2 or 3.
-- ``{"type": "resolver", ...}`` — a resolver agent is settling a conflict (step 1).
+- ``{"type": "resolver", ...}`` — a resolver agent is settling a conflict (step 1); until its
+  prompt went through (no ``"path"`` yet) the resolver is still being started.
 - ``{"type": "agent_turn", "result": "gate_fix", ...}`` — the run's agent is fixing the gate.
 - ``{"type": "integrated"}`` — merged; the run has left the queue.
 """
@@ -14,8 +15,8 @@ from __future__ import annotations
 
 from .model import EscalationKind, Outcome, Run, RunKind, RunStatus, resolver_agent_name
 from .stages import (
-    PROGRAMMING_ERRORS, Context, close_resolver, escalate, event, handle_turn_outcome, persist,
-    poll_turn, port_failure, send_turn, ticket_title,
+    PROGRAMMING_ERRORS, Context, agent_ready, close_resolver, escalate, event, handle_turn_outcome,
+    persist, poll_turn, port_failure, ready_waiting, send_turn, ticket_title,
 )
 
 GATE_OUTPUT_LINES = 150
@@ -33,10 +34,11 @@ def head(ctx: Context) -> Run | None:
 def process(ctx: Context) -> None:
     """Advance the head of the queue by as much as can happen without waiting."""
     run = head(ctx)
-    if run is None:
+    if run is None or ready_waiting(ctx, run):
         return
     try:
         _step(ctx, run)
+        agent_ready(ctx, run)
     except PROGRAMMING_ERRORS:
         raise
     except Exception as exc:  # noqa: BLE001 - port failures count as integrate attempts
@@ -47,7 +49,9 @@ def process(ctx: Context) -> None:
 def _step(ctx: Context, run: Run) -> None:
     aw = run.awaiting or {"type": "queue"}
     kind = aw.get("type")
-    if kind == "resolver":
+    if kind == "resolver" and "path" not in aw:
+        _launch_resolver(ctx, run)
+    elif kind == "resolver":
         _poll_resolver(ctx, run)
     elif kind == "agent_turn":
         _poll_gate_fix(ctx, run)
@@ -78,12 +82,26 @@ def _merge(ctx: Context, run: Run) -> None:
 def _start_resolver(ctx: Context, run: Run, base: str) -> None:
     conflicts = ctx.git.unmerged_paths(run.worktree)
     pane = ctx.herdr.split_pane(run.pane_id, cwd=run.worktree)
-    name = resolver_agent_name(run.id)
-    ctx.herdr.start_agent(name, pane, ctx.settings.agent_args)
+    run.awaiting = {"type": "resolver", "agent": resolver_agent_name(run.id), "pane_id": pane,
+                    "base": base, "conflicts": conflicts, "started": False}
+    persist(ctx)
+    _launch_resolver(ctx, run)
+
+
+def _launch_resolver(ctx: Context, run: Run) -> None:
+    """Start the resolver agent in its pane and prompt it; resumable after a not-ready (or any
+    port) error at either step, without splitting another pane."""
+    aw = run.awaiting
+    name, pane = aw["agent"], aw["pane_id"]
+    if not aw.get("started"):
+        if ctx.herdr.agent_pane(name) != pane:
+            ctx.herdr.start_agent(name, pane, ctx.settings.agent_args)
+        aw["started"] = True
+        persist(ctx)
     send_turn(ctx, run, template="resolver", schema="resolve", name="resolve", agent=name,
-              extra={"type": "resolver", "pane_id": pane, "base": base},
+              extra={"type": "resolver", "pane_id": pane, "base": aw["base"]},
               run_id=run.id, branch=run.id, spec_branch=ctx.spec_branch,
-              conflicts="\n".join(conflicts))
+              conflicts="\n".join(aw["conflicts"]))
 
 
 def _poll_resolver(ctx: Context, run: Run) -> None:
@@ -160,9 +178,9 @@ def last_lines(text: str, n: int = GATE_OUTPUT_LINES) -> str:
 
 def _gate_failed(ctx: Context, run: Run, base: str, cmd: str, code: int, output: str) -> None:
     if run.gate_attempts < ctx.settings.gate_retry_budget:
-        run.gate_attempts += 1
         send_turn(ctx, run, template="gate_failed", schema="gate_fix", name="gate_fix",
                   extra={"base": base}, command=cmd, exit_code=code, output=output)
+        run.gate_attempts += 1  # after the prompt went through
         return
     escalate(ctx, run, EscalationKind.BUDGET_EXHAUSTED,
              f"gate still failing for {run.id} after {run.gate_attempts} fix attempts: "
