@@ -137,6 +137,14 @@ def manual_merge_problem(ctx: Context, run: Run) -> str | None:
 # step 2: gate -------------------------------------------------------------------------------
 
 def _gate(ctx: Context, run: Run, base: str) -> None:
+    # The gate checks the working tree but only commits get merged: uncommitted changes to
+    # tracked files would pass the gate and never reach the spec branch. Untracked files are
+    # allowed (a previous gate run's artifacts).
+    if not ctx.git.is_clean(run.worktree, untracked=False):
+        _gate_failed(ctx, run, base, "git status --porcelain --untracked-files=no", 1,
+                     f"{run.worktree} has uncommitted changes to tracked files; commit them "
+                     f"on your branch (or discard them) so the gate checks what gets merged")
+        return
     for cmd in ctx.plan.gate:
         result = ctx.shell.run(cmd, cwd=run.worktree, timeout=ctx.settings.gate_timeout)
         event(ctx, run, "gate", cmd=cmd, code=result.code)

@@ -81,6 +81,15 @@ class CliGitTest(unittest.TestCase):
             f.write("more\n")
         self.assertFalse(self.git.is_clean(self.repo))  # modified tracked file
 
+    def test_is_clean_tracked_only(self):
+        with open(os.path.join(self.repo, "build.log"), "w") as f:
+            f.write("artifact\n")
+        self.assertFalse(self.git.is_clean(self.repo))
+        self.assertTrue(self.git.is_clean(self.repo, untracked=False))
+        with open(os.path.join(self.repo, "README.md"), "a") as f:
+            f.write("more\n")
+        self.assertFalse(self.git.is_clean(self.repo, untracked=False))
+
     def _diverge(self, conflicting: bool) -> None:
         self.git.checkout(self.repo, "ticket-1", create_from="main")
         self.commit("README.md" if conflicting else "t.txt", "ticket\n", "ticket change")

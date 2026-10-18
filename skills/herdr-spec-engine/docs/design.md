@@ -251,8 +251,11 @@ FIFO of run ids persisted in state. Only the head is processed. For the head run
    `resolve-…`, prompt `resolver`, await `resolve` result. `RESOLVED` → check `Git.is_clean` and
    no unmerged paths, continue to 2 (else treat as `ESCALATE`). `ESCALATE` → escalate
    `resolver-escalated`. Close the resolver pane when done.
-2. Gate: each command via `Shell.run(cmd, cwd=worktree, timeout=gate_timeout)`, stop at first
-   failure. Failure → if `gate_attempts < gate_retry_budget`: prompt ticket agent `gate_failed`
+2. Gate: first `Git.is_clean(worktree, untracked=False)` — uncommitted changes to tracked files
+   (a review or gate fix not committed) would pass the gate without being merged, so they count
+   as a gate failure (command `git status --porcelain --untracked-files=no`, exit 1); untracked
+   files are allowed (earlier gate artifacts). Then each command via `Shell.run(cmd,
+   cwd=worktree, timeout=gate_timeout)`, stop at first failure. Failure → if `gate_attempts < gate_retry_budget`: prompt ticket agent `gate_failed`
    (command, exit code, last 150 lines), await `gate_fix`, gate_attempts += 1, go to 1. Else
    escalate `budget-exhausted`.
 3. If `Git.rev_parse(spec_branch) != base` → go to 1. Else in the repo root (spec branch checked
@@ -435,7 +438,7 @@ class Git(Protocol):
     def pull_ff_only(self, cwd: str) -> None: ...
     def rev_parse(self, cwd: str, ref: str) -> str: ...
     def commits_ahead(self, cwd: str, base: str, branch: str) -> int: ...
-    def is_clean(self, cwd: str) -> bool: ...                          # respects excludes
+    def is_clean(self, cwd: str, untracked: bool = True) -> bool: ...  # respects excludes
     def unmerged_paths(self, cwd: str) -> list[str]: ...
     def merge(self, cwd: str, ref: str, no_ff: bool = False, message: str | None = None) -> MergeResult: ...
     def merge_abort(self, cwd: str) -> None: ...
@@ -486,7 +489,8 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   `gh issue close <n>`.
 - **git_cli**: plain `git -C <cwd> …`, failures raise `GitError` (a `RuntimeError`).
   `common_dir` = `rev-parse --git-common-dir` made absolute against `cwd`; `is_clean` =
-  `git status --porcelain` empty (honours `.gitignore` and `info/exclude`); `unmerged_paths` =
+  `git status --porcelain` empty (honours `.gitignore` and `info/exclude`; `untracked=False` adds
+  `--untracked-files=no`); `unmerged_paths` =
   `diff --name-only --diff-filter=U`; `merge` = `merge --no-edit [--no-ff] [-m msg] <ref>` →
   `ok` with `commit` = new `HEAD`, or not ok with `conflict` = any unmerged paths;
   `current_branch` is `"HEAD"` when detached.

@@ -390,7 +390,7 @@ class FakeGit(_Recorder):
         b = self.branches.get(base, 0)
         return max(0, self.branches.get(branch, b) - b)
 
-    def is_clean(self, cwd: str) -> bool:
+    def is_clean(self, cwd: str, untracked: bool = True) -> bool:
         self._call("is_clean", cwd=cwd)
         return self.clean.get(cwd, True)
 

@@ -70,9 +70,11 @@ class CliGit:
     def commits_ahead(self, cwd: str, base: str, branch: str) -> int:
         return int(self._out(cwd, "rev-list", "--count", f"{base}..{branch}"))
 
-    def is_clean(self, cwd: str) -> bool:
-        """No staged, unstaged or untracked changes; ignored/excluded files don't count."""
-        return self._run(cwd, "status", "--porcelain", "-z").stdout == ""
+    def is_clean(self, cwd: str, untracked: bool = True) -> bool:
+        """No staged or unstaged changes, nor untracked files unless ``untracked=False``;
+        ignored/excluded files never count."""
+        args = ["status", "--porcelain", "-z"] + ([] if untracked else ["--untracked-files=no"])
+        return self._run(cwd, *args).stdout == ""
 
     def unmerged_paths(self, cwd: str) -> list[str]:
         out = self._run(cwd, "diff", "--name-only", "--diff-filter=U", "-z").stdout

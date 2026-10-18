@@ -127,6 +127,22 @@ class MergeQueueTest(unittest.TestCase):
         self.assertEqual(len(self.worktree_merges(h)), 2)  # back to step 1 after the fix
         self.assertEqual(len(self.root_merges(h)), 1)
 
+    def test_uncommitted_tracked_changes_fail_the_gate_before_it_runs(self):
+        # The gate runs on the working tree but only commits are merged: a review or gate fix
+        # left uncommitted would pass the gate and never reach the spec branch.
+        h = self.harness()
+        wt = self.worktree(h)
+        h.turn("ticket-1", {"status": "implemented", "summary": "s", "denied_actions": []},
+               commits=1)
+        h.turn("ticket-1", {"fixed": [], "pending": [], "scope_creep": []},
+               also=lambda: h.git.set_clean(wt, False))
+        h.turn("ticket-1", GATE_FIXED, also=lambda: h.git.set_clean(wt, True))
+        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+        gate = [v for n, v in h.rendered if n == "gate_failed"][0]
+        self.assertIn("uncommitted", gate["output"])
+        self.assertEqual(len(h.shell.calls_to("run")), 1)  # the real gate ran once, when clean
+        self.assertEqual(len(self.root_merges(h)), 1)
+
     def test_gate_failure_beyond_budget_escalates_and_retry_resets(self):
         h = self.harness(settings=Settings(gate_retry_budget=1))
         h.shell.results["make test"] = [FAIL, FAIL, FAIL, PASS]
