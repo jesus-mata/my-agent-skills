@@ -329,6 +329,8 @@ def reenter(ctx: Context, run: Run) -> None:
         run.awaiting = {"type": "queue"}
         if run.id not in ctx.state.queue:
             ctx.state.queue.append(run.id)
+    elif run.stage is Stage.CLOSE and aw.get("type") == "close":
+        pass  # keep the finished steps: a retry never comments or closes twice
     else:
         run.awaiting = None
 

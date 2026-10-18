@@ -278,6 +278,20 @@ class StagesTest(unittest.TestCase):
         self.assertEqual(len(h.github.comments[1]), 1)
         self.assertEqual(h.github.closed, [1])
 
+    def test_close_retry_after_budget_exhausted_never_comments_twice(self):
+        h = self.harness()
+        h.script_ticket("ticket-1")
+        h.herdr.fail_next("remove_worktree", RuntimeError("herdr down"))
+        h.herdr.fail_next("remove_worktree", RuntimeError("herdr down"))
+        h.run_until(lambda: h.open_escalations())
+        esc = h.only_escalation()
+        self.assertEqual((esc.kind, esc.stage), (EscalationKind.BUDGET_EXHAUSTED, Stage.CLOSE))
+        h.resolve(esc.id, "retry")
+        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+        self.assertEqual(len(h.github.comments[1]), 1)
+        self.assertEqual(h.github.closed, [1])
+        self.assertEqual(h.herdr.worktrees, {})
+
     def test_format_finding(self):
         text = format_finding({"severity": "high", "title": "T", "file": "a.py", "line": 4,
                                "failure_scenario": "boom"})

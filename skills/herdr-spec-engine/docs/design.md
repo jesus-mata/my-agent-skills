@@ -236,8 +236,8 @@ Implementation notes (`stages.py`):
 - Result names: the stage value, except turns inside a stage — `verify` (verify_failed turn),
   `gate_fix` and `resolve` (merge queue) — so `<run_id>.<name>.json` never collides.
 - `awaiting` keeps the turn while the run is escalated (so `answered` resumes it); further
-  internal types: `sync`, `verify`, `close` (CLOSE records finished steps so a retry never
-  comments twice), `queue`, `integrated`. `{"type": "escalation"}` marks runs escalated before
+  internal types: `sync`, `verify`, `close` (CLOSE records finished steps so a retry — including
+  `retry` on its `budget-exhausted` — never comments twice), `queue`, `integrated`. `{"type": "escalation"}` marks runs escalated before
   holding an agent (hitl, unrefined, external blocker).
 - AWAIT_HUMAN re-reads the issue first: already closed → `done` without escalating.
 - SPEC_REVIEW / E2E store their accepted result in `run.review`.
