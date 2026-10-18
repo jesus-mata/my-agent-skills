@@ -4,7 +4,7 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Sequence, TextIO
 
 _DURATION_RE = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([smh]?)\s*$")
 _UNITS = {"": 1, "s": 1, "m": 60, "h": 3600}
@@ -36,8 +36,40 @@ def _not_implemented(name: str) -> int:
     return 2
 
 
+def plan_command(
+    github: Any, git: Any, cwd: str, spec: int, branch: str | None, gate: list[str] | None,
+    from_file: str | None, out: TextIO,
+) -> int:
+    """Build, validate, save and print the plan. 0 if runnable, 1 if not, 2 on input errors."""
+    import os
+
+    from . import plan as planner
+    from .store import Store, state_dir_for
+
+    repo_root = git.repo_root(cwd)
+    common_dir = os.path.join(cwd, git.common_dir(cwd))  # absolute stays absolute
+    gate_cmds = list(gate) if gate else planner.discover_gate(repo_root)
+    try:
+        plan = planner.build_plan(github, spec, branch or f"spec-{spec}", gate_cmds, from_file)
+    except (OSError, ValueError, LookupError) as e:
+        print(f"engine plan: {e}", file=sys.stderr)
+        return 2
+    problems = planner.validate_plan(plan)
+    store = Store(state_dir_for(common_dir, spec))
+    store.save_plan(plan)
+    out.write(planner.format_plan(plan, problems))
+    out.write(f"Plan written to {store.paths.plan}\n")
+    return 0 if not problems else 1
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
-    return _not_implemented("plan")
+    import os
+
+    from .adapters.gh_cli import CliGitHub
+    from .adapters.git_cli import CliGit
+
+    return plan_command(CliGitHub(), CliGit(), os.getcwd(), args.spec, args.branch, args.gate,
+                        args.from_file, sys.stdout)
 
 
 def cmd_run(args: argparse.Namespace) -> int:
