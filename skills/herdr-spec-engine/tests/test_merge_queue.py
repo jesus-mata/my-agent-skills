@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from spec_engine.model import EscalationKind, RunStatus, Settings, Stage
+from spec_engine.model import EscalationKind, EscalationStatus, RunStatus, Settings, Stage
 from spec_engine.ports import MergeResult, ShellResult
 from tests.engine_harness import BRANCH, GATE_FIXED, Harness, ticket
 
@@ -67,13 +67,39 @@ class MergeQueueTest(unittest.TestCase):
         h.run_until(lambda: h.open_escalations())
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.RESOLVER_ESCALATED)
-        self.assertEqual(esc.details, "logic rewrite")
+        self.assertTrue(esc.details.startswith("logic rewrite"))
+        self.assertIn(f"Worktree: {wt}", esc.details)
+        self.assertEqual(h.git.calls_to("merge_abort"), [])  # the merge stays for the human
         self.assertIn(h.herdr.agent_panes["resolve-ticket-1"], h.herdr.closed_panes)
         self.assertEqual(h.shell.calls_to("run"), [])
 
         h.resolve(esc.id, "resolved-manually")
         h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
         self.assertEqual(len(self.worktree_merges(h)), 1)  # straight to the gate
+        self.assertEqual(len(h.shell.calls_to("run")), 1)
+
+    def test_resolved_manually_refused_until_the_merge_is_committed(self):
+        h = self.harness()
+        wt = self.worktree(h)
+        h.git.script_merge(wt, BRANCH, CONFLICT)
+        h.script_ticket("ticket-1")
+        h.turn("resolve-ticket-1", {"verdict": "ESCALATE", "summary": "logic rewrite"},
+               also=lambda: h.git.set_unmerged(wt, ["src/a.py"]))
+        h.run_until(lambda: h.open_escalations())
+        esc = h.only_escalation()
+
+        h.resolve(esc.id, "resolved-manually")
+        h.tick()
+        esc = h.state.escalations[esc.id]
+        self.assertEqual(esc.status, EscalationStatus.OPEN)
+        self.assertIn("unmerged paths: src/a.py", esc.details)
+        self.assertEqual(h.status("ticket-1"), RunStatus.ESCALATED)
+        self.assertEqual(h.shell.calls_to("run"), [])
+
+        h.git.set_unmerged(wt, [])  # the human committed the merge
+        h.clock.advance(1)
+        h.resolve(esc.id, "resolved-manually")
+        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
         self.assertEqual(len(h.shell.calls_to("run")), 1)
 
     def test_resolved_but_still_unmerged_is_treated_as_escalate(self):
@@ -143,7 +169,7 @@ class MergeQueueTest(unittest.TestCase):
         h.run_until(lambda: h.open_escalations())
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.REPO_DIRTY)
-        self.assertEqual(esc.actions, ["retry"])
+        self.assertEqual(esc.actions, ["retry", "hand-to-human"])
         h.git.set_clean(h.root, True)
         h.resolve(esc.id, "retry")
         h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)

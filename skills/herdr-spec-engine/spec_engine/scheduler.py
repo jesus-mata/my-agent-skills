@@ -372,7 +372,7 @@ class Engine:
         return {
             "answered": self._answered,
             "skip-ticket": self._skip,
-            "resolved-manually": self._resume,
+            "resolved-manually": self._resolved_manually,
             "leave-open": self._leave_open,
             "done": self._human_done,
             "relabeled": self._recheck,
@@ -381,6 +381,15 @@ class Engine:
 
     def _resume(self, esc: Escalation, run: Run) -> None:
         run.status = RunStatus.ACTIVE
+
+    def _resolved_manually(self, esc: Escalation, run: Run) -> bool:
+        """Resume at the gate once the human committed the merge in the run's worktree."""
+        problem = merge_queue.manual_merge_problem(self.ctx, run)
+        if problem:
+            esc.details = f"{esc.details}\nresolved-manually refused: {problem}".strip()
+            return False
+        run.status = RunStatus.ACTIVE
+        return True
 
     def _answered(self, esc: Escalation, run: Run) -> None:
         run.status = RunStatus.ACTIVE

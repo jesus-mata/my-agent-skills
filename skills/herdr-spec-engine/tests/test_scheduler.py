@@ -324,7 +324,7 @@ class SchedulerTest(unittest.TestCase):
         self.assertEqual(h.github.closed, [1])  # fix runs touch no issue
         with open(h.store.paths.report) as f:
             report = f.read()
-        self.assertIn("nothing pushed", report)
+        self.assertIn("nothing was pushed", report)
         self.assertIsNone(h.store.read_pid())
         self.assertFalse(h.engine.tick())
         self.assertEqual(h.store.load_state().status, EngineStatus.COMPLETE)

@@ -13,12 +13,14 @@ ACTIONS: dict[EscalationKind, tuple[str, ...]] = {
     EscalationKind.STAGE_TIMEOUT: ("retry", "skip-ticket", HANDED_OFF_ACTION),
     EscalationKind.BUDGET_EXHAUSTED: ("retry", "skip-ticket", HANDED_OFF_ACTION),
     EscalationKind.RESOLVER_ESCALATED: ("resolved-manually", HANDED_OFF_ACTION),
-    EscalationKind.OUTWARD_ACTION_DENIED: ("leave-open", "retry"),
-    EscalationKind.HITL_TICKET: ("done",),
-    EscalationKind.UNREFINED_TICKET: ("relabeled", "skip-ticket"),
-    EscalationKind.EXTERNAL_BLOCKER: ("cleared", "skip-ticket"),
-    EscalationKind.REPO_DIRTY: ("retry",),
+    EscalationKind.OUTWARD_ACTION_DENIED: ("leave-open", "retry", HANDED_OFF_ACTION),
+    EscalationKind.HITL_TICKET: ("done", HANDED_OFF_ACTION),
+    EscalationKind.UNREFINED_TICKET: ("relabeled", "skip-ticket", HANDED_OFF_ACTION),
+    EscalationKind.EXTERNAL_BLOCKER: ("cleared", "skip-ticket", HANDED_OFF_ACTION),
+    EscalationKind.REPO_DIRTY: ("retry", HANDED_OFF_ACTION),
 }
+"""Every kind allows ``hand-to-human``: the supervisor parks an escalation that waits on the user
+so ``watch`` stops reporting it, and resolves it later with one of the other actions."""
 
 
 def is_valid_action(kind: EscalationKind | str, action: str) -> bool:

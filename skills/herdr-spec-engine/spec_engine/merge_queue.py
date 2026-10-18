@@ -103,13 +103,35 @@ def _poll_resolver(ctx: Context, run: Run) -> None:
         close_resolver(ctx, run)
         escalate(ctx, run, EscalationKind.RESOLVER_ESCALATED,
                  f"merge conflict in {run.id} needs a human ({value['verdict']})",
-                 details=value["summary"], awaiting=after)
+                 details=f"{value['summary']}\n\n{manual_merge_hint(ctx, run)}", awaiting=after)
     elif outcome is Outcome.AGENT_LOST:
         close_resolver(ctx, run)
         escalate(ctx, run, EscalationKind.RESOLVER_ESCALATED,
-                 f"resolver for {run.id} was lost mid-merge", awaiting=after)
+                 f"resolver for {run.id} was lost mid-merge",
+                 details=manual_merge_hint(ctx, run), awaiting=after)
     else:
         handle_turn_outcome(ctx, run, outcome)
+
+
+def manual_merge_hint(ctx: Context, run: Run) -> str:
+    return (f"Worktree: {run.worktree}\nFinish merging `{ctx.spec_branch}` into `{run.id}` there "
+            f"(if no merge is in progress, run `git merge {ctx.spec_branch}` first), commit it and "
+            f"leave the tree clean; then resolve with `resolved-manually`. The engine resumes "
+            f"at the gate.")
+
+
+def manual_merge_problem(ctx: Context, run: Run) -> str | None:
+    """Why a `resolved-manually` merge is not finished in the run's worktree, or None."""
+    base = (run.awaiting or {}).get("base") or ctx.spec_branch
+    problems = []
+    unmerged = ctx.git.unmerged_paths(run.worktree)
+    if unmerged:
+        problems.append("unmerged paths: " + ", ".join(unmerged))
+    if not ctx.git.is_clean(run.worktree):
+        problems.append(f"{run.worktree} has uncommitted changes (merge not committed?)")
+    if ctx.git.commits_ahead(run.worktree, run.id, base) > 0:
+        problems.append(f"`{ctx.spec_branch}` ({base}) is not merged into `{run.id}`")
+    return "; ".join(problems) or None
 
 
 # step 2: gate -------------------------------------------------------------------------------

@@ -7,7 +7,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .model import EscalationStatus, Phase, Run, RunKind, run_id_for
+from .model import EscalationStatus, Phase, Run, RunKind, RunStatus, run_id_for
+from .stages import format_finding, pending_spec_findings, ticket_title
 
 if TYPE_CHECKING:
     from .scheduler import Engine
@@ -25,22 +26,29 @@ def start_spec_review(engine: Engine) -> Run:
 
 
 def on_spec_review(engine: Engine, run: Run, result: dict) -> list[Run]:
-    """One fix run per ``hard`` finding; phase ``fixes``."""
+    """One fix run per ``hard`` finding (``finding`` = the entry); phase ``fixes``.
+
+    Idempotent: a finding that already has a fix run gets no second one.
+    """
     state = engine.state
+    existing = [r.finding for r in state.runs.values() if r.kind is RunKind.FIX]
     created = []
     for finding in (result or {}).get("hard", []):
+        if finding in existing:
+            continue
         state.fix_seq += 1
         run_id = run_id_for(RunKind.FIX, spec=state.spec, k=state.fix_seq)
         fix = Run.new(RunKind.FIX, run_id, finding=finding)
         state.runs[run_id] = fix
         created.append(fix)
+        engine.event(fix, "fix_run", title=finding.get("title", ""))
     state.phase = Phase.FIXES
     engine.event(run, "phase", phase=state.phase.value, fix_runs=[r.id for r in created])
     return created
 
 
 def maybe_start_e2e(engine: Engine) -> Run | None:
-    """Once every fix run is terminal, create the e2e run; phase ``e2e``."""
+    """Once every fix run is terminal (or there are none), create the e2e run; phase ``e2e``."""
     state = engine.state
     fixes = [r for r in state.runs.values() if r.kind is RunKind.FIX]
     if state.phase is not Phase.FIXES or any(not r.terminal for r in fixes):
@@ -54,34 +62,138 @@ def maybe_start_e2e(engine: Engine) -> Run | None:
 
 
 def on_e2e(engine: Engine, run: Run, result: dict) -> None:
-    """E2E finished: phase ``complete``."""
+    """E2E finished: phase ``complete`` (the scheduler then writes the report)."""
     engine.state.phase = Phase.COMPLETE
     engine.event(run, "phase", phase=Phase.COMPLETE.value)
 
 
+# report -------------------------------------------------------------------------------------
+
 def write_report(engine: Engine) -> str:
-    """The final report as Markdown (minimal; written to ``report.md`` by the scheduler)."""
+    """The final report as Markdown (written to ``report.md`` by the scheduler)."""
     state = engine.state
-    plan = engine.ctx.plan
-    lines = [f"# Spec #{state.spec}: {plan.title}", "", f"Spec branch: `{state.branch}`", ""]
-    lines += ["## Tickets", ""]
-    for run in state.runs.values():
-        if run.kind in (RunKind.TICKET, RunKind.HUMAN, RunKind.FIX):
-            label = f"#{run.ticket}" if run.ticket is not None else run.id
-            notes = f" — {'; '.join(run.notes)}" if run.notes else ""
-            lines.append(f"- {label}: {run.status.value}{notes}")
-    for kind, title in ((RunKind.SPEC_REVIEW, "Spec review"), (RunKind.E2E, "E2E")):
-        run = next((r for r in state.runs.values() if r.kind is kind), None)
-        if run is not None:
-            lines += ["", f"## {title}", "", f"- status: {run.status.value}"]
-            for key, items in (run.review or {}).items():
-                lines.append(f"- {key}: {len(items) if isinstance(items, list) else items}")
-    open_escalations = [e for e in state.escalations.values()
-                        if e.status is not EscalationStatus.RESOLVED]
-    if open_escalations:
-        lines += ["", "## Unresolved escalations", ""]
-        lines += [f"- {e.id} ({e.run}, {e.kind.value}, {e.status.value}): {e.summary}"
-                  for e in open_escalations]
-    lines += ["", "The spec branch is local; nothing pushed.", ""]
+    ctx = engine.ctx
+    runs = list(state.runs.values())
+    lines = [f"# Spec #{state.spec}: {ctx.plan.title}", "",
+             f"Spec branch: `{state.branch}` (base `{ctx.plan.base}`)", ""]
+    lines += _tickets_section(engine, runs)
+    lines += _spec_review_section(runs)
+    lines += _fix_runs_section(runs)
+    lines += _e2e_section(runs)
+    lines += _escalations_section(engine)
+    lines += ["", f"Spec branch `{state.branch}` is local; nothing was pushed.", ""]
     return "\n".join(lines)
 
+
+def _bullets(items: list[str], empty: str = "none") -> list[str]:
+    return [f"- {i}" for i in items] if items else [f"- {empty}"]
+
+
+def _reason(run: Run, lead: str = " — ") -> str:
+    return f"{lead}{'; '.join(run.notes)}" if run.notes else ""
+
+
+def _tickets_section(engine: Engine, runs: list[Run]) -> list[str]:
+    ctx = engine.ctx
+    tickets = sorted((r for r in runs if r.kind in (RunKind.TICKET, RunKind.HUMAN)),
+                     key=lambda r: r.ticket or 0)
+    planned_done = [t for t in ctx.plan.tickets if t.klass.value == "done"]
+    done, left_open, skipped, other = [], [], [], []
+    for run in tickets:
+        label = f"#{run.ticket} {ticket_title(ctx, run.ticket)}".rstrip()
+        if run.status is RunStatus.DONE:
+            how = "done by a human" if run.kind is RunKind.HUMAN else (
+                f"merged as {run.merge_commit}" if run.merge_commit else "done")
+            item = f"{label} — {how}{_reason(run, '; ')}"
+            done.append(item)
+            done.extend(f"  - pending [{p['kind']}] {p['title']}: {p['reason']}"
+                        for p in (run.review or {}).get("pending", []))
+            if pending_spec_findings(run):
+                done.append("  - left open on GitHub until the pending spec finding is addressed")
+        elif run.status is RunStatus.LEFT_OPEN:
+            left_open.append(f"{label}{_reason(run)}")
+        elif run.status is RunStatus.SKIPPED:
+            skipped.append(f"{label}{_reason(run)}")
+        else:
+            other.append(f"{label} — {run.status.value} at {run.stage.value}{_reason(run)}")
+    out = ["## Tickets", ""]
+    if planned_done:
+        out += [f"Already closed before the run: "
+                + ", ".join(f"#{t.number}" for t in planned_done), ""]
+    out += [f"Done ({sum(1 for r in tickets if r.status is RunStatus.DONE)}):", *_bullets(done),
+            "", f"Left open ({len(left_open)}):", *_bullets(left_open),
+            "", f"Skipped ({len(skipped)}):", *_bullets(skipped)]
+    if other:
+        out += ["", f"Not finished ({len(other)}):", *_bullets(other)]
+    return out + [""]
+
+
+def _fix_run_for(runs: list[Run], finding: dict) -> Run | None:
+    return next((r for r in runs if r.kind is RunKind.FIX and r.finding == finding), None)
+
+
+def _finding_line(f: dict) -> str:
+    where = f.get("file", "")
+    if f.get("line") is not None:
+        where = f"{where}:{f['line']}"
+    return f"[{f.get('severity', '')}] {f.get('title', '')}" + (f" ({where})" if where else "")
+
+
+def _spec_review_section(runs: list[Run]) -> list[str]:
+    run = next((r for r in runs if r.kind is RunKind.SPEC_REVIEW), None)
+    out = ["## Spec review", ""]
+    if run is None:
+        return out + ["- not run", ""]
+    if run.status is not RunStatus.DONE:
+        return out + [f"- did not finish: {run.status.value}{_reason(run)}", ""]
+    review = run.review or {}
+    fixed = [f"[{f['severity']}] {f['title']} ({f['commit']})" for f in review.get("fixed", [])]
+    pending = []
+    for f in review.get("hard", []):
+        fix = _fix_run_for(runs, f)
+        if fix is None or fix.status is not RunStatus.DONE:
+            state = f"{fix.id} {fix.status.value}{_reason(fix)}" if fix else "no fix run"
+            pending.append(f"{_finding_line(f)} — {state}")
+    not_fixed = [f"[{f['severity']}] {f['title']}" for f in review.get("not_fixed", [])]
+    return out + [f"Fixed in review ({len(fixed)}):", *_bullets(fixed),
+                  "", f"Hard findings still pending ({len(pending)}):", *_bullets(pending),
+                  "", f"Not fixed, medium/low ({len(not_fixed)}):", *_bullets(not_fixed), ""]
+
+
+def _fix_runs_section(runs: list[Run]) -> list[str]:
+    fixes = [r for r in runs if r.kind is RunKind.FIX]
+    out = ["## Fix runs", ""]
+    if not fixes:
+        return out + ["- none", ""]
+    for run in fixes:
+        title = (run.finding or {}).get("title", "")
+        how = f"merged as {run.merge_commit}" if run.merge_commit else run.status.value
+        out.append(f"- {run.id} {title} — {how}{_reason(run, '; ')}")
+        out.append("  - finding: " + format_finding(run.finding).replace("\n", "; "))
+        out.extend(f"  - pending [{p['kind']}] {p['title']}: {p['reason']}"
+                   for p in (run.review or {}).get("pending", []))
+    return out + [""]
+
+
+def _e2e_section(runs: list[Run]) -> list[str]:
+    run = next((r for r in runs if r.kind is RunKind.E2E), None)
+    out = ["## E2E", ""]
+    if run is None:
+        return out + ["- not run", ""]
+    if run.status is not RunStatus.DONE:
+        return out + [f"- did not finish: {run.status.value}{_reason(run)}", ""]
+    result = run.review or {}
+    passed = list(result.get("passed", []))
+    fixed = [f"{f['title']} ({f['commit']})" for f in result.get("fixed", [])]
+    pending = [f"{p['title']}: {p['reason']}" for p in result.get("pending", [])]
+    return out + [f"Passed ({len(passed)}):", *_bullets(passed),
+                  "", f"Fixed ({len(fixed)}):", *_bullets(fixed),
+                  "", f"Pending ({len(pending)}):", *_bullets(pending), ""]
+
+
+def _escalations_section(engine: Engine) -> list[str]:
+    unresolved = [e for e in engine.state.escalations.values()
+                  if e.status is not EscalationStatus.RESOLVED]
+    items = [f"{e.id} {e.kind.value} on {e.run} ({e.status.value.replace('_', ' ')}): {e.summary}"
+             for e in unresolved]
+    return ["## Open or handed-off escalations", "", *_bullets(items)]

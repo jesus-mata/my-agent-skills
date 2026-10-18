@@ -456,8 +456,10 @@ def _verify_failed(ctx: Context, run: Run) -> None:
                  f"{run.id} still fails verification", details=problem)
         return
     bump(run)
+    work = (f"ticket #{run.ticket}" if run.ticket is not None
+            else f"the spec review finding \"{(run.finding or {}).get('title', '')}\"")
     send_turn(ctx, run, template="verify_failed", schema="implement", name="verify",
-              ticket=run.ticket if run.ticket is not None else run.id, branch=run.id,
+              ticket=work, branch=run.id,
               spec_branch=ctx.spec_branch, problem=problem)
 
 
