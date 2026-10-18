@@ -23,8 +23,8 @@ In Claude Code:
 /plugin install mattpocock-skills@claude-plugins-official
 ```
 
-`herdr-implement-spec` also needs the [herdr](https://github.com/herdrdev/herdr) CLI and an
-authenticated `gh`.
+`herdr-implement-spec` and `herdr-spec-engine` also need the [herdr](https://github.com/herdrdev/herdr)
+CLI and an authenticated `gh`; `herdr-spec-engine` also needs `python3` 3.11 or newer.
 
 ## Install
 
@@ -54,6 +54,7 @@ behind the one you edit.
 | --- | --- |
 | [`e2e`](skills/e2e/SKILL.md) | Bring up the local stack and end-to-end test a change — web app, HTTP API, CLI, or desktop app — driven by the project's root E2E.md. Use it when you need to verify that something actually works, not just that it compiles or that the unit tests pass. |
 | [`herdr-implement-spec`](skills/herdr-implement-spec/SKILL.md) | Implement every ticket of a spec/PRD by orchestrating parallel Claude instances in herdr worktrees, wave by wave, merging each into a spec branch, then code-review and E2E-test the whole spec. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or slices implemented, not just a single ticket. |
+| [`herdr-spec-engine`](skills/herdr-spec-engine/SKILL.md) | Implement every ticket of a spec/PRD with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec while you supervise its escalations. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or sub-issues implemented, not just a single ticket. |
 | [`implement-ticket`](skills/implement-ticket/SKILL.md) | Implements the work of a ticket or issue |
 | [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrite an existing ticket in place so it matches the /to-tickets format, falsifying its technical claims against the real code before trusting any of them. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands you a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
 
