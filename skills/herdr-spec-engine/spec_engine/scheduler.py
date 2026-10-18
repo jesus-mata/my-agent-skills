@@ -395,7 +395,7 @@ class Engine:
         run.status = RunStatus.ACTIVE
         run.stage_started_at = self.ctx.now()
         if run.awaiting and "prompted_at" in run.awaiting:
-            run.awaiting["prompted_at"] = self.ctx.now()
+            run.awaiting["prompted_at"] = run.awaiting["answered_at"] = self.ctx.now()
             run.awaiting.pop("unknown_since", None)
 
     def _retry_resend(self, esc: Escalation, run: Run) -> None:

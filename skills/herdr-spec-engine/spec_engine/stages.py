@@ -8,6 +8,7 @@ applies the generic outcomes (retry, re-provision, escalate).
 """
 from __future__ import annotations
 
+import math
 import os
 from dataclasses import dataclass
 from typing import Any, Callable, NamedTuple
@@ -214,6 +215,10 @@ def poll_turn(ctx: Context, run: Run) -> Outcome | None:
     if status == "missing":
         return Outcome.AGENT_LOST
     if status == "blocked":
+        # Right after an `answered` resolution herdr's screen-based status can still say
+        # blocked; only a block that outlives the settle window is a new one.
+        if now - aw.get("answered_at", -math.inf) < ctx.settings.settle_seconds:
+            return None
         return Outcome.AGENT_BLOCKED
     if status == "unknown":
         since = aw.setdefault("unknown_since", now)

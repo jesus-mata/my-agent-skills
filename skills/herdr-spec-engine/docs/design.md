@@ -283,7 +283,7 @@ status: open|handed_off|resolved, resolution: str|None, note}`. While a run's es
 
 | Kind | Actions | Effect |
 | --- | --- | --- |
-| `agent-blocked` | `answered`, `hand-to-human` | answered → resume polling the same turn (reset `stage_started_at`) |
+| `agent-blocked` | `answered`, `hand-to-human` | answered → resume polling the same turn (reset `stage_started_at`; a `blocked` status within `settle_seconds` of the answer is ignored, since herdr's screen-based status can lag) |
 | `agent-unknown` | `answered`, `retry`, `hand-to-human` | retry → re-send stage prompt |
 | `stage-timeout` | `retry`, `skip-ticket`, `hand-to-human` | retry → reset timer, keep waiting |
 | `budget-exhausted` | `retry`, `skip-ticket`, `hand-to-human` | retry → reset that stage's attempts, re-enter the stage |

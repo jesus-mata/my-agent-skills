@@ -124,6 +124,30 @@ class StagesTest(unittest.TestCase):
         h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
         self.assertEqual(h.templates().count("implement"), 1)
 
+    def test_answered_tolerates_a_lagging_blocked_status(self):
+        # herdr detects status from the screen: right after the supervisor answers, the agent
+        # can still read as blocked for a few seconds. That is not a new block.
+        h = self.harness()
+        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "blocked"))
+        h.tick()
+        esc = h.only_escalation()
+        h.resolve(esc.id, "answered")
+        h.tick()  # consumes `answered`; herdr still says blocked
+        self.assertEqual(h.open_escalations(), [])
+        h.herdr.set_status("ticket-1", "working")
+        h.tick()
+        h.herdr.set_status("ticket-1", "blocked")  # a genuinely new block later on
+        h.tick()
+        self.assertEqual(h.only_escalation().kind, EscalationKind.AGENT_BLOCKED)
+
+    def test_answered_but_still_blocked_after_settle_escalates_again(self):
+        h = self.harness()
+        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "blocked"))
+        h.tick()
+        h.resolve(h.only_escalation().id, "answered")
+        h.tick(3)  # t+0 .. t+20: past the settle window, still blocked
+        self.assertEqual(h.only_escalation().kind, EscalationKind.AGENT_BLOCKED)
+
     def test_timeout_escalates_and_retry_resets_timer(self):
         h = self.harness(settings=Settings(stage_timeout=100))
         h.herdr.on_prompt("ticket-1", working)
