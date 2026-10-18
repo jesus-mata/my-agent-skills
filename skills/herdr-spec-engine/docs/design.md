@@ -286,15 +286,17 @@ status: open|handed_off|resolved, resolution: str|None, note}`. While a run's es
 | `agent-unknown` | `answered`, `retry`, `hand-to-human` | retry → re-send stage prompt |
 | `stage-timeout` | `retry`, `skip-ticket`, `hand-to-human` | retry → reset timer, keep waiting |
 | `budget-exhausted` | `retry`, `skip-ticket`, `hand-to-human` | retry → reset that stage's attempts, re-enter the stage |
-| `resolver-escalated` | `resolved-manually`, `hand-to-human` | resolved-manually → merge-queue step 2 |
-| `outward-action-denied` | `leave-open`, `retry` | leave-open → comment on ticket, status `left_open`, remove worktree |
-| `hitl-ticket` | `done` | engine re-reads issue; closed → `done`; open → stays escalated (details updated) |
-| `unrefined-ticket` | `relabeled`, `skip-ticket` | relabeled → re-read labels, reclassify |
-| `external-blocker` | `cleared`, `skip-ticket` | cleared → re-read blockers; all closed → proceed |
-| `repo-dirty` | `retry` | retry → re-check |
+| `resolver-escalated` | `resolved-manually`, `hand-to-human` | resolved-manually → verify the human finished the merge in the worktree (no unmerged paths, clean tree, the queued `base` merged into the run branch); then merge-queue step 2, else stays open with the reason in details |
+| `outward-action-denied` | `leave-open`, `retry`, `hand-to-human` | leave-open → comment on ticket, status `left_open`, remove worktree |
+| `hitl-ticket` | `done`, `hand-to-human` | engine re-reads issue; closed → `done`; open → stays escalated (details updated) |
+| `unrefined-ticket` | `relabeled`, `skip-ticket`, `hand-to-human` | relabeled → re-read labels, reclassify |
+| `external-blocker` | `cleared`, `skip-ticket`, `hand-to-human` | cleared → re-read blockers; all closed → proceed |
+| `repo-dirty` | `retry`, `hand-to-human` | retry → re-check |
 
-`hand-to-human` sets status `handed_off`: the escalation stays unresolved, `watch` stops reporting
-it, and the supervisor resolves it later with one of the other actions. `skip-ticket` → status
+`hand-to-human` (every kind) sets status `handed_off`: the escalation stays unresolved, `watch`
+stops reporting it, and the supervisor resolves it later with one of the other actions. Every
+kind allows it because every kind can end up waiting on the user, and an escalation `watch` keeps
+reporting would wake the supervisor on every poll. `skip-ticket` → status
 `skipped`, remove worktree if any, interrupt agent. Any action not in the list → `resolve` exits 2.
 
 Engine notes: a resolution line is consumed once, keyed `<escalation_id>@<ts>` in
@@ -346,13 +348,26 @@ is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec re
   `fixes`. Fix runs go through the same scheduler and merge queue.
 - When all fix runs are terminal (or there were none): create the `e2e` run, phase `e2e`.
 - E2E OK → phase `complete`; write `report.md`: tickets done / left open / skipped (with reasons
-  and pending `spec` findings), spec review fixed / pending / not fixed, fix runs, e2e passed /
-  fixed / pending, open or handed-off escalations, and "spec branch is local; nothing pushed".
+  from `run.notes` and pending review findings, `[spec]` ones flagged as keeping the issue open),
+  tickets already closed before the run, spec review fixed / hard findings still pending (their
+  fix run not `done`) / not fixed (medium/low), fix runs (merge commit, finding, pending review
+  findings), e2e passed / fixed / pending, open or handed-off escalations, and
+  "Spec branch `<b>` is local; nothing was pushed." A spec review or e2e that did not finish is
+  reported as such.
 - Spec review and e2e tabs are never closed by the engine.
+
+Implementation notes (`spec_phases.py`): the scheduler owns every phase transition and calls
+`start_spec_review`, `on_spec_review` (idempotent: a finding that already has a fix run gets no
+second one), `maybe_start_e2e`, `on_e2e`, and `write_report` (returns the Markdown; the scheduler
+writes it). A hard finding reaches the fix-run prompts through `stages.format_finding`
+(`<title> (<severity>)`, `File: <file>:<line>`, `Failure scenario: …`).
 
 ## Prompts (`prompts.py`, `prompts/*.md`)
 
 `render(name, **vars) -> str` with `string.Template.substitute` (missing var → KeyError, a bug).
+Every variable is text (or an int) by the time it reaches `render`: lists and findings are
+formatted by the stage. `tests/test_real_templates.py` drives whole scenarios through the real
+templates to keep both sides in step.
 Every template states: you are a sub Claude instance started by herdr-spec-engine for spec #$spec;
 work only in your cwd; commit on your branch; never push, merge, rebase onto other branches, switch
 branches or deploy; end your turn by writing the result JSON to `$result_path` (example:
@@ -360,8 +375,8 @@ branches or deploy; end your turn by writing the result JSON to `$result_path` (
 
 | Template | Variables (besides `spec`, `spec_title`, `result_path`, `result_example`) |
 | --- | --- |
-| `implement` | `ticket`, `ticket_title`, `branch`, `spec_branch`, `integrated` (list of merged tickets), `siblings` (tickets running now) |
-| `verify_failed` | `ticket`, `branch`, `spec_branch`, `problem` |
+| `implement` | `ticket`, `ticket_title`, `branch`, `spec_branch`, `integrated` (merged tickets), `siblings` (tickets running now) — both pre-formatted Markdown bullet lists (`- #n title (run-id)`, or `none`), each on its own lines in the template |
+| `verify_failed` | `ticket` (text: `ticket #<n>`, or `the spec review finding "<title>"` for fix runs), `branch`, `spec_branch`, `problem` |
 | `review` | `ticket`, `spec_branch` |
 | `result_retry` | `error` |
 | `gate_failed` | `command`, `exit_code`, `output` |
@@ -375,7 +390,9 @@ Content follows the old skill: implement uses `/implement-ticket <n>`; review us
 `/mattpocock-skills:code-review <spec_branch>` with the fix policy (fix every missing/wrong spec
 finding and hard standards violation, test-first with `/mattpocock-skills:tdd`, one commit each,
 only report scope creep); resolver uses `/mattpocock-skills:resolving-merge-conflicts`, finishes
-the merge commit, ESCALATE for big chunks or significant logic changes; spec review runs
+the merge commit, ESCALATE for big chunks or significant logic changes — leaving the conflicted
+merge in progress (never `git merge --abort`) so the human finishes it in the worktree and
+`resolved-manually` resumes at the gate; spec review runs
 `/code-review high` against `$base`, fixes easy blocker/high findings inline test-first (1–2 files,
 no design/API change), lists the rest as `hard`, **never creates worktrees or agents**; e2e runs
 `/e2e`, fixes issues test-first with built-in subagents, max 2 fix rounds.
@@ -495,16 +512,47 @@ engine abort <N>
 - Each subcommand is handled by `cmd_<name>(args) -> int` (exit code). `run` flags default to
   `None` (dest = the `Settings` field name, `--poll` → `poll_seconds`) so
   `cli.settings_overrides(args)` returns only the flags given explicitly.
-- `run` needs `plan.json`, refuses if the plan has unrefined tickets or a cycle (exit 1), refuses if
-  another engine is alive (exit 1). First `run` stores settings; a resumed `run` overrides only the
-  flags given explicitly. Agent args = `["--permission-mode", "auto", "--model", <model>]`.
-- `watch` reads `state.json` every 5 s (read-only). Exit 0 printing each **open** escalation (id,
-  run, kind, summary, details, allowed actions) as soon as one exists; exit 0 printing
-  `COMPLETE` + `report.md` when status is complete; exit 3 printing `ENGINE NOT RUNNING` if the
-  pid is dead and state is not complete; exit 1 on timeout.
-- `resolve` validates the escalation id and action against `state.json`, appends to
-  `resolutions.jsonl`, exit 0; unknown id/action → exit 2.
-- `status` prints runs (id, status, stage, awaiting), queue, escalations.
-- `stop` creates the `stop` file. `abort`: if engine alive, request stop and wait up to 60 s for it
-  to exit; then for each run holding an agent: interrupt, close resolver panes, remove worktrees
-  of runs not `done` (branches kept); state.status = aborted. Nothing on GitHub is reverted.
+- Each `cmd_<name>(args)` is a thin wrapper that builds the real adapters and calls a testable
+  `<name>_command(...)` taking ports / a `Store` / clock callables: `plan_command`,
+  `run_command(ports, cwd, spec, overrides, out)`, `watch_command(store, spec, timeout, out, now=,
+  sleep=, alive=)`, `resolve_command(store, spec, id, action, note, out)`,
+  `status_command(store, spec, as_json, out)`, `stop_command(store, spec, out)`,
+  `abort_command(store, spec, herdr, out, now=, sleep=, wait=60)`. `main` turns `GitError`,
+  `GhError`, `HerdrError` and `OSError` into a one-line error and exit 2 (e.g. not in a git repo).
+  Commands other than `plan`/`run` without `state.json` print a clean error (which of `engine
+  plan` / `engine run` to run next).
+- `run` needs `plan.json`, refuses if the plan is unrunnable (`validate_plan`: unrefined tickets,
+  a cycle, a dangling blocker), if another engine is alive, or if the run was aborted (exit 1); a
+  complete run prints where the report is and exits 0. First `run` stores settings; a resumed
+  `run` overrides only the flags given explicitly (`Settings.from_dict(stored | overrides)`).
+  Agent args = `["--permission-mode", "auto", "--model", <model>]`. It builds the `Context` from
+  `adapters.real_ports(repo_root)` with an absolute `common_dir`, prints a short banner (starting
+  or resuming, tickets, max agents, model, state dir) and the final outcome (`COMPLETE. Report:
+  …` or `Stopped: state saved…`); per-transition output lives in `events.jsonl`. Ctrl-C persists,
+  logs `stopped` (reason `interrupted`), clears the pid and exits 0, like `stop`.
+- `watch` reads `state.json` every 5 s (read-only) and exits on the first of:
+  - status complete → `COMPLETE`, a blank line, then `report.md`; exit 0;
+  - status aborted → `ABORTED`; exit 0;
+  - open escalations → `<n> open escalation(s) for spec #N:` then one `ESCALATION <id>` block
+    each (oldest first) with `run` (+ `#ticket`), `kind`, `stage`, `summary`, indented `details`,
+    `actions`, and `resolve: <SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`; exit 0.
+    Skipped: `handed_off` escalations and escalations with a `resolutions.jsonl` line whose
+    `<id>@<ts>` key is not yet in `consumed_resolutions` (the supervisor already answered; it is
+    reported again only if the engine re-opens it);
+  - the pid dead on two consecutive polls (so a just-launched engine is not reported) → `ENGINE
+    NOT RUNNING: restart with …`; exit 3;
+  - timeout → exit 1.
+- `resolve` validates the escalation id (must exist and not be resolved) and the action (in the
+  escalation's `actions`) against `state.json`, appends to `resolutions.jsonl` and exits 0
+  (noting when the engine is not running); no state, unknown id, resolved escalation or a
+  disallowed action → exit 2, printing the unresolved ids or the allowed actions.
+- `status` prints the engine line (status, phase, engine running/pid), runs (id, status, stage,
+  awaiting), the merge queue and unresolved escalations (flagging a queued resolution); `--json`
+  prints `state.json`. No state → exit 1.
+- `stop` creates the `stop` file when the engine is alive (no engine → message, exit 0).
+- `abort`: if the engine is alive, request stop and wait up to 60 s for it to exit (still alive →
+  exit 1, nothing torn down, so there is never a second writer). Then for every non-terminal run:
+  interrupt its resolver and close the resolver pane, interrupt its agent, remove its worktree
+  (branches kept; `done` runs are untouched), status `aborted`; queue emptied; state.status =
+  aborted (best effort: herdr errors are printed as warnings). Spec review / e2e tabs stay open.
+  Nothing on GitHub is reverted. An aborted run cannot be resumed (`run` exits 1).
