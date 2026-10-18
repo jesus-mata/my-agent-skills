@@ -187,12 +187,17 @@ def _final(ctx: Context, run: Run, base: str) -> None:
         return
     result = ctx.git.merge(ctx.repo_root, run.id, no_ff=True, message=merge_message(ctx, run))
     if not result.ok:
-        try:
-            ctx.git.merge_abort(ctx.repo_root)
-        finally:
-            escalate(ctx, run, EscalationKind.REPO_DIRTY,
-                     f"merging {run.id} into {ctx.spec_branch} failed", details=result.output,
-                     awaiting=resume)
+        details = result.output
+        if result.conflict:  # a failure before git started merging leaves nothing to abort
+            try:
+                ctx.git.merge_abort(ctx.repo_root)
+            except PROGRAMMING_ERRORS:
+                raise
+            except Exception as exc:  # noqa: BLE001 - reported in the escalation instead
+                details += f"\n`git merge --abort` failed: {exc}"
+        escalate(ctx, run, EscalationKind.REPO_DIRTY,
+                 f"merging {run.id} into {ctx.spec_branch} failed", details=details,
+                 awaiting=resume)
         return
     run.merge_commit = result.commit
     ctx.state.queue.remove(run.id)

@@ -175,6 +175,22 @@ class MergeQueueTest(unittest.TestCase):
         h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
         self.assertEqual(len(h.shell.calls_to("run")), 1)  # gate not re-run
 
+    def test_final_merge_failure_without_merge_in_progress_escalates_once(self):
+        # e.g. "untracked working tree files would be overwritten": git leaves no merge to abort.
+        h = self.harness(settings=Settings(retry_budget=0))
+        h.git.script_merge(h.root, "ticket-1", MergeResult(
+            ok=False, conflict=False, commit=None, output="would be overwritten by merge"))
+        h.git.fail_next("merge_abort", RuntimeError("There is no merge to abort"))
+        h.script_ticket("ticket-1")
+        h.run_until(lambda: h.open_escalations())
+        h.tick()
+        esc = h.only_escalation()
+        self.assertEqual(esc.kind, EscalationKind.REPO_DIRTY)
+        self.assertIn("would be overwritten", esc.details)
+        self.assertEqual(h.run("ticket-1").escalation, esc.id)
+        h.resolve(esc.id, "retry")
+        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+
     def test_queue_is_fifo_and_escalated_head_does_not_block(self):
         h = self.harness([ticket(1), ticket(2)], settings=Settings(max_agents=2))
         h.git.script_merge(self.worktree(h, "ticket-1"), BRANCH, CONFLICT)

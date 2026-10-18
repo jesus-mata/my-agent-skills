@@ -272,7 +272,8 @@ Implementation notes (`merge_queue.py`):
 - A resolver that goes `missing` → `resolver-escalated`; its other non-OK outcomes use the
   generic agent-turn handling (attempts counted on INTEGRATE).
 - A non-conflict merge failure in the worktree counts as a port failure; a failed final merge
-  in the repo root is aborted and raises `repo-dirty`.
+  in the repo root is aborted (only when it stopped on conflicts; otherwise git left nothing
+  to abort) and raises one `repo-dirty`.
 
 ## Escalations (`transitions.py`)
 
