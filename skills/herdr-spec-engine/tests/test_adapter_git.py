@@ -90,6 +90,27 @@ class CliGitTest(unittest.TestCase):
             f.write("more\n")
         self.assertFalse(self.git.is_clean(self.repo, untracked=False))
 
+    def test_status_entries_list_untracked_files_one_by_one(self):
+        self.assertEqual(self.git.status_entries(self.repo), [])
+        cache = os.path.join(self.repo, "pkg", "__pycache__")
+        os.makedirs(cache)
+        for name in ("a.pyc", "b.pyc"):
+            with open(os.path.join(cache, name), "w") as f:
+                f.write("x")
+        with open(os.path.join(self.repo, "README.md"), "a") as f:
+            f.write("more\n")
+        self.assertEqual(sorted(self.git.status_entries(self.repo)), [
+            " M README.md", "?? pkg/__pycache__/a.pyc", "?? pkg/__pycache__/b.pyc"])
+
+    def test_clean_untracked_deletes_only_the_given_paths(self):
+        for name in ("junk.pyc", "keep.txt"):
+            with open(os.path.join(self.repo, name), "w") as f:
+                f.write("x")
+        self.git.clean_untracked(self.repo, ["junk.pyc", "README.md"])
+        self.assertFalse(os.path.exists(os.path.join(self.repo, "junk.pyc")))
+        self.assertTrue(os.path.exists(os.path.join(self.repo, "keep.txt")))
+        self.assertTrue(os.path.exists(os.path.join(self.repo, "README.md")))  # tracked: kept
+
     def _diverge(self, conflicting: bool) -> None:
         self.git.checkout(self.repo, "s7-ticket-1", create_from="main")
         self.commit("README.md" if conflicting else "t.txt", "ticket\n", "ticket change")

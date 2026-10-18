@@ -322,6 +322,7 @@ class FakeGit(_Recorder):
         self.revs: dict[str, int] = defaultdict(int)
         self.cwd_branch: dict[str, str] = {}
         self.clean: dict[str, bool] = {}
+        self.entries: dict[str, list[str]] = {}
         self.unmerged: dict[str, list[str]] = {}
         self._merges: dict[tuple[str, str], deque[MergeResult]] = defaultdict(deque)
 
@@ -332,6 +333,10 @@ class FakeGit(_Recorder):
 
     def set_clean(self, cwd: str, clean: bool) -> None:
         self.clean[cwd] = clean
+
+    def set_status(self, cwd: str, entries: list[str]) -> None:
+        """Porcelain entries (``"?? path"``) for ``cwd``; non-empty makes it dirty."""
+        self.entries[cwd] = list(entries)
 
     def set_unmerged(self, cwd: str, paths: list[str]) -> None:
         self.unmerged[cwd] = list(paths)
@@ -396,7 +401,18 @@ class FakeGit(_Recorder):
 
     def is_clean(self, cwd: str, untracked: bool = True) -> bool:
         self._call("is_clean", cwd=cwd)
-        return self.clean.get(cwd, True)
+        return self.clean.get(cwd, True) and not self.entries.get(cwd)
+
+    def status_entries(self, cwd: str) -> list[str]:
+        self._call("status_entries", cwd=cwd)
+        if cwd in self.entries:
+            return list(self.entries[cwd])
+        return [] if self.clean.get(cwd, True) else [" M (unscripted)"]
+
+    def clean_untracked(self, cwd: str, paths: list[str]) -> None:
+        self._call("clean_untracked", cwd=cwd, paths=list(paths))
+        self.entries[cwd] = [e for e in self.entries.get(cwd, [])
+                             if not (e.startswith("?? ") and e[3:] in paths)]
 
     def unmerged_paths(self, cwd: str) -> list[str]:
         self._call("unmerged_paths", cwd=cwd)

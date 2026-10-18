@@ -13,7 +13,9 @@ run is in the three steps lives in ``run.awaiting``:
 """
 from __future__ import annotations
 
-from .model import EscalationKind, Outcome, Run, RunKind, RunStatus, resolver_agent_name
+from .model import (
+    EscalationKind, EscalationStatus, Outcome, Run, RunKind, RunStatus, resolver_agent_name,
+)
 from .stages import (
     PROGRAMMING_ERRORS, Context, agent_ready, close_resolver, escalate, event, handle_turn_outcome,
     persist, poll_turn, port_failure, ready_waiting, send_turn, ticket_title,
@@ -206,10 +208,14 @@ def _final(ctx: Context, run: Run, base: str) -> None:
         return
     resume = {"type": "queue", "resume": "final", "base": base}
     branch = ctx.git.current_branch(ctx.repo_root)
-    if branch != ctx.spec_branch or not ctx.git.is_clean(ctx.repo_root):
+    problem = _repo_root_problem(ctx, run, branch)
+    if problem:
+        if _open_repo_dirty(ctx, run):
+            run.awaiting = resume  # one escalation per cause: re-checked each tick
+            return
         escalate(ctx, run, EscalationKind.REPO_DIRTY,
                  f"repo root must be clean with {ctx.spec_branch} checked out to merge {run.id}",
-                 details=f"{ctx.repo_root} is on {branch}", awaiting=resume)
+                 details=problem, awaiting=resume)
         return
     result = ctx.git.merge(ctx.repo_root, run.id, no_ff=True, message=merge_message(ctx, run))
     if not result.ok:
@@ -229,6 +235,46 @@ def _final(ctx: Context, run: Run, base: str) -> None:
     ctx.state.queue.remove(run.id)
     run.awaiting = {"type": "integrated"}
     event(ctx, run, "integrated", commit=result.commit)
+
+
+CACHE_DIRS = frozenset({"__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache"})
+CACHE_SUFFIXES = (".pyc", ".pyo")
+STATUS_LINES = 30
+
+
+def is_cache_path(path: str) -> bool:
+    """A tool cache that is safe to delete: it is regenerated on the next run."""
+    parts = path.rstrip("/").split("/")
+    return bool(CACHE_DIRS.intersection(parts[:-1])) or parts[-1].endswith(CACHE_SUFFIXES)
+
+
+def _repo_root_problem(ctx: Context, run: Run, branch: str) -> str | None:
+    """Why the repo root cannot take the merge, or None. Untracked tool caches alone (left by
+    agents or a check run in the root, or un-ignored by switching spec branches) are deleted."""
+    root = ctx.repo_root
+    if branch != ctx.spec_branch:
+        return f"{root} is on {branch}, not {ctx.spec_branch}"
+    if ctx.git.is_clean(root):
+        return None
+    entries = ctx.git.status_entries(root)
+    caches = [e[3:] for e in entries if e.startswith("?? ") and is_cache_path(e[3:])]
+    if caches and len(caches) == len(entries):
+        ctx.git.clean_untracked(root, caches)
+        event(ctx, run, "repo_caches_cleaned", paths=caches)
+        if ctx.git.is_clean(root):
+            return None
+        entries = ctx.git.status_entries(root)
+    listing = "\n".join(entries[:STATUS_LINES])
+    more = f"\n... and {len(entries) - STATUS_LINES} more" if len(entries) > STATUS_LINES else ""
+    return f"{root} has changes (git status --short):\n{listing}{more}"
+
+
+
+def _open_repo_dirty(ctx: Context, run: Run) -> bool:
+    """Another run already has an unresolved repo-dirty escalation (same root, same cause)."""
+    return any(e.kind is EscalationKind.REPO_DIRTY and e.run != run.id
+               and e.status is not EscalationStatus.RESOLVED
+               for e in ctx.state.escalations.values())
 
 
 def merge_message(ctx: Context, run: Run) -> str:

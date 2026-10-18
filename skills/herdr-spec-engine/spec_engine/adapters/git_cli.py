@@ -76,6 +76,24 @@ class CliGit:
         args = ["status", "--porcelain", "-z"] + ([] if untracked else ["--untracked-files=no"])
         return self._run(cwd, *args).stdout == ""
 
+    def status_entries(self, cwd: str) -> list[str]:
+        """``git status --porcelain`` entries (``"XY path"``), listing untracked files one by one
+        rather than collapsing untracked directories; ignored/excluded files never count."""
+        out = self._run(cwd, "status", "--porcelain", "-z", "--untracked-files=all").stdout
+        entries, fields = [], iter(out.split("\0"))
+        for field in fields:
+            if not field:
+                continue
+            entries.append(field)
+            if field[0] in "RC":  # a rename/copy is followed by its source path
+                next(fields, None)
+        return entries
+
+    def clean_untracked(self, cwd: str, paths: list[str]) -> None:
+        """Delete untracked ``paths``; ``git clean`` never touches tracked files."""
+        if paths:
+            self._run(cwd, "clean", "-f", "-q", "--", *paths)
+
     def unmerged_paths(self, cwd: str) -> list[str]:
         out = self._run(cwd, "diff", "--name-only", "--diff-filter=U", "-z").stdout
         return sorted({p for p in out.split("\0") if p})

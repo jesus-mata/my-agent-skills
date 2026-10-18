@@ -191,6 +191,43 @@ class MergeQueueTest(unittest.TestCase):
         h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
         self.assertEqual(len(h.shell.calls_to("run")), 1)  # gate not re-run
 
+    def test_untracked_caches_in_repo_root_are_cleaned_not_escalated(self):
+        h = self.harness()
+        caches = ["?? sandbox/__pycache__/greet.cpython-314.pyc", "?? .pytest_cache/v/x", "?? a.pyc"]
+        h.git.set_status(h.root, caches)
+        h.script_ticket("s7-ticket-1")
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
+        self.assertEqual(h.open_escalations(), [])
+        self.assertEqual(h.git.calls_to("clean_untracked")[0]["paths"], [c[3:] for c in caches])
+        self.assertEqual(len(self.root_merges(h)), 1)
+
+    def test_repo_dirty_lists_the_paths_and_cleans_nothing_when_mixed(self):
+        h = self.harness()
+        h.git.set_status(h.root, ["?? sandbox/__pycache__/a.pyc", "?? notes.txt", " M README.md"])
+        h.script_ticket("s7-ticket-1")
+        h.run_until(lambda: h.open_escalations())
+        esc = h.only_escalation()
+        self.assertEqual(esc.kind, EscalationKind.REPO_DIRTY)
+        self.assertIn("?? notes.txt", esc.details)
+        self.assertIn(" M README.md", esc.details)
+        self.assertEqual(h.git.calls_to("clean_untracked"), [])
+
+    def test_one_repo_dirty_escalation_for_several_queued_runs(self):
+        h = self.harness([ticket(1), ticket(2)], settings=Settings(max_agents=2))
+        h.git.set_status(h.root, ["?? notes.txt"])
+        h.script_ticket("s7-ticket-1")
+        h.script_ticket("s7-ticket-2")
+        h.run_until(lambda: h.open_escalations()
+                    and h.run("s7-ticket-2").awaiting.get("resume") == "final")
+        for _ in range(3):
+            h.tick()
+        esc = h.only_escalation()
+        h.git.set_status(h.root, [])
+        h.resolve(esc.id, "retry")
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE
+                    and h.status("s7-ticket-2") is RunStatus.DONE)
+        self.assertEqual(len(h.state.escalations), 1)
+
     def test_final_merge_failure_without_merge_in_progress_escalates_once(self):
         # e.g. "untracked working tree files would be overwritten": git leaves no merge to abort.
         h = self.harness(settings=Settings(retry_budget=0))
