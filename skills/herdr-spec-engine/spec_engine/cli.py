@@ -68,7 +68,8 @@ def cmd_plan(args: argparse.Namespace) -> int:
     from .adapters.gh_cli import CliGitHub
     from .adapters.git_cli import CliGit
 
-    return plan_command(CliGitHub(), CliGit(), os.getcwd(), args.spec, args.branch, args.gate,
+    cwd = os.getcwd()
+    return plan_command(CliGitHub(cwd), CliGit(), cwd, args.spec, args.branch, args.gate,
                         args.from_file, sys.stdout)
 
 
