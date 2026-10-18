@@ -388,12 +388,13 @@ def _enter_claim(ctx: Context, run: Run) -> None:
 
 
 def start_run_agent(ctx: Context, run: Run) -> None:
-    """Start the run's own agent in its pane, or adopt it when herdr already has it (an earlier
-    ``agent.start`` failed on our side — socket timeout, Ctrl-C — after herdr started it)."""
-    if ctx.herdr.agent_status(run.id) == "missing":
-        ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
-    else:
+    """Start the run's own agent in its pane, or adopt it when herdr already runs it in that pane
+    (an earlier ``agent.start`` failed on our side — socket timeout, Ctrl-C — after herdr
+    started it). A same-named agent in another pane is not ours: names are global to herdr."""
+    if run.pane_id is not None and ctx.herdr.agent_pane(run.id) == run.pane_id:
         event(ctx, run, "agent_adopted", agent=run.id)
+    else:
+        ctx.herdr.start_agent(run.id, run.pane_id, ctx.settings.agent_args)
     run.agent = run.id
 
 

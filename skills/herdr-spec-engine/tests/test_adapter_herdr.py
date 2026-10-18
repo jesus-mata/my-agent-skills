@@ -201,6 +201,13 @@ class SocketHerdrTest(unittest.TestCase):
             "agent_not_found", "agent target ticket-3 not found")
         self.assertEqual(self.herdr.agent_status("ticket-3"), "missing")
 
+    def test_agent_pane(self):
+        self.server.handlers["agent.get"] = lambda p: ok(
+            "agent_info", agent=agent_info("w7:p1", "idle", p["target"]))
+        self.assertEqual(self.herdr.agent_pane("ticket-3"), "w7:p1")
+        self.server.handlers["agent.get"] = lambda p: err("agent_not_found", "gone")
+        self.assertIsNone(self.herdr.agent_pane("ticket-3"))
+
     def test_agent_status_other_errors_raise(self):
         self.server.handlers["agent.get"] = lambda p: err("internal", "x")
         with self.assertRaises(HerdrError):

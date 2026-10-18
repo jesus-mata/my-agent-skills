@@ -205,6 +205,10 @@ class FakeHerdr(_Recorder):
         self._call("agent_status", name=name)
         return self.agents.get(name, "missing")
 
+    def agent_pane(self, name: str) -> str | None:
+        self._call("agent_pane", name=name)
+        return self.agent_panes.get(name) if name in self.agents else None
+
     def read_agent(self, name: str, lines: int) -> str:
         self._call("read_agent", name=name, lines=lines)
         if name not in self.agents:

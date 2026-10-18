@@ -163,6 +163,16 @@ class SocketHerdr:
         status = (result.get("agent") or {}).get("agent_status")
         return status if status in AGENT_STATUSES else "unknown"  # type: ignore[return-value]
 
+    def agent_pane(self, name: str) -> str | None:
+        try:
+            result = self.request("agent.get", {"target": name})
+        except HerdrError as e:
+            if e.code == AGENT_NOT_FOUND:
+                return None
+            raise
+        pane = (result.get("agent") or {}).get("pane_id")
+        return str(pane) if pane else None
+
     def read_agent(self, name: str, lines: int) -> str:
         result = self.request("agent.read", {
             "target": name, "source": "recent", "lines": int(lines), "format": "text",

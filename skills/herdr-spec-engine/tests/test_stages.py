@@ -269,6 +269,15 @@ class StagesTest(unittest.TestCase):
         self.assertEqual(h.run("ticket-1").stage, Stage.IMPLEMENT)
         self.assertEqual(len(h.herdr.prompts["ticket-1"]), 1)
 
+    def test_same_named_agent_in_another_pane_is_not_adopted(self):
+        # Agent names are global to the herdr server: another repo can run its own ticket-1.
+        h = self.harness()
+        h.herdr.agents["ticket-1"] = "working"
+        h.herdr.agent_panes["ticket-1"] = "elsewhere:p1"
+        h.herdr.on_prompt("ticket-1", working)
+        h.tick()
+        self.assertEqual(len(h.herdr.calls_to("start_agent")), 1)
+
     def test_outward_denied_leave_open_and_dependents_skipped(self):
         h = self.harness([ticket(1), ticket(2, blockers=[1]), ticket(3)])
         h.turn("ticket-1", {"status": "outward-denied", "summary": "needs a deploy",

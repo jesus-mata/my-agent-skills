@@ -241,8 +241,8 @@ Implementation notes (`stages.py`):
   internal types: `sync`, `verify`, `close` (CLOSE records finished steps so a retry — including
   `retry` on its `budget-exhausted` — never comments twice), `queue`, `integrated`. `{"type": "escalation"}` marks runs escalated before
   holding an agent (hitl, unrefined, external blocker).
-- PROVISION / PROVISION_TAB start the agent only when `agent_status(run_id)` is `missing`;
-  otherwise they adopt it (an earlier `agent.start` raised on the engine's side — socket timeout,
+- PROVISION / PROVISION_TAB adopt an agent herdr already runs under the run id *in the run's
+  pane* (`agent_pane`) instead of starting it (an earlier `agent.start` raised on the engine's side — socket timeout,
   Ctrl-C — after herdr had started it), so a retry never starts a second agent with the name.
 - AWAIT_HUMAN re-reads the issue first: already closed → `done` without escalating.
 - SPEC_REVIEW / E2E store their accepted result in `run.review`.
@@ -430,6 +430,7 @@ class Herdr(Protocol):
     def start_agent(self, name: str, pane_id: str, args: list[str]) -> None: ...   # kind claude
     def prompt_agent(self, name: str, text: str) -> None: ...
     def agent_status(self, name: str) -> AgentStatus: ...
+    def agent_pane(self, name: str) -> str | None: ...               # None when not found
     def read_agent(self, name: str, lines: int) -> str: ...
     def interrupt_agent(self, name: str) -> None: ...                 # ctrl+c
     def wait_for_change(self, timeout: float) -> None: ...            # may return early
@@ -475,7 +476,7 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   `pane.split {target_pane_id, direction: "right", cwd, focus: false}` → `result.pane.pane_id`;
   `pane.close {pane_id}`; `agent.start {name, kind: "claude", pane_id, args, timeout_ms: 60000}`
   (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text}`; `agent.get {target}` →
-  `result.agent.agent_status` (error code `agent_not_found` → `missing`; any status outside the
+  `result.agent.agent_status` (`agent_pane`: `result.agent.pane_id`) (error code `agent_not_found` → `missing`; any status outside the
   enum → `unknown`); `agent.read {target, source: "recent", lines, format: "text", strip_ansi:
   true}` → `result.read.text`; `agent.send_keys {target, keys: ["ctrl+c"]}`. `agent.prompt`,
   `agent.read` and `agent.send_keys` on a missing agent raise `HerdrError("agent_not_found")`.
