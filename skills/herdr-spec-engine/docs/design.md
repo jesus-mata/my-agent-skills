@@ -316,8 +316,8 @@ to `pending`; the scheduler re-reads the issue when it next tries to start it.
 `Engine(ctx).run_forever()`:
 
 ```
-startup: ping herdr; verify repo root on spec branch (create from base if missing: checkout base,
-         pull --ff-only, checkout -b); ensure exclude entry; load or init state; write pid
+startup: write pid (first, so `watch` sees it during slow git steps; cleared if startup fails); ping herdr; verify repo root on spec branch (create from base if missing: checkout base,
+         pull --ff-only, checkout -b); ensure exclude entry; load or init state
 loop:    consume resolutions inbox -> apply
          for each non-terminal, non-escalated run: advance (enter / poll / transition) — persist after each transition
          process merge-queue head

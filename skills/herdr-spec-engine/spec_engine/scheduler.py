@@ -57,19 +57,25 @@ class Engine:
     def startup(self) -> None:
         """Ping herdr, ensure the spec branch and exclude entry, load or init state, write pid."""
         ctx = self.ctx
-        ctx.herdr.ping()
-        self._ensure_spec_branch()
-        self._ensure_exclude()
-        state = ctx.store.load_state()
-        resumed = state is not None
-        ctx.state = state if resumed else self._init_state()
-        ctx.state.settings = ctx.settings
-        ctx.store.clear_stop()
+        # The pid goes first: `watch` reports a pid-less engine as dead after ~5 s, and creating
+        # the spec branch (`git pull`) can take longer.
         ctx.store.write_pid()
-        self.event(None, "resumed" if resumed else "started")
-        self.persist()
-        if resumed:
-            self._reconcile()
+        try:
+            ctx.herdr.ping()
+            self._ensure_spec_branch()
+            self._ensure_exclude()
+            state = ctx.store.load_state()
+            resumed = state is not None
+            ctx.state = state if resumed else self._init_state()
+            ctx.state.settings = ctx.settings
+            ctx.store.clear_stop()
+            self.event(None, "resumed" if resumed else "started")
+            self.persist()
+            if resumed:
+                self._reconcile()
+        except BaseException:
+            ctx.store.clear_pid()
+            raise
 
     def run_forever(self) -> int:
         self.startup()

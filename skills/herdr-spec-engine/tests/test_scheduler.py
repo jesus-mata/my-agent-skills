@@ -37,6 +37,22 @@ class SchedulerTest(unittest.TestCase):
         self.assertIsNotNone(h.store.load_state())
         self.assertEqual(h.herdr.calls_to("ping"), [{}, {}])
 
+    def test_pid_is_written_before_slow_startup_steps(self):
+        # `watch` declares the engine dead after two pid-less polls 5 s apart; `git pull` while
+        # creating the spec branch can take longer than that.
+        h = self.harness([ticket(1)])
+        seen = []
+        h.git.pull_ff_only = lambda cwd: seen.append(h.store.read_pid())
+        h.start()
+        self.assertEqual(seen, [os.getpid()])
+
+    def test_failed_startup_clears_the_pid(self):
+        h = self.harness([ticket(1)])
+        h.git.fail_next("pull_ff_only", RuntimeError("no tracking information"))
+        with self.assertRaises(RuntimeError):
+            h.engine.run_forever()
+        self.assertIsNone(h.store.read_pid())
+
     def test_done_tickets_get_no_run_and_satisfy_blockers(self):
         h = self.harness([ticket(1, klass="done"), ticket(2, blockers=[1])]).start()
         self.assertNotIn("ticket-1", h.state.runs)
