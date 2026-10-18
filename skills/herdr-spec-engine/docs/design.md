@@ -81,10 +81,13 @@ worktrees). The engine deletes the file before sending a prompt, and after the a
 idle/done reads + validates it, archives it to `out/`, then deletes it.
 
 Schemas (`results.py`, hand-written validators returning `(value, None)` or `(None, error_str)`;
-unknown keys allowed; every list may be empty):
+unknown keys allowed; every list may be empty; an optional list may be missing and is read as
+`[]`):
 
 - **implement** — `{"status": "implemented" | "outward-denied", "summary": str, "denied_actions": [str]}`
-- **review** — `{"fixed": [{"kind": "spec"|"standards", "title": str, "commit": str}], "pending": [{"kind": "spec"|"standards", "title": str, "reason": str}], "scope_creep": [str]}`
+- **review** — `{"fixed": [{"kind": "spec"|"standards", "title": str, "commit": str}], "pending": [{"kind": "spec"|"standards", "title": str, "reason": str}], "dismissed": [{"kind": "spec"|"standards", "title": str, "reason": str}] (optional), "scope_creep": [str]}`.
+  `pending` holds real findings left unfixed; `dismissed` holds findings the agent judged false
+  positives or not applicable. Only a pending `spec` finding keeps the ticket open.
 - **gate_fix** — `{"summary": str}`
 - **resolve** — `{"verdict": "RESOLVED" | "ESCALATE", "summary": str}`
 - **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "medium"|"low", "title": str}]}`
@@ -362,10 +365,11 @@ is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec re
   `fixes`. Fix runs go through the same scheduler and merge queue.
 - When all fix runs are terminal (or there were none): create the `e2e` run, phase `e2e`.
 - E2E OK → phase `complete`; write `report.md`: tickets done / left open / skipped (with reasons
-  from `run.notes` and pending review findings, `[spec]` ones flagged as keeping the issue open),
+  from `run.notes`, pending review findings (`[spec]` ones flagged as keeping the issue open) and
+  dismissed review findings),
   tickets already closed before the run, spec review fixed / hard findings still pending (their
-  fix run not `done`) / not fixed (medium/low), fix runs (merge commit, finding, pending review
-  findings), e2e passed / fixed / pending, open or handed-off escalations, and
+  fix run not `done`) / not fixed (medium/low), fix runs (merge commit, finding, pending and
+  dismissed review findings), e2e passed / fixed / pending, open or handed-off escalations, and
   "Spec branch `<b>` is local; nothing was pushed." A spec review or e2e that did not finish is
   reported as such.
 - Spec review and e2e tabs are never closed by the engine.
@@ -403,7 +407,8 @@ branches or deploy; end your turn by writing the result JSON to `$result_path` (
 Content follows the old skill: implement uses `/implement-ticket <n>`; review uses
 `/mattpocock-skills:code-review <spec_branch>` with the fix policy (fix every missing/wrong spec
 finding and hard standards violation, test-first with `/mattpocock-skills:tdd`, one commit each,
-only report scope creep); resolver uses `/mattpocock-skills:resolving-merge-conflicts`, finishes
+only report scope creep; false positives go to `dismissed`, never `pending`; work merged into the
+spec branch after the ticket branch was cut is not a finding); resolver uses `/mattpocock-skills:resolving-merge-conflicts`, finishes
 the merge commit, ESCALATE for big chunks or significant logic changes — leaving the conflicted
 merge in progress (never `git merge --abort`) so the human finishes it in the worktree and
 `resolved-manually` resumes at the gate; spec review runs

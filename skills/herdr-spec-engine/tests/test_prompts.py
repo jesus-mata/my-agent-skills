@@ -131,9 +131,10 @@ class ContentTest(unittest.TestCase):
         expected = {
             "implement": ["/implement-ticket <ticket-value>", "outward-denied", "denied_actions"],
             "review": ["/mattpocock-skills:code-review <spec_branch-value>",
-                       "/mattpocock-skills:tdd", "scope_creep"],
+                       "/mattpocock-skills:tdd", "scope_creep", "`dismissed`",
+                       "never in `pending`", "is not a finding"],
             "fix_review": ["/mattpocock-skills:code-review <spec_branch-value>",
-                           "/mattpocock-skills:tdd"],
+                           "/mattpocock-skills:tdd", "`dismissed`", "is not a finding"],
             "resolver": ["/mattpocock-skills:resolving-merge-conflicts", "ESCALATE", "RESOLVED"],
             "spec_review": ["/code-review high", "against `<base-value>`",
                             "/mattpocock-skills:tdd", "Never create worktrees"],

@@ -61,6 +61,15 @@ class ResultsTest(unittest.TestCase):
                            "review.pending[0].reason", "missing")
         self.assertInvalid("review", bad("review", fixed=["x"]), "review.fixed[0]", "object")
         self.assertInvalid("review", bad("review", scope_creep=KeyError), "review.scope_creep")
+        self.assertInvalid("review", bad("review", dismissed=[{"kind": "spec", "title": "t"}]),
+                           "review.dismissed[0].reason", "missing")
+        self.assertInvalid("review", bad("review", dismissed="x"), "review.dismissed", "list")
+
+    def test_review_dismissed_is_optional_and_defaults_to_empty(self):
+        old = bad("review", dismissed=KeyError)
+        value, error = results.validate_review(old)
+        self.assertIsNone(error)
+        self.assertEqual(value.get("dismissed", []), [])
 
     def test_gate_fix(self):
         self.assertInvalid("gate_fix", {"summary": 3}, "gate_fix.summary", "integer")

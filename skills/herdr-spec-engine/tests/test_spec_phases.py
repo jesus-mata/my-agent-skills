@@ -6,6 +6,10 @@ from spec_engine.model import (
 )
 from tests.engine_harness import Harness, ticket
 
+DISMISSED_SPEC = {"fixed": [], "pending": [], "scope_creep": [],
+                  "dismissed": [{"kind": "spec", "title": "Greeting module absent",
+                                 "reason": "false positive: merged into the spec branch later"}]}
+
 HARD_A = {"severity": "blocker", "title": "Race on save", "file": "src/save.py", "line": 3,
           "failure_scenario": "two saves lose one"}
 HARD_B = {"severity": "high", "title": "Leaky cache", "file": "src/cache.py", "line": None,
@@ -108,6 +112,22 @@ class SpecPhasesTest(unittest.TestCase):
         self.assertIn("## Fix runs\n\n- none", report)
         self.assertIn("## E2E\n\n- not run", report)
         self.assertIn("## Open or handed-off escalations\n\n- none", report)
+
+
+class DismissedFindingTest(unittest.TestCase):
+    def test_dismissed_spec_finding_closes_the_ticket_and_is_reported(self):
+        h = Harness([ticket(1, title="Readme")])
+        self.addCleanup(h.cleanup)
+        h.start()
+        h.script_ticket("s7-ticket-1", review=DISMISSED_SPEC)
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
+        self.assertEqual(h.github.closed, [1])
+        self.assertEqual(h.run("s7-ticket-1").notes, [])
+        self.assertNotIn("Left open", h.github.comments[1][0])
+        report = spec_phases.write_report(h.engine)
+        self.assertIn("  - dismissed [spec] Greeting module absent: false positive: merged into "
+                      "the spec branch later", report)
+        self.assertNotIn("left open on GitHub", report)
 
 
 if __name__ == "__main__":

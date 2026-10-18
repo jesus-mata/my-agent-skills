@@ -7,7 +7,10 @@ You are a sub Claude instance started by herdr-spec-engine for spec #$spec ($spe
    - Fix smells only when cheap and inside this ticket.
    - Scope creep: report it only, leave the code as it is.
 3. Make each fix test-first with `/mattpocock-skills:tdd` (failing test, then fix), one commit per fix on your branch.
-4. Record each fix in `fixed` with its commit sha, each finding you did not fix in `pending` with the reason, and scope creep in `scope_creep`.
+4. Record each fix in `fixed` with its commit sha, each real finding you did not fix in `pending` with the reason, and scope creep in `scope_creep`.
+5. A finding you judge a false positive or not applicable goes in `dismissed` with the reason, never in `pending`. A pending `spec` finding keeps the ticket open on GitHub, so `pending` is only for real gaps left in this ticket.
+
+Your branch was cut from `$spec_branch` when this ticket started. Sibling tickets merged into `$spec_branch` after that can be missing from your branch. Their absence is not a finding: the engine merges your branch into `$spec_branch` after the review. Dismiss such findings.
 
 Rules:
 - Stay in your current directory and commit only on your current branch.

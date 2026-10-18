@@ -93,6 +93,15 @@ def _reason(run: Run, lead: str = " — ") -> str:
     return f"{lead}{'; '.join(run.notes)}" if run.notes else ""
 
 
+def _review_findings(run: Run) -> list[str]:
+    """Sub-bullets for a run's review: pending findings, then dismissed ones (never blocking)."""
+    review = run.review or {}
+    return ([f"  - pending [{p['kind']}] {p['title']}: {p['reason']}"
+             for p in review.get("pending", [])]
+            + [f"  - dismissed [{d['kind']}] {d['title']}: {d['reason']}"
+               for d in review.get("dismissed", [])])
+
+
 def _tickets_section(engine: Engine, runs: list[Run]) -> list[str]:
     ctx = engine.ctx
     tickets = sorted((r for r in runs if r.kind in (RunKind.TICKET, RunKind.HUMAN)),
@@ -106,8 +115,7 @@ def _tickets_section(engine: Engine, runs: list[Run]) -> list[str]:
                 f"merged as {run.merge_commit}" if run.merge_commit else "done")
             item = f"{label} — {how}{_reason(run, '; ')}"
             done.append(item)
-            done.extend(f"  - pending [{p['kind']}] {p['title']}: {p['reason']}"
-                        for p in (run.review or {}).get("pending", []))
+            done.extend(_review_findings(run))
             if pending_spec_findings(run):
                 done.append("  - left open on GitHub until the pending spec finding is addressed")
         elif run.status is RunStatus.LEFT_OPEN:
@@ -170,8 +178,7 @@ def _fix_runs_section(runs: list[Run]) -> list[str]:
         how = f"merged as {run.merge_commit}" if run.merge_commit else run.status.value
         out.append(f"- {run.id} {title} — {how}{_reason(run, '; ')}")
         out.append("  - finding: " + format_finding(run.finding).replace("\n", "; "))
-        out.extend(f"  - pending [{p['kind']}] {p['title']}: {p['reason']}"
-                   for p in (run.review or {}).get("pending", []))
+        out.extend(_review_findings(run))
     return out + [""]
 
 

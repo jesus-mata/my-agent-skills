@@ -1,7 +1,8 @@
 """Result files: the schema-checked JSON an agent writes to end its turn.
 
 Validators take the parsed JSON and return ``(value, None)`` or ``(None, error)``. Unknown keys
-are allowed; every list may be empty.
+are allowed; every list may be empty. Optional lists (e.g. ``review.dismissed``) may be missing;
+readers treat a missing one as ``[]``.
 """
 from __future__ import annotations
 
@@ -72,6 +73,12 @@ def _obj_list(d: dict, key: str, where: str, check: Callable[[dict, str], None])
     return items
 
 
+def _opt_obj_list(d: dict, key: str, where: str,
+                  check: Callable[[dict, str], None]) -> list[dict]:
+    """Like ``_obj_list``, but the key may be missing (older results omit it; read it as ``[]``)."""
+    return _obj_list(d, key, where, check) if key in d else []
+
+
 def _kind(v: Any) -> str:
     if v is None:
         return "null"
@@ -106,13 +113,14 @@ def _review(d: dict, w: str) -> None:
         _str(e, "title", p)
         _str(e, "commit", p)
 
-    def pending(e: dict, p: str) -> None:
+    def with_reason(e: dict, p: str) -> None:
         _enum(e, "kind", p, kinds)
         _str(e, "title", p)
         _str(e, "reason", p)
 
     _obj_list(d, "fixed", w, fixed)
-    _obj_list(d, "pending", w, pending)
+    _obj_list(d, "pending", w, with_reason)
+    _opt_obj_list(d, "dismissed", w, with_reason)
     _str_list(d, "scope_creep", w)
 
 
@@ -186,6 +194,9 @@ _EXAMPLES: dict[str, dict] = {
         "fixed": [{"kind": "spec", "title": "Missing empty-state message", "commit": "abc1234"}],
         "pending": [{"kind": "standards", "title": "Long function in parser.py",
                      "reason": "Needs a wider refactor"}],
+        "dismissed": [{"kind": "spec", "title": "Helper from ticket #3 missing",
+                       "reason": "Not a finding: #3 merged into the spec branch after this "
+                                 "branch was cut"}],
         "scope_creep": ["Renamed unrelated helper"],
     },
     "gate_fix": {"summary": "Fixed the failing lint rule in api.py."},
