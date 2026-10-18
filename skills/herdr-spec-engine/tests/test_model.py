@@ -3,7 +3,7 @@ import unittest
 
 from spec_engine import transitions
 from spec_engine.model import (
-    STAGES_BY_KIND, Escalation, EscalationKind, EscalationStatus, Phase, Plan, PlanTicket, Run,
+    AGENT_NAME_RE, STAGES_BY_KIND, Escalation, EscalationKind, EscalationStatus, Phase, Plan, PlanTicket, Run,
     RunKind, RunState, RunStatus, Settings, Stage, TicketClass, resolver_agent_name, run_id_for,
 )
 
@@ -59,17 +59,51 @@ class ModelTest(unittest.TestCase):
                                               status=EscalationStatus.HANDED_OFF)).stage, None)
 
     def test_run_ids(self):
-        self.assertEqual(run_id_for(RunKind.TICKET, ticket=4), "ticket-4")
-        self.assertEqual(run_id_for(RunKind.HUMAN, ticket=4), "human-4")
-        self.assertEqual(run_id_for(RunKind.FIX, spec=9, k=2), "fix-9-2")
-        self.assertEqual(run_id_for(RunKind.SPEC_REVIEW, spec=9), "review-spec-9")
-        self.assertEqual(run_id_for(RunKind.E2E, spec=9), "e2e-spec-9")
+        self.assertEqual(run_id_for(RunKind.TICKET, spec=9, ticket=4), "s9-ticket-4")
+        self.assertEqual(run_id_for(RunKind.HUMAN, spec=9, ticket=4), "s9-human-4")
+        self.assertEqual(run_id_for(RunKind.FIX, spec=9, k=2), "s9-fix-2")
+        self.assertEqual(run_id_for(RunKind.SPEC_REVIEW, spec=9), "s9-review")
+        self.assertEqual(run_id_for(RunKind.E2E, spec=9), "s9-e2e")
+        for kind in RunKind:
+            with self.assertRaises(ValueError):
+                run_id_for(kind, ticket=4, k=2)  # the spec is always required
         with self.assertRaises(ValueError):
-            run_id_for(RunKind.TICKET)
-        self.assertEqual(resolver_agent_name("ticket-12"), "resolve-ticket-12")
-        long = resolver_agent_name("fix-123456789-123456789012345")
-        self.assertLessEqual(len(long), 32)
-        self.assertTrue(long.startswith("resolve-fix-"))
+            run_id_for(RunKind.TICKET, spec=9)
+        with self.assertRaises(ValueError):
+            run_id_for(RunKind.FIX, spec=9)
+
+    def test_resolver_agent_names(self):
+        self.assertEqual(resolver_agent_name("s9-ticket-12"), "s9-resolve-ticket-12")
+        self.assertEqual(resolver_agent_name("s9-fix-3"), "s9-resolve-fix-3")
+        self.assertEqual(resolver_agent_name("s99999-ticket-99999"),
+                         "s99999-resolve-ticket-99999")
+        # a name that would not fit is still a valid, distinct herdr name
+        a = resolver_agent_name("s123456789012-ticket-123456789012")
+        b = resolver_agent_name("s123456789012-ticket-123456789013")
+        self.assertRegex(a, AGENT_NAME_RE)
+        self.assertNotEqual(a, b)
+
+    def test_names_fit_herdr_and_are_unique_up_to_five_digits(self):
+        numbers = [1, 2, 9, 10, 11, 12, 19, 21, 99, 100, 123, 999, 1000, 1234, 9999, 10000,
+                   12345, 99999]
+        run_ids, resolvers = set(), {}
+        for spec in numbers:
+            ids = [run_id_for(RunKind.SPEC_REVIEW, spec=spec), run_id_for(RunKind.E2E, spec=spec)]
+            for n in numbers:
+                ids += [run_id_for(RunKind.TICKET, spec=spec, ticket=n),
+                        run_id_for(RunKind.HUMAN, spec=spec, ticket=n),
+                        run_id_for(RunKind.FIX, spec=spec, k=n)]
+            for run_id in ids:
+                self.assertRegex(run_id, AGENT_NAME_RE)
+                self.assertTrue(run_id.startswith(f"s{spec}-"), run_id)
+                self.assertNotIn(run_id, run_ids)
+                run_ids.add(run_id)
+                name = resolver_agent_name(run_id)
+                self.assertRegex(name, AGENT_NAME_RE)
+                self.assertTrue(name.startswith(f"s{spec}-resolve-"), name)
+                self.assertNotIn(name, run_ids)
+                self.assertNotIn(name, resolvers, f"{run_id} and {resolvers.get(name)}")
+                resolvers[name] = run_id
 
     def test_new_run_starts_at_first_stage(self):
         for kind, stages in STAGES_BY_KIND.items():

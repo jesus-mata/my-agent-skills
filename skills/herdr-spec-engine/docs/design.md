@@ -136,14 +136,19 @@ A **Run** is one entity the scheduler advances. Kinds and their stage sequence:
 
 | Kind | Run id | Stages |
 | --- | --- | --- |
-| `ticket` | `ticket-<n>` | CLAIM → PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
-| `human` | `human-<n>` | AWAIT_HUMAN |
-| `fix` | `fix-<N>-<k>` | PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
-| `spec_review` | `review-spec-<N>` | PROVISION_TAB → SPEC_REVIEW |
-| `e2e` | `e2e-spec-<N>` | PROVISION_TAB → E2E |
+| `ticket` | `s<N>-ticket-<n>` | CLAIM → PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
+| `human` | `s<N>-human-<n>` | AWAIT_HUMAN |
+| `fix` | `s<N>-fix-<k>` | PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
+| `spec_review` | `s<N>-review` | PROVISION_TAB → SPEC_REVIEW |
+| `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E |
 
-Run ids double as herdr agent names and branch names (`ticket-<n>`, `fix-<N>-<k>`); all match
-herdr's `[a-z][a-z0-9_-]{0,31}`. Resolver agents are `resolve-<run_id>` truncated to 32 chars.
+Run ids double as herdr agent names, branch names and tab labels (e.g. spec 7: `s7-ticket-12`,
+`s7-fix-1`, tabs `s7-review` / `s7-e2e`). herdr agent names are global to the herdr server, so the
+`s<N>-` prefix keeps runs of different specs and repos from colliding. All match herdr's
+`[a-z][a-z0-9_-]{0,31}` (the longest, `s99999-ticket-99999`, is 19 chars). Resolver agents are
+`s<N>-resolve-<rest>` for run id `s<N>-<rest>` (`s7-resolve-ticket-12`, 27 chars at most for
+5-digit numbers); a name that would exceed 32 chars swaps `<rest>` for a 10-char hash of the run
+id instead of truncating, so two resolvers never share a name.
 
 Terminal statuses: `done`, `left_open`, `skipped`, `aborted`. Non-terminal: `pending` (not yet
 ready), `active`, `escalated`.
@@ -253,7 +258,7 @@ FIFO of run ids persisted in state. Only the head is processed. For the head run
 
 1. `base = Git.rev_parse(spec_branch)`. In the worktree: `Git.merge(worktree, spec_branch)`.
    Conflict → start resolver: `Herdr.split_pane(run.pane_id, cwd=worktree)`, start agent
-   `resolve-…`, prompt `resolver`, await `resolve` result. `RESOLVED` → check `Git.is_clean` and
+   `s<N>-resolve-…`, prompt `resolver`, await `resolve` result. `RESOLVED` → check `Git.is_clean` and
    no unmerged paths, continue to 2 (else treat as `ESCALATE`). `ESCALATE` → escalate
    `resolver-escalated`. Close the resolver pane when done.
 2. Gate: first `Git.is_clean(worktree, untracked=False)` — uncommitted changes to tracked files
@@ -265,7 +270,7 @@ FIFO of run ids persisted in state. Only the head is processed. For the head run
    escalate `budget-exhausted`.
 3. If `Git.rev_parse(spec_branch) != base` → go to 1. Else in the repo root (spec branch checked
    out): `Git.merge(repo_root, id, no_ff=True, message="Merge #<n>: <title>")` (fix runs:
-   `"Merge fix-<N>-<k>: <title>"`). Record `merge_commit`, pop the queue → `INTEGRATED`.
+   `"Merge s<N>-fix-<k>: <title>"`). Record `merge_commit`, pop the queue → `INTEGRATED`.
 
 The repo root must have the spec branch checked out and be clean (ignoring `.herdr-spec/`);
 otherwise raise `budget-exhausted`-style escalation kind `repo-dirty` (actions `retry`).

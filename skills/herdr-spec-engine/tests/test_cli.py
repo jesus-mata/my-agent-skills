@@ -20,7 +20,7 @@ E2E_OK = {"passed": ["flow works"], "fixed": [], "pending": []}
 ENGINE = "/skills/herdr-spec-engine/engine"
 
 
-def esc(id_, kind=EscalationKind.AGENT_BLOCKED, run="ticket-1", status=EscalationStatus.OPEN,
+def esc(id_, kind=EscalationKind.AGENT_BLOCKED, run="s7-ticket-1", status=EscalationStatus.OPEN,
         created_at=1.0, details="screen line 1\nscreen line 2"):
     return Escalation(id=id_, run=run, kind=kind, stage=Stage.IMPLEMENT, created_at=created_at,
                       summary=f"{run} needs help", details=details, actions=list(ACTIONS[kind]),
@@ -38,7 +38,7 @@ class CliTestBase(unittest.TestCase):
 
     def save_state(self, *escalations, runs=None, status=EngineStatus.RUNNING, consumed=()):
         state = RunState(spec=SPEC, branch="spec-7", status=status)
-        for run in runs or [Run.new(RunKind.TICKET, "ticket-1", ticket=1)]:
+        for run in runs or [Run.new(RunKind.TICKET, "s7-ticket-1", ticket=1)]:
             state.runs[run.id] = run
         for e in escalations:
             state.escalations[e.id] = e
@@ -94,9 +94,9 @@ class RunCommandTest(CliTestBase):
     def test_runs_to_completion_with_explicit_settings(self):
         h = self.h
         self.store.save_plan(h.plan)
-        h.script_ticket("ticket-1")
-        h.turn("review-spec-7", SPEC_REVIEW_CLEAN)
-        h.turn("e2e-spec-7", E2E_OK)
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
         self.assertEqual(self.run_cmd({"max_agents": 2, "model": "sonnet"}), 0)
         out = self.out.getvalue()
         self.assertIn("starting spec #7 (Spec seven) on branch spec-7", out)
@@ -105,7 +105,7 @@ class RunCommandTest(CliTestBase):
         state = self.store.load_state()
         self.assertEqual(state.status, EngineStatus.COMPLETE)
         self.assertEqual((state.settings.max_agents, state.settings.model), (2, "sonnet"))
-        self.assertEqual(h.herdr.agent_args["ticket-1"][-1], "sonnet")
+        self.assertEqual(h.herdr.agent_args["s7-ticket-1"][-1], "sonnet")
         self.assertIsNone(self.store.read_pid())
         self.assertTrue(os.path.isabs(self.store.state_dir))
 
@@ -118,7 +118,7 @@ class RunCommandTest(CliTestBase):
         self.assertIsNone(self.store.read_pid())
         state = self.store.load_state()
         self.assertEqual(state.status, EngineStatus.RUNNING)
-        self.assertEqual(state.runs["ticket-1"].status, RunStatus.ACTIVE)
+        self.assertEqual(state.runs["s7-ticket-1"].status, RunStatus.ACTIVE)
 
         self.out = io.StringIO()
         self.assertEqual(self.run_cmd({"retry_budget": 3}), 0)
@@ -151,10 +151,10 @@ class WatchCommandTest(CliTestBase):
         out = self.out.getvalue()
         self.assertIn("2 open escalation(s)", out)
         self.assertLess(out.index("ESCALATION e1"), out.index("ESCALATION e2"))
-        self.assertIn("  run:     ticket-1 (#1)", out)
+        self.assertIn("  run:     s7-ticket-1 (#1)", out)
         self.assertIn("  kind:    stage-timeout", out)
         self.assertIn("  stage:   implement", out)
-        self.assertIn("  summary: ticket-1 needs help", out)
+        self.assertIn("  summary: s7-ticket-1 needs help", out)
         self.assertIn("  details:\n    screen line 1\n    screen line 2", out)
         self.assertIn("  actions: retry, skip-ticket, hand-to-human", out)
         self.assertIn(f"  resolve: {ENGINE} resolve 7 e1 <action> [--note TEXT]", out)
@@ -256,21 +256,21 @@ class ResolveCommandTest(CliTestBase):
 
 class StatusCommandTest(CliTestBase):
     def test_text(self):
-        run = Run.new(RunKind.TICKET, "ticket-1", ticket=1)
+        run = Run.new(RunKind.TICKET, "s7-ticket-1", ticket=1)
         run.status, run.stage = RunStatus.ACTIVE, Stage.INTEGRATE
         run.awaiting = {"type": "queue"}
         state = self.save_state(esc("e1"), esc("e2", status=EscalationStatus.RESOLVED),
                                 runs=[run])
-        state.queue = ["ticket-1"]
+        state.queue = ["s7-ticket-1"]
         self.store.save_state(state)
         self.store.append_resolution("e1", "answered", ts=3.0)
         self.assertEqual(self.call(cli.status_command, self.store, SPEC, False, self.out), 0)
         out = self.out.getvalue()
         self.assertIn("spec #7 on spec-7: running, phase tickets, engine not running", out)
-        self.assertRegex(out, r"ticket-1\s+active\s+integrate\s+queue")
-        self.assertIn("Merge queue: ticket-1", out)
+        self.assertRegex(out, r"s7-ticket-1\s+active\s+integrate\s+queue")
+        self.assertIn("Merge queue: s7-ticket-1", out)
         self.assertIn("Escalations (1 unresolved, 1 resolved)", out)
-        self.assertIn("e1 open agent-blocked on ticket-1", out)
+        self.assertIn("e1 open agent-blocked on s7-ticket-1", out)
         self.assertIn("[resolution queued]", out)
 
     def test_json(self):
@@ -306,28 +306,28 @@ class StopAbortTest(CliTestBase):
 
     def runs_for_abort(self):
         herdr = self.h.herdr
-        active = Run.new(RunKind.TICKET, "ticket-1", ticket=1)
-        wt = herdr.create_worktree(self.h.root, "ticket-1", "spec-7", "ticket-1")
-        herdr.start_agent("ticket-1", wt.pane_id, [])
+        active = Run.new(RunKind.TICKET, "s7-ticket-1", ticket=1)
+        wt = herdr.create_worktree(self.h.root, "s7-ticket-1", "spec-7", "s7-ticket-1")
+        herdr.start_agent("s7-ticket-1", wt.pane_id, [])
         resolver_pane = herdr.split_pane(wt.pane_id, wt.path)
-        herdr.start_agent("resolve-ticket-1", resolver_pane, [])
-        active.status, active.stage, active.agent = RunStatus.ACTIVE, Stage.INTEGRATE, "ticket-1"
+        herdr.start_agent("s7-resolve-ticket-1", resolver_pane, [])
+        active.status, active.stage, active.agent = RunStatus.ACTIVE, Stage.INTEGRATE, "s7-ticket-1"
         active.workspace_id, active.pane_id, active.worktree = wt.workspace_id, wt.pane_id, wt.path
-        active.awaiting = {"type": "resolver", "agent": "resolve-ticket-1",
+        active.awaiting = {"type": "resolver", "agent": "s7-resolve-ticket-1",
                            "pane_id": resolver_pane}
-        done = Run.new(RunKind.TICKET, "ticket-2", ticket=2)
+        done = Run.new(RunKind.TICKET, "s7-ticket-2", ticket=2)
         done.status, done.workspace_id = RunStatus.DONE, "w-done"
-        pending = Run.new(RunKind.TICKET, "ticket-3", ticket=3)
+        pending = Run.new(RunKind.TICKET, "s7-ticket-3", ticket=3)
         return [active, done, pending], wt, resolver_pane
 
     def test_abort_tears_down_unfinished_runs(self):
         runs, wt, resolver_pane = self.runs_for_abort()
         state = self.save_state(esc("e1", status=EscalationStatus.HANDED_OFF), runs=runs)
-        state.queue = ["ticket-1"]
+        state.queue = ["s7-ticket-1"]
         self.store.save_state(state)
         self.assertEqual(self.abort(), 0)
         herdr = self.h.herdr
-        self.assertEqual(herdr.interrupted, ["resolve-ticket-1", "ticket-1"])
+        self.assertEqual(herdr.interrupted, ["s7-resolve-ticket-1", "s7-ticket-1"])
         self.assertEqual(herdr.closed_panes, [resolver_pane])
         self.assertEqual(herdr.removed_worktrees, [wt.workspace_id])  # never the done run's
         self.assertEqual(self.h.github.calls, [])  # nothing on GitHub
@@ -336,8 +336,8 @@ class StopAbortTest(CliTestBase):
         self.assertEqual(state.status, EngineStatus.ABORTED)
         self.assertEqual(state.queue, [])
         self.assertEqual({r.id: r.status for r in state.runs.values()},
-                         {"ticket-1": RunStatus.ABORTED, "ticket-2": RunStatus.DONE,
-                          "ticket-3": RunStatus.ABORTED})
+                         {"s7-ticket-1": RunStatus.ABORTED, "s7-ticket-2": RunStatus.DONE,
+                          "s7-ticket-3": RunStatus.ABORTED})
         self.assertIn("Nothing on GitHub was reverted", self.out.getvalue())
 
     def test_abort_continues_past_herdr_errors(self):
@@ -345,7 +345,7 @@ class StopAbortTest(CliTestBase):
         self.save_state(runs=runs)
         self.h.herdr.fail_next("remove_worktree", RuntimeError("herdr down"))
         self.assertEqual(self.abort(), 0)
-        self.assertIn("warning: remove worktree of ticket-1: herdr down", self.out.getvalue())
+        self.assertIn("warning: remove worktree of s7-ticket-1: herdr down", self.out.getvalue())
         self.assertEqual(self.store.load_state().status, EngineStatus.ABORTED)
 
     def test_abort_stops_a_live_engine_first(self):

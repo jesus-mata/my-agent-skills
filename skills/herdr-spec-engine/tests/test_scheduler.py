@@ -55,23 +55,23 @@ class SchedulerTest(unittest.TestCase):
 
     def test_done_tickets_get_no_run_and_satisfy_blockers(self):
         h = self.harness([ticket(1, klass="done"), ticket(2, blockers=[1])]).start()
-        self.assertNotIn("ticket-1", h.state.runs)
-        h.script_ticket("ticket-2")
-        h.run_until(lambda: h.status("ticket-2") is RunStatus.DONE)
+        self.assertNotIn("s7-ticket-1", h.state.runs)
+        h.script_ticket("s7-ticket-2")
+        h.run_until(lambda: h.status("s7-ticket-2") is RunStatus.DONE)
 
     # happy path -----------------------------------------------------------------------------
 
     def test_chain_a_then_b_reaches_close(self):
         h = self.harness([ticket(1, title="Alpha"), ticket(2, blockers=[1], title="Beta")]).start()
-        h.script_ticket("ticket-1")
-        h.script_ticket("ticket-2")
+        h.script_ticket("s7-ticket-1")
+        h.script_ticket("s7-ticket-2")
         h.tick()
-        self.assertEqual(h.status("ticket-1"), RunStatus.ACTIVE)
-        self.assertEqual(h.status("ticket-2"), RunStatus.PENDING)
-        h.run_until(lambda: h.run("ticket-1").merge_commit is not None)
-        self.assertEqual(h.status("ticket-2"), RunStatus.PENDING)  # starts once A is done
-        self.assertNotIn("ticket-2", h.herdr.agents)
-        h.run_until(lambda: h.status("ticket-2") is RunStatus.DONE)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ACTIVE)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.PENDING)
+        h.run_until(lambda: h.run("s7-ticket-1").merge_commit is not None)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.PENDING)  # starts once A is done
+        self.assertNotIn("s7-ticket-2", h.herdr.agents)
+        h.run_until(lambda: h.status("s7-ticket-2") is RunStatus.DONE)
 
         self.assertEqual(h.github.assigned, [1, 2])
         self.assertEqual(h.github.closed, [1, 2])
@@ -83,72 +83,72 @@ class SchedulerTest(unittest.TestCase):
         self.assertEqual(len(h.herdr.removed_worktrees), 2)
         b_impl = [v for n, v in h.rendered if n == "implement" and v["ticket"] == 2][0]
         self.assertIn("#1 Alpha", b_impl["integrated"])
-        self.assertEqual(h.run("ticket-1").merge_commit, "spec-7@1")
+        self.assertEqual(h.run("s7-ticket-1").merge_commit, "spec-7@1")
         # every transition is persisted
-        self.assertEqual(h.store.load_state().runs["ticket-2"].status, RunStatus.DONE)
+        self.assertEqual(h.store.load_state().runs["s7-ticket-2"].status, RunStatus.DONE)
         h.tick()
         self.assertEqual(h.state.phase, Phase.SPEC_REVIEW)
 
     def _two_independent(self, max_agents):
         h = self.harness([ticket(1), ticket(2)],
                          settings=Settings(max_agents=max_agents)).start()
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "working"))
-        h.herdr.on_prompt("ticket-2", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-2", lambda f, n, t: f.set_status(n, "working"))
         h.tick(3)
         return h
 
     def test_max_agents_one_runs_tickets_one_at_a_time(self):
         h = self._two_independent(1)
-        self.assertEqual(h.status("ticket-1"), RunStatus.ACTIVE)
-        self.assertEqual(h.status("ticket-2"), RunStatus.PENDING)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ACTIVE)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.PENDING)
 
     def test_max_agents_two_runs_tickets_concurrently_in_ascending_order(self):
         h = self._two_independent(2)
-        self.assertEqual(h.status("ticket-1"), RunStatus.ACTIVE)
-        self.assertEqual(h.status("ticket-2"), RunStatus.ACTIVE)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ACTIVE)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.ACTIVE)
         starts = [c["name"] for c in h.herdr.calls_to("start_agent")]
-        self.assertEqual(starts, ["ticket-1", "ticket-2"])
+        self.assertEqual(starts, ["s7-ticket-1", "s7-ticket-2"])
         b_impl = [v for n, v in h.rendered if n == "implement" and v["ticket"] == 2][0]
-        self.assertIn("ticket-1", b_impl["siblings"])
+        self.assertIn("s7-ticket-1", b_impl["siblings"])
 
     # escalation kinds before CLAIM -------------------------------------------------------------
 
     def test_human_ticket_hitl_then_done_after_issue_closed(self):
         h = self.harness([ticket(1, klass="human"), ticket(2, blockers=[1])]).start()
-        h.script_ticket("ticket-2")
+        h.script_ticket("s7-ticket-2")
         h.tick()
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.HITL_TICKET)
-        self.assertEqual(esc.run, "human-1")
-        self.assertEqual(h.status("human-1"), RunStatus.ESCALATED)
+        self.assertEqual(esc.run, "s7-human-1")
+        self.assertEqual(h.status("s7-human-1"), RunStatus.ESCALATED)
 
         h.resolve(esc.id, "done")  # still open on GitHub -> stays escalated
         h.tick()
-        self.assertEqual(h.status("human-1"), RunStatus.ESCALATED)
+        self.assertEqual(h.status("s7-human-1"), RunStatus.ESCALATED)
         self.assertEqual(esc.status, EscalationStatus.OPEN)
         self.assertIn("still open", esc.details)
-        self.assertEqual(h.status("ticket-2"), RunStatus.PENDING)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.PENDING)
 
         h.github.close(1)
         h.resolve(esc.id, "done")
         h.tick()
         self.assertEqual(esc.status, EscalationStatus.RESOLVED)
-        self.assertEqual(h.status("human-1"), RunStatus.DONE)
-        h.run_until(lambda: h.status("ticket-2") is RunStatus.DONE)
+        self.assertEqual(h.status("s7-human-1"), RunStatus.DONE)
+        h.run_until(lambda: h.status("s7-ticket-2") is RunStatus.DONE)
 
     def test_unrefined_ticket_relabeled_then_starts(self):
         h = self.harness([ticket(1, klass="unrefined")]).start()
-        h.script_ticket("ticket-1")
+        h.script_ticket("s7-ticket-1")
         h.tick()
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.UNREFINED_TICKET)
-        self.assertNotIn("ticket-1", h.herdr.agents)
+        self.assertNotIn("s7-ticket-1", h.herdr.agents)
         h.github.add(replace(h.github.issues[1], labels=("ready-for-agent",)))
         h.resolve(esc.id, "relabeled")
         h.tick()
         self.assertEqual(esc.status, EscalationStatus.RESOLVED)
-        self.assertEqual(h.status("ticket-1"), RunStatus.ACTIVE)
-        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ACTIVE)
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
 
     def test_unrefined_ticket_relabeled_human_becomes_human_run(self):
         h = self.harness([ticket(1, klass="unrefined")]).start()
@@ -156,8 +156,8 @@ class SchedulerTest(unittest.TestCase):
         h.github.add(replace(h.github.issues[1], labels=("ready-for-human",)))
         h.resolve(h.only_escalation().id, "relabeled")
         h.tick(2)
-        self.assertNotIn("ticket-1", h.state.runs)
-        self.assertEqual(h.status("human-1"), RunStatus.ESCALATED)
+        self.assertNotIn("s7-ticket-1", h.state.runs)
+        self.assertEqual(h.status("s7-human-1"), RunStatus.ESCALATED)
         self.assertEqual(h.only_escalation().kind, EscalationKind.HITL_TICKET)
 
     def test_external_blocker_cleared_then_starts(self):
@@ -165,7 +165,7 @@ class SchedulerTest(unittest.TestCase):
         h.github.add(make_issue(1, labels=["ready-for-agent"],
                                 blocked_by=[ref(99, repo="o/other")]))
         h.start()
-        h.script_ticket("ticket-1")
+        h.script_ticket("s7-ticket-1")
         h.tick()
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.EXTERNAL_BLOCKER)
@@ -179,7 +179,7 @@ class SchedulerTest(unittest.TestCase):
         h.github.add(make_issue(1, labels=["ready-for-agent"],
                                 blocked_by=[ref(99, state="CLOSED", repo="o/other")]))
         h.resolve(h.only_escalation().id, "cleared")
-        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
 
     def test_skip_unrefined_ticket_skips_dependents_at_end(self):
         h = self.harness([ticket(1, klass="unrefined"), ticket(2, blockers=[1]),
@@ -187,34 +187,34 @@ class SchedulerTest(unittest.TestCase):
         h.tick()
         h.resolve(h.only_escalation().id, "skip-ticket")
         h.tick()
-        self.assertEqual(h.status("ticket-1"), RunStatus.SKIPPED)
-        self.assertEqual(h.status("ticket-2"), RunStatus.SKIPPED)
-        self.assertEqual(h.status("ticket-3"), RunStatus.SKIPPED)
-        self.assertIn("blocked by #1", h.run("ticket-2").notes)
-        self.assertIn("blocked by #2", h.run("ticket-3").notes)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.SKIPPED)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.SKIPPED)
+        self.assertEqual(h.status("s7-ticket-3"), RunStatus.SKIPPED)
+        self.assertIn("blocked by #1", h.run("s7-ticket-2").notes)
+        self.assertIn("blocked by #2", h.run("s7-ticket-3").notes)
         self.assertEqual(h.state.phase, Phase.SPEC_REVIEW)
 
     # resolutions ----------------------------------------------------------------------------
 
     def test_hand_to_human_is_not_resolved_until_another_action(self):
         h = self.harness([ticket(1)]).start()
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "blocked"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "blocked"))
         h.tick()
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.AGENT_BLOCKED)
         h.resolve(esc.id, "hand-to-human")
         h.tick(3)
         self.assertEqual(esc.status, EscalationStatus.HANDED_OFF)
-        self.assertEqual(h.status("ticket-1"), RunStatus.ESCALATED)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ESCALATED)
         self.assertEqual(h.store.load_state().escalations[esc.id].status,
                          EscalationStatus.HANDED_OFF)
 
-        h.herdr.set_status("ticket-1", "working")
+        h.herdr.set_status("s7-ticket-1", "working")
         h.resolve(esc.id, "answered")
         h.tick()
         self.assertEqual(esc.status, EscalationStatus.RESOLVED)
         self.assertEqual(esc.resolution, "answered")
-        self.assertEqual(h.status("ticket-1"), RunStatus.ACTIVE)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ACTIVE)
 
     def test_invalid_or_duplicate_resolutions_are_ignored(self):
         h = self.harness([ticket(1, klass="unrefined")]).start()
@@ -231,33 +231,33 @@ class SchedulerTest(unittest.TestCase):
     def test_skip_ticket_interrupts_removes_worktree_and_skips(self):
         h = self.harness([ticket(1), ticket(2, blockers=[1])],
                          settings=Settings(stage_timeout=100)).start()
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "working"))
         h.run_until(lambda: h.open_escalations())
         esc = h.only_escalation()
         self.assertEqual(esc.kind, EscalationKind.STAGE_TIMEOUT)
         h.resolve(esc.id, "skip-ticket", note="too big")
         h.tick()
-        self.assertEqual(h.status("ticket-1"), RunStatus.SKIPPED)
-        self.assertIn("ticket-1", h.herdr.interrupted)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.SKIPPED)
+        self.assertIn("s7-ticket-1", h.herdr.interrupted)
         self.assertEqual(len(h.herdr.removed_worktrees), 1)
-        self.assertIn("skipped by supervisor (stage-timeout): too big", h.run("ticket-1").notes)
-        self.assertEqual(h.status("ticket-2"), RunStatus.SKIPPED)
+        self.assertIn("skipped by supervisor (stage-timeout): too big", h.run("s7-ticket-1").notes)
+        self.assertEqual(h.status("s7-ticket-2"), RunStatus.SKIPPED)
 
     # stop and resume ------------------------------------------------------------------------
 
     def test_stop_file_persists_and_exits(self):
         h = self.harness([ticket(1)]).start()
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "working"))
         h.tick()
         h.store.request_stop()
         self.assertFalse(h.engine.tick())
         self.assertFalse(h.store.stop_requested())
         self.assertIsNone(h.store.read_pid())
-        self.assertEqual(h.store.load_state().runs["ticket-1"].stage, Stage.IMPLEMENT)
+        self.assertEqual(h.store.load_state().runs["s7-ticket-1"].stage, Stage.IMPLEMENT)
 
     def test_run_forever_waits_between_ticks_until_stopped(self):
         h = self.harness([ticket(1)])
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "working"))
         original = h.herdr.wait_for_change
         calls = []
 
@@ -274,68 +274,68 @@ class SchedulerTest(unittest.TestCase):
 
     def test_resume_with_working_agent_does_not_reprompt(self):
         h = self.harness([ticket(1)]).start()
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "working"))
         h.tick(2)
-        self.assertEqual(len(h.herdr.prompts["ticket-1"]), 1)
+        self.assertEqual(len(h.herdr.prompts["s7-ticket-1"]), 1)
         h.store.request_stop()
         h.tick()
 
         h.engine = h.new_engine()
         h.start()
         h.tick(3)
-        self.assertEqual(len(h.herdr.prompts["ticket-1"]), 1)
-        self.assertEqual(h.status("ticket-1"), RunStatus.ACTIVE)
+        self.assertEqual(len(h.herdr.prompts["s7-ticket-1"]), 1)
+        self.assertEqual(h.status("s7-ticket-1"), RunStatus.ACTIVE)
 
         # the agent finishes the turn it was working on
-        path = h.run("ticket-1").awaiting["path"]
+        path = h.run("s7-ticket-1").awaiting["path"]
         os.makedirs(os.path.dirname(path), exist_ok=True)
         with open(path, "w") as f:
             f.write('{"status": "implemented", "summary": "s", "denied_actions": []}')
-        h.git.add_commits("ticket-1", 1, base=BRANCH)
-        h.turn("ticket-1", REVIEW_CLEAN)
-        h.herdr.set_status("ticket-1", "idle")
-        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+        h.git.add_commits("s7-ticket-1", 1, base=BRANCH)
+        h.turn("s7-ticket-1", REVIEW_CLEAN)
+        h.herdr.set_status("s7-ticket-1", "idle")
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
 
     def test_resume_with_missing_agent_reprovisions(self):
         h = self.harness([ticket(1)]).start()
-        h.herdr.on_prompt("ticket-1", lambda f, n, t: f.set_status(n, "working"))
+        h.herdr.on_prompt("s7-ticket-1", lambda f, n, t: f.set_status(n, "working"))
         h.tick(2)
         h.store.request_stop()
         h.tick()
-        h.herdr.remove_agent("ticket-1")  # herdr restarted while the engine was down
+        h.herdr.remove_agent("s7-ticket-1")  # herdr restarted while the engine was down
 
         h.engine = h.new_engine()
         h.start()
-        h.script_ticket("ticket-1")
+        h.script_ticket("s7-ticket-1")
         h.tick()
         self.assertEqual(len(h.herdr.calls_to("open_worktree")), 1)
         self.assertEqual(len(h.herdr.calls_to("start_agent")), 2)
-        self.assertEqual(len(h.herdr.prompts["ticket-1"]), 2)
-        self.assertEqual(h.herdr.prompts["ticket-1"][0], h.herdr.prompts["ticket-1"][1])
-        self.assertEqual(h.run("ticket-1").attempts[Stage.IMPLEMENT], 1)
-        h.run_until(lambda: h.status("ticket-1") is RunStatus.DONE)
+        self.assertEqual(len(h.herdr.prompts["s7-ticket-1"]), 2)
+        self.assertEqual(h.herdr.prompts["s7-ticket-1"][0], h.herdr.prompts["s7-ticket-1"][1])
+        self.assertEqual(h.run("s7-ticket-1").attempts[Stage.IMPLEMENT], 1)
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
 
     # spec phases ----------------------------------------------------------------------------
 
     def test_full_flow_spec_review_fix_e2e_complete(self):
         h = self.harness([ticket(1)]).start()
-        h.script_ticket("ticket-1")
-        h.turn("review-spec-7", {"fixed": [], "hard": [HARD], "not_fixed": []})
-        h.turn("fix-7-1", IMPLEMENTED, commits=1)
-        h.turn("fix-7-1", REVIEW_CLEAN)
-        h.turn("e2e-spec-7", E2E_OK)
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", {"fixed": [], "hard": [HARD], "not_fixed": []})
+        h.turn("s7-fix-1", IMPLEMENTED, commits=1)
+        h.turn("s7-fix-1", REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
         h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=80)
 
         self.assertEqual(h.state.phase, Phase.COMPLETE)
-        fix = h.run("fix-7-1")
+        fix = h.run("s7-fix-1")
         self.assertEqual(fix.status, RunStatus.DONE)
         self.assertEqual(fix.finding, HARD)
         self.assertEqual(h.templates().count("fix_implement"), 1)
         self.assertIn("Race on save", [v for n, v in h.rendered if n == "fix_review"][0]["finding"])
         root_merges = [c["message"] for c in h.git.calls_to("merge") if c["cwd"] == h.root]
-        self.assertEqual(root_merges, ["Merge #1: Ticket 1", "Merge fix-7-1: Race on save"])
+        self.assertEqual(root_merges, ["Merge #1: Ticket 1", "Merge s7-fix-1: Race on save"])
         self.assertEqual([c["label"] for c in h.herdr.calls_to("create_tab")],
-                         ["review-spec-7", "e2e-spec-7"])
+                         ["s7-review", "s7-e2e"])
         self.assertEqual(h.herdr.closed_panes, [])  # spec review and e2e tabs stay open
         self.assertEqual(h.github.closed, [1])  # fix runs touch no issue
         with open(h.store.paths.report) as f:
@@ -347,11 +347,11 @@ class SchedulerTest(unittest.TestCase):
 
     def test_spec_review_without_hard_findings_goes_straight_to_e2e(self):
         h = self.harness([ticket(1)]).start()
-        h.script_ticket("ticket-1")
-        h.turn("review-spec-7", SPEC_REVIEW_CLEAN)
-        h.turn("e2e-spec-7", E2E_OK)
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
         h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=80)
-        self.assertFalse([r for r in h.state.runs if r.startswith("fix-")])
+        self.assertFalse([r for r in h.state.runs if r.startswith("s7-fix-")])
         spec_review = [v for n, v in h.rendered if n == "spec_review"][0]
         self.assertEqual(spec_review["base"], "main")
         self.assertTrue(spec_review["result_path"].startswith(h.root))

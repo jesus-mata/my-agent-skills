@@ -22,7 +22,7 @@ DOCUMENTED = {
     "e2e": (("spec_branch",), "e2e"),
 }
 
-RESULT_PATH = "/repo/wt/ticket-12/.herdr-spec/ticket-12.implement.json"
+RESULT_PATH = "/repo/wt/s7-ticket-12/.herdr-spec/s7-ticket-12.implement.json"
 STRAY = re.compile(r"\$(\{|[A-Za-z_])")
 
 

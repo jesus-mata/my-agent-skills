@@ -53,42 +53,42 @@ class RealTemplateScenarioTest(unittest.TestCase):
 
     def test_ticket_spec_review_hard_finding_fix_run_e2e_complete(self):
         h = self.harness([ticket(1, title="Export endpoint")])
-        h.script_ticket("ticket-1", review={
+        h.script_ticket("s7-ticket-1", review={
             "fixed": [], "scope_creep": ["renamed a helper"],
             "pending": [{"kind": "standards", "title": "long function", "reason": "wider refactor"}],
         })
-        h.turn("review-spec-7", {"fixed": [{"severity": "high", "title": "Off by one",
+        h.turn("s7-review", {"fixed": [{"severity": "high", "title": "Off by one",
                                             "commit": "abc1234"}],
                                  "hard": [HARD], "not_fixed": [{"severity": "low",
                                                                 "title": "log wording"}]})
-        h.turn("fix-7-1", IMPLEMENTED, commits=1)
-        h.turn("fix-7-1", REVIEW_CLEAN)
-        h.turn("e2e-spec-7", E2E_OK)
+        h.turn("s7-fix-1", IMPLEMENTED, commits=1)
+        h.turn("s7-fix-1", REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
         h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=80)
 
         self.assertEqual(h.templates(), ["implement", "review", "spec_review", "fix_implement",
                                          "fix_review", "e2e"])
         self.assert_prompt_hygiene(h)
         implement = h.text_of("implement")
-        self.assertIn("ticket #1 (Export endpoint) on branch `ticket-1`", implement)
+        self.assertIn("ticket #1 (Export endpoint) on branch `s7-ticket-1`", implement)
         self.assertIn("Already integrated into `spec-7`:\n\nnone\n", implement)
         self.assertIn("/implement-ticket 1", implement)
-        self.assertIn(f"`{h.run('ticket-1').worktree}/.herdr-spec/ticket-1.implement.json`",
+        self.assertIn(f"`{h.run('s7-ticket-1').worktree}/.herdr-spec/s7-ticket-1.implement.json`",
                       implement)
         self.assertIn(f"`{BRANCH}` against `main`", h.text_of("spec_review"))
         for name in ("fix_implement", "fix_review"):
             text = h.text_of(name)
             self.assertIn("Race on save (blocker)\nFile: src/save.py:3\n"
                           "Failure scenario: two saves at once lose the first write", text)
-        self.assertIn("branch `fix-7-1`", h.text_of("fix_implement"))
+        self.assertIn("branch `s7-fix-1`", h.text_of("fix_implement"))
 
         self.assertEqual(h.state.phase, Phase.COMPLETE)
-        self.assertEqual(h.status("fix-7-1"), RunStatus.DONE)
+        self.assertEqual(h.status("s7-fix-1"), RunStatus.DONE)
         with open(h.store.paths.report) as f:
             report = f.read()
         for expected in ("#1 Export endpoint — merged as", "pending [standards] long function",
                          "[high] Off by one (abc1234)", "Hard findings still pending (0)",
-                         "[low] log wording", "fix-7-1 Race on save — merged as",
+                         "[low] log wording", "s7-fix-1 Race on save — merged as",
                          "export flow works", "button label (e2e1)",
                          "emoji in CSV: needs a product decision",
                          "Spec branch `spec-7` is local; nothing was pushed."):
@@ -98,64 +98,64 @@ class RealTemplateScenarioTest(unittest.TestCase):
         h = self.harness([ticket(1, title="Alpha"), ticket(2, title="Beta"),
                           ticket(3, blockers=[1], title="Gamma")],
                          settings=Settings(max_agents=2))
-        wt1 = os.path.join(h.herdr.worktree_root, "ticket-1")
-        wt3 = os.path.join(h.herdr.worktree_root, "ticket-3")
-        # ticket-1: invalid result, then a valid one; then a clean review.
-        h.turn("ticket-1", "not json", commits=1)
-        h.turn("ticket-1", IMPLEMENTED)
-        h.turn("ticket-1", REVIEW_CLEAN)
-        # ticket-2: forgets to commit (verify_failed), then the gate fails once.
-        h.turn("ticket-2", IMPLEMENTED)
-        h.turn("ticket-2", IMPLEMENTED, commits=1)
-        h.turn("ticket-2", REVIEW_CLEAN)
-        h.turn("ticket-2", GATE_FIXED)
+        wt1 = os.path.join(h.herdr.worktree_root, "s7-ticket-1")
+        wt3 = os.path.join(h.herdr.worktree_root, "s7-ticket-3")
+        # s7-ticket-1: invalid result, then a valid one; then a clean review.
+        h.turn("s7-ticket-1", "not json", commits=1)
+        h.turn("s7-ticket-1", IMPLEMENTED)
+        h.turn("s7-ticket-1", REVIEW_CLEAN)
+        # s7-ticket-2: forgets to commit (verify_failed), then the gate fails once.
+        h.turn("s7-ticket-2", IMPLEMENTED)
+        h.turn("s7-ticket-2", IMPLEMENTED, commits=1)
+        h.turn("s7-ticket-2", REVIEW_CLEAN)
+        h.turn("s7-ticket-2", GATE_FIXED)
         h.shell.results["make test"] = [ShellResult(0, "ok"),
                                         ShellResult(2, "FAILED test_beta\n$HOME is unset"),
                                         ShellResult(0, "ok"), ShellResult(0, "ok")]
-        # ticket-3 starts after ticket-1 merged; merging the spec branch conflicts.
-        h.script_ticket("ticket-3")
+        # s7-ticket-3 starts after s7-ticket-1 merged; merging the spec branch conflicts.
+        h.script_ticket("s7-ticket-3")
         h.git.script_merge(wt3, BRANCH, CONFLICT)
         h.git.set_unmerged(wt3, ["src/a.py", "src/b.py"])
-        h.turn("resolve-ticket-3", {"verdict": "RESOLVED", "summary": "kept both"},
+        h.turn("s7-resolve-ticket-3", {"verdict": "RESOLVED", "summary": "kept both"},
                also=lambda: h.git.set_unmerged(wt3, []))
-        h.turn("review-spec-7", {"fixed": [], "hard": [], "not_fixed": []})
-        h.turn("e2e-spec-7", {"passed": [], "fixed": [], "pending": []})
+        h.turn("s7-review", {"fixed": [], "hard": [], "not_fixed": []})
+        h.turn("s7-e2e", {"passed": [], "fixed": [], "pending": []})
         h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=120)
 
         for name in ("implement", "result_retry", "verify_failed", "review", "gate_failed",
                      "resolver", "spec_review", "e2e"):
             self.assertIn(name, h.templates())
         self.assert_prompt_hygiene(h)
-        self.assertIn("ticket-1.implement.json: invalid JSON", h.text_of("result_retry"))
+        self.assertIn("s7-ticket-1.implement.json: invalid JSON", h.text_of("result_retry"))
         self.assertIn("has no commits ahead of spec-7", h.text_of("verify_failed"))
         gate = h.text_of("gate_failed")
         self.assertIn("exit code 2", gate)
         self.assertIn("```\nmake test\n```", gate)
         self.assertIn("$HOME is unset", gate)  # output is substituted verbatim, never expanded
         resolver = h.text_of("resolver")
-        self.assertIn("run `ticket-3` on branch `ticket-3`", resolver)
+        self.assertIn("run `s7-ticket-3` on branch `s7-ticket-3`", resolver)
         self.assertIn("```\nsrc/a.py\nsrc/b.py\n```", resolver)
         self.assertIn("never run `git merge --abort`", resolver)
         implement3 = [t for n, t in h.texts if n == "implement" and "ticket #3" in t][0]
-        self.assertIn("Already integrated into `spec-7`:\n\n- #1 Alpha (ticket-1)\n\n", implement3)
+        self.assertIn("Already integrated into `spec-7`:\n\n- #1 Alpha (s7-ticket-1)\n\n", implement3)
         implement2 = [t for n, t in h.texts if n == "implement" and "ticket #2" in t][0]
         self.assertIn("Running in parallel in other worktrees (keep out of their way):\n\n"
-                      "- #1 Alpha (ticket-1)\n\n1.", implement2)
+                      "- #1 Alpha (s7-ticket-1)\n\n1.", implement2)
         self.assertNotIn(wt1, implement2)
         for n in (1, 2, 3):
-            self.assertEqual(h.status(f"ticket-{n}"), RunStatus.DONE)
+            self.assertEqual(h.status(f"s7-ticket-{n}"), RunStatus.DONE)
 
     def test_fix_run_verify_failed_names_the_finding(self):
         h = self.harness([ticket(1)])
-        h.script_ticket("ticket-1")
-        h.turn("review-spec-7", {"fixed": [], "hard": [HARD], "not_fixed": []})
-        h.turn("fix-7-1", IMPLEMENTED)  # forgets to commit
-        h.turn("fix-7-1", IMPLEMENTED, commits=1)
-        h.turn("fix-7-1", REVIEW_CLEAN)
-        h.turn("e2e-spec-7", E2E_OK)
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", {"fixed": [], "hard": [HARD], "not_fixed": []})
+        h.turn("s7-fix-1", IMPLEMENTED)  # forgets to commit
+        h.turn("s7-fix-1", IMPLEMENTED, commits=1)
+        h.turn("s7-fix-1", REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
         h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=80)
         self.assert_prompt_hygiene(h)
-        self.assertIn('working on the spec review finding "Race on save" on branch `fix-7-1`',
+        self.assertIn('working on the spec review finding "Race on save" on branch `s7-fix-1`',
                       h.text_of("verify_failed"))
 
 

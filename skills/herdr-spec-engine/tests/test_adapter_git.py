@@ -44,10 +44,10 @@ class CliGitTest(unittest.TestCase):
 
     def test_common_dir_from_linked_worktree(self):
         wt = os.path.join(self.tmpdir, "wt")
-        self.sh("worktree", "add", "-q", "-b", "ticket-1", wt, "main")
+        self.sh("worktree", "add", "-q", "-b", "s7-ticket-1", wt, "main")
         self.assertEqual(self.git.common_dir(wt), os.path.join(self.repo, ".git"))
         self.assertEqual(self.git.repo_root(wt), wt)
-        self.assertEqual(self.git.current_branch(wt), "ticket-1")
+        self.assertEqual(self.git.current_branch(wt), "s7-ticket-1")
 
     def test_common_dir_from_subdirectory(self):
         sub = os.path.join(self.repo, "a", "b")
@@ -59,12 +59,12 @@ class CliGitTest(unittest.TestCase):
         main_sha = self.git.rev_parse(self.repo, "main")
         self.assertEqual(main_sha, self.sh("rev-parse", "HEAD"))
         self.assertEqual(len(main_sha), 40)
-        self.git.checkout(self.repo, "ticket-1", create_from="main")
+        self.git.checkout(self.repo, "s7-ticket-1", create_from="main")
         self.commit("a.txt", "a\n", "a")
         self.commit("b.txt", "b\n", "b")
-        self.assertEqual(self.git.commits_ahead(self.repo, "main", "ticket-1"), 2)
-        self.assertEqual(self.git.commits_ahead(self.repo, "ticket-1", "main"), 0)
-        self.assertNotEqual(self.git.rev_parse(self.repo, "ticket-1"), main_sha)
+        self.assertEqual(self.git.commits_ahead(self.repo, "main", "s7-ticket-1"), 2)
+        self.assertEqual(self.git.commits_ahead(self.repo, "s7-ticket-1", "main"), 0)
+        self.assertNotEqual(self.git.rev_parse(self.repo, "s7-ticket-1"), main_sha)
         with self.assertRaises(GitError):
             self.git.rev_parse(self.repo, "no-such-ref")
 
@@ -91,14 +91,14 @@ class CliGitTest(unittest.TestCase):
         self.assertFalse(self.git.is_clean(self.repo, untracked=False))
 
     def _diverge(self, conflicting: bool) -> None:
-        self.git.checkout(self.repo, "ticket-1", create_from="main")
+        self.git.checkout(self.repo, "s7-ticket-1", create_from="main")
         self.commit("README.md" if conflicting else "t.txt", "ticket\n", "ticket change")
         self.git.checkout(self.repo, "main")
         self.commit("README.md" if conflicting else "m.txt", "main\n", "main change")
 
     def test_merge_clean(self):
         self._diverge(conflicting=False)
-        result = self.git.merge(self.repo, "ticket-1")
+        result = self.git.merge(self.repo, "s7-ticket-1")
         self.assertTrue(result.ok)
         self.assertFalse(result.conflict)
         self.assertEqual(result.commit, self.sh("rev-parse", "HEAD"))
@@ -106,27 +106,27 @@ class CliGitTest(unittest.TestCase):
         self.assertTrue(self.git.is_clean(self.repo))
 
     def test_merge_no_ff_with_message(self):
-        self.git.checkout(self.repo, "ticket-1", create_from="main")
+        self.git.checkout(self.repo, "s7-ticket-1", create_from="main")
         self.commit("t.txt", "t\n", "ticket")
         self.git.checkout(self.repo, "main")
-        result = self.git.merge(self.repo, "ticket-1", no_ff=True, message="Merge #1: Thing")
+        result = self.git.merge(self.repo, "s7-ticket-1", no_ff=True, message="Merge #1: Thing")
         self.assertTrue(result.ok)
         self.assertEqual(result.commit, self.sh("rev-parse", "HEAD"))
         self.assertEqual(self.sh("log", "-1", "--format=%s"), "Merge #1: Thing")
         self.assertEqual(len(self.sh("log", "-1", "--format=%P").split()), 2)  # a merge commit
 
     def test_merge_fast_forward_by_default(self):
-        self.git.checkout(self.repo, "ticket-1", create_from="main")
+        self.git.checkout(self.repo, "s7-ticket-1", create_from="main")
         self.commit("t.txt", "t\n", "ticket")
         self.git.checkout(self.repo, "main")
-        result = self.git.merge(self.repo, "ticket-1")
+        result = self.git.merge(self.repo, "s7-ticket-1")
         self.assertTrue(result.ok)
-        self.assertEqual(result.commit, self.git.rev_parse(self.repo, "ticket-1"))
+        self.assertEqual(result.commit, self.git.rev_parse(self.repo, "s7-ticket-1"))
 
     def test_merge_conflict_unmerged_paths_and_abort(self):
         self._diverge(conflicting=True)
         before = self.git.rev_parse(self.repo, "HEAD")
-        result = self.git.merge(self.repo, "ticket-1", no_ff=True, message="Merge #1")
+        result = self.git.merge(self.repo, "s7-ticket-1", no_ff=True, message="Merge #1")
         self.assertFalse(result.ok)
         self.assertTrue(result.conflict)
         self.assertIsNone(result.commit)

@@ -19,21 +19,21 @@ class FakeHerdrTest(unittest.TestCase):
         self.herdr = FakeHerdr(os.path.join(self.tmp.name, "wt"), clock=self.clock)
 
     def test_script_turn_writes_result_and_sets_status(self):
-        wt = self.herdr.create_worktree("/repo", "ticket-1", "spec-7", "ticket-1")
+        wt = self.herdr.create_worktree("/repo", "s7-ticket-1", "spec-7", "s7-ticket-1")
         self.assertTrue(os.path.isdir(wt.path))
-        self.herdr.start_agent("ticket-1", wt.pane_id, ["--model", "opus"])
-        result = os.path.join(wt.path, ".herdr-spec", "ticket-1.implement.json")
-        self.herdr.script_turn("ticket-1", {"status": "implemented", "summary": "s",
+        self.herdr.start_agent("s7-ticket-1", wt.pane_id, ["--model", "opus"])
+        result = os.path.join(wt.path, ".herdr-spec", "s7-ticket-1.implement.json")
+        self.herdr.script_turn("s7-ticket-1", {"status": "implemented", "summary": "s",
                                             "denied_actions": []}, status_after="done")
-        self.herdr.prompt_agent("ticket-1", f"Do it. Write the result to `{result}` when done.")
+        self.herdr.prompt_agent("s7-ticket-1", f"Do it. Write the result to `{result}` when done.")
         with open(result) as f:
             self.assertEqual(json.load(f)["status"], "implemented")
-        self.assertEqual(self.herdr.agent_status("ticket-1"), "done")
-        self.assertEqual(len(self.herdr.prompts["ticket-1"]), 1)
+        self.assertEqual(self.herdr.agent_status("s7-ticket-1"), "done")
+        self.assertEqual(len(self.herdr.prompts["s7-ticket-1"]), 1)
 
         # next prompt has no script -> agent is working
-        self.herdr.prompt_agent("ticket-1", "again")
-        self.assertEqual(self.herdr.agent_status("ticket-1"), "working")
+        self.herdr.prompt_agent("s7-ticket-1", "again")
+        self.assertEqual(self.herdr.agent_status("s7-ticket-1"), "working")
 
     def test_script_turn_raw_string_and_explicit_path(self):
         self.herdr.start_agent("a", "p0", [])
@@ -61,18 +61,18 @@ class FakeHerdrTest(unittest.TestCase):
     def test_fail_next_and_calls(self):
         self.herdr.fail_next("create_tab", HerdrError("boom", "nope"))
         with self.assertRaises(HerdrError) as cm:
-            self.herdr.create_tab("/repo", "review-spec-7")
+            self.herdr.create_tab("/repo", "s7-review")
         self.assertEqual(cm.exception.code, "boom")
-        pane = self.herdr.create_tab("/repo", "review-spec-7")
+        pane = self.herdr.create_tab("/repo", "s7-review")
         self.assertTrue(pane.startswith("p"))
         self.assertEqual(self.herdr.calls_to("create_tab"),
-                         [{"cwd": "/repo", "label": "review-spec-7"}] * 2)
+                         [{"cwd": "/repo", "label": "s7-review"}] * 2)
 
     def test_worktrees_ids_and_removal(self):
-        a = self.herdr.create_worktree("/repo", "ticket-1", "spec-7", "ticket-1")
-        b = self.herdr.create_worktree("/repo", "ticket-2", "spec-7", "ticket-2")
+        a = self.herdr.create_worktree("/repo", "s7-ticket-1", "spec-7", "s7-ticket-1")
+        b = self.herdr.create_worktree("/repo", "s7-ticket-2", "spec-7", "s7-ticket-2")
         self.assertNotEqual(a.workspace_id, b.workspace_id)
-        self.assertEqual(self.herdr.open_worktree("/repo", "ticket-1", "ticket-1"), a)
+        self.assertEqual(self.herdr.open_worktree("/repo", "s7-ticket-1", "s7-ticket-1"), a)
         self.herdr.remove_worktree(a.workspace_id)
         self.assertFalse(os.path.exists(a.path))
         self.assertEqual(self.herdr.removed_worktrees, [a.workspace_id])
@@ -129,20 +129,20 @@ class FakeGitTest(unittest.TestCase):
         git.checkout("/repo", "spec-7", create_from="main")
         self.assertEqual(git.current_branch("/repo"), "spec-7")
         self.assertTrue(git.branch_exists("/repo", "spec-7"))
-        self.assertEqual(git.commits_ahead("/wt/ticket-1", "spec-7", "ticket-1"), 0)
-        git.add_commits("ticket-1", 2, base="spec-7")
-        self.assertEqual(git.commits_ahead("/wt/ticket-1", "spec-7", "ticket-1"), 2)
+        self.assertEqual(git.commits_ahead("/wt/s7-ticket-1", "spec-7", "s7-ticket-1"), 0)
+        git.add_commits("s7-ticket-1", 2, base="spec-7")
+        self.assertEqual(git.commits_ahead("/wt/s7-ticket-1", "spec-7", "s7-ticket-1"), 2)
 
         before = git.rev_parse("/repo", "spec-7")
-        git.script_merge("/wt/ticket-1", "spec-7", MergeResult(False, True, None, "CONFLICT"))
-        r = git.merge("/wt/ticket-1", "spec-7")
+        git.script_merge("/wt/s7-ticket-1", "spec-7", MergeResult(False, True, None, "CONFLICT"))
+        r = git.merge("/wt/s7-ticket-1", "spec-7")
         self.assertTrue(r.conflict)
         self.assertEqual(git.rev_parse("/repo", "spec-7"), before)
-        r = git.merge("/repo", "ticket-1", no_ff=True, message="Merge #1: t")
+        r = git.merge("/repo", "s7-ticket-1", no_ff=True, message="Merge #1: t")
         self.assertTrue(r.ok)
         self.assertIsNotNone(r.commit)
         self.assertNotEqual(git.rev_parse("/repo", "spec-7"), before)
-        self.assertEqual(git.commits_ahead("/repo", "spec-7", "ticket-1"), 0)
+        self.assertEqual(git.commits_ahead("/repo", "spec-7", "s7-ticket-1"), 0)
 
     def test_clean_and_unmerged(self):
         git = FakeGit()

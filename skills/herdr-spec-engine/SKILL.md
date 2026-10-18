@@ -32,7 +32,7 @@ Loop until COMPLETE:
    - **3 `ENGINE NOT RUNNING`**: the engine died or was stopped. Unless the user stopped it, re-run step 2.2 in the same pane; `engine run <N>` resumes from saved state. Then go to 1.
    - **1** (watch timeout): go to 1.
 
-Resolve with `<SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`, using only an action the escalation lists (exit 0 = queued; exit 2 = unknown id or action not allowed, and it prints the allowed ones). The engine applies it on its next tick. Read an agent's screen with `herdr agent read <agent> --source recent --lines 120`. `<SKILL_DIR>/engine status <N>` (`--json` for the raw state) shows every run, the merge queue and all unresolved escalations.
+Resolve with `<SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`, using only an action the escalation lists (exit 0 = queued; exit 2 = unknown id or action not allowed, and it prints the allowed ones). The engine applies it on its next tick. Read an agent's screen with `herdr agent read <agent> --source recent --lines 120`; engine agents, their branches and tabs are named after their run: `s<N>-ticket-<n>`, `s<N>-fix-<k>`, `s<N>-review`, `s<N>-e2e`, merge resolvers `s<N>-resolve-<run>` (e.g. `s7-resolve-ticket-12`). `<SKILL_DIR>/engine status <N>` (`--json` for the raw state) shows every run, the merge queue and all unresolved escalations.
 
 Every kind also allows `hand-to-human`: use it whenever you are waiting on the user, so `watch` stops reporting the escalation; resolve it later with another action when the user reports back.
 

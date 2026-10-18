@@ -146,7 +146,7 @@ class Engine:
             if t.klass is TicketClass.DONE:
                 continue
             kind = RunKind.HUMAN if t.klass is TicketClass.HUMAN else RunKind.TICKET
-            run_id = run_id_for(kind, ticket=t.number)
+            run_id = run_id_for(kind, spec=plan.spec, ticket=t.number)
             state.runs[run_id] = Run.new(kind, run_id, ticket=t.number)
         return state
 
@@ -273,7 +273,7 @@ class Engine:
 
     def _replace_with_human_run(self, run: Run) -> None:
         del self.state.runs[run.id]
-        run_id = run_id_for(RunKind.HUMAN, ticket=run.ticket)
+        run_id = run_id_for(RunKind.HUMAN, spec=self.state.spec, ticket=run.ticket)
         self.state.runs[run_id] = Run.new(RunKind.HUMAN, run_id, ticket=run.ticket)
         self.event(run, "reclassified", to=run_id)
         self.persist()

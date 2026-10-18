@@ -101,7 +101,7 @@ class ReadResultTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.path = os.path.join(self.tmp.name, ".herdr-spec", "ticket-1.implement.json")
+        self.path = os.path.join(self.tmp.name, ".herdr-spec", "s7-ticket-1.implement.json")
         os.makedirs(os.path.dirname(self.path))
 
     def write(self, text):

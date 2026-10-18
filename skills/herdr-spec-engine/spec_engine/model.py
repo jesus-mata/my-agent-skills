@@ -5,6 +5,7 @@ as their string values.
 """
 from __future__ import annotations
 
+import hashlib
 import re
 from dataclasses import dataclass, field, fields
 from enum import Enum
@@ -124,17 +125,21 @@ STAGES_BY_KIND: dict[RunKind, tuple[Stage, ...]] = {
 def run_id_for(
     kind: RunKind, *, spec: int | None = None, ticket: int | None = None, k: int | None = None
 ) -> str:
-    """The run id (also agent and branch name) for a run of ``kind``."""
+    """The run id (also agent, branch and tab name) for a run of ``kind``.
+
+    herdr agent names are global to the herdr server, so every id is prefixed with its spec
+    (``s<N>-``) to keep runs of different specs and repos apart."""
     kind = RunKind(kind)
+    prefix = f"s{_need(spec, 'spec')}-"
     if kind is RunKind.TICKET:
-        return f"ticket-{_need(ticket, 'ticket')}"
+        return f"{prefix}ticket-{_need(ticket, 'ticket')}"
     if kind is RunKind.HUMAN:
-        return f"human-{_need(ticket, 'ticket')}"
+        return f"{prefix}human-{_need(ticket, 'ticket')}"
     if kind is RunKind.FIX:
-        return f"fix-{_need(spec, 'spec')}-{_need(k, 'k')}"
+        return f"{prefix}fix-{_need(k, 'k')}"
     if kind is RunKind.SPEC_REVIEW:
-        return f"review-spec-{_need(spec, 'spec')}"
-    return f"e2e-spec-{_need(spec, 'spec')}"
+        return f"{prefix}review"
+    return f"{prefix}e2e"
 
 
 def _need(value: int | None, name: str) -> int:
@@ -143,9 +148,19 @@ def _need(value: int | None, name: str) -> int:
     return value
 
 
+_SPEC_PREFIX_RE = re.compile(r"^(s\d+)-(.+)$")
+
+
 def resolver_agent_name(run_id: str) -> str:
-    """``resolve-<run_id>`` truncated to herdr's 32-char agent name limit."""
-    name = f"resolve-{run_id}"[:32].rstrip("-_")
+    """``s<N>-resolve-<rest>`` for run id ``s<N>-<rest>`` (27 chars at most for 5-digit spec and
+    ticket numbers). A name that would not fit herdr's 32 chars becomes ``s<N>-resolve-<hash>``
+    (or ``resolve-<hash>``) rather than a truncation two runs could share."""
+    m = _SPEC_PREFIX_RE.match(run_id)
+    head, rest = (f"{m.group(1)}-resolve-", m.group(2)) if m else ("resolve-", run_id)
+    name = head + rest
+    if not AGENT_NAME_RE.match(name):
+        digest = hashlib.sha1(run_id.encode()).hexdigest()[:10]
+        name = head + digest if len(head) + 10 <= 32 else f"resolve-{digest}"
     if not AGENT_NAME_RE.match(name):
         raise ValueError(f"invalid herdr agent name: {name!r}")
     return name

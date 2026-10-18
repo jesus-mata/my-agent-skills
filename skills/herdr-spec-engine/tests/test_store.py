@@ -32,17 +32,17 @@ class StoreTest(unittest.TestCase):
         self.store.save_plan(plan)
         self.assertEqual(self.store.load_plan(), plan)
         state = RunState(spec=7, branch="spec-7",
-                         runs={"ticket-1": Run.new(RunKind.TICKET, "ticket-1", ticket=1)})
+                         runs={"s7-ticket-1": Run.new(RunKind.TICKET, "s7-ticket-1", ticket=1)})
         self.store.save_state(state)
         self.assertEqual(self.store.load_state(), state)
         leftovers = [f for f in os.listdir(self.store.state_dir) if f.endswith(".tmp")]
         self.assertEqual(leftovers, [])
 
     def test_events_and_resolutions(self):
-        self.store.append_event("ticket-1", "transition", to="review")
+        self.store.append_event("s7-ticket-1", "transition", to="review")
         with open(self.store.paths.events) as f:
             self.assertEqual(json.loads(f.readline()),
-                             {"ts": 42.0, "run": "ticket-1", "type": "transition", "to": "review"})
+                             {"ts": 42.0, "run": "s7-ticket-1", "type": "transition", "to": "review"})
         self.assertEqual(self.store.read_resolutions(), [])
         self.store.append_resolution("e1", "retry", note="go")
         with open(self.store.paths.resolutions, "a") as f:
@@ -73,8 +73,8 @@ class StoreTest(unittest.TestCase):
         self.assertIsNone(self.store.read_pid())
 
     def test_archive_and_report(self):
-        path = self.store.archive_result("ticket-1", "review", 0, {"a": 1})
-        self.assertEqual(path, os.path.join(self.store.paths.out, "ticket-1.review.0.json"))
+        path = self.store.archive_result("s7-ticket-1", "review", 0, {"a": 1})
+        self.assertEqual(path, os.path.join(self.store.paths.out, "s7-ticket-1.review.0.json"))
         with open(path) as f:
             self.assertEqual(json.load(f), {"a": 1})
         self.store.write_report("# Report\n")
