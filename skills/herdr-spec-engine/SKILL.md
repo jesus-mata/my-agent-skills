@@ -11,13 +11,13 @@ You are the **supervisor** of a spec run. The engine owns every transition: it c
 
 # 1. Plan
 
-1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--base B` (default `main`, or `master` if there is no `main`), `--gate CMD` repeatable, `--from FILE` for specs without sub-issues; see design.md "Plan").
+1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--base B` (default `main`, or `master` if there is no `main`), `--gate CMD` repeatable, `--from FILE` for specs without sub-issues — keep that file outside the repo, an untracked file in the repo root blocks every merge as `repo-dirty`; see design.md "Plan").
 2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands. Get their confirmation.
 3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` if the discovered gate is wrong, then re-run `plan` until it exits 0 and the user confirms.
 
 # 2. Start the engine
 
-1. `herdr tab create --cwd "$PWD" --label engine-spec-<N>` → PANE_ID is `.result.root_pane.pane_id`.
+1. From the repo root: `herdr tab create --cwd "$PWD" --label engine-spec-<N> --no-focus` → PANE_ID is `.result.root_pane.pane_id`.
 2. `herdr pane run <PANE_ID> "<SKILL_DIR>/engine run <N>"`, adding run flags only when the user asks: `--max-agents N` (default 3), `--model M` (opus), `--stage-timeout D` (2h), `--retry-budget N` (1), `--gate-retry-budget N` (2), `--gate-timeout D` (30m), `--poll D` (10s); durations take `90`, `90s`, `30m`, `2h`. A resumed run keeps its stored settings and overrides only the flags given. `run` exits 1 without starting when `plan.json` is missing or unrunnable, another engine for `<N>` is alive, or the run was aborted; read the pane (`herdr pane read <PANE_ID>`) if `watch` reports `ENGINE NOT RUNNING` right away.
 
 # 3. Supervise
