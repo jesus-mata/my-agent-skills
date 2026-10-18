@@ -159,8 +159,8 @@ class FakeHerdr(_Recorder):
         self.panes[wt.pane_id] = path
         return wt
 
-    def remove_worktree(self, workspace_id: str) -> None:
-        self._call("remove_worktree", workspace_id=workspace_id)
+    def remove_worktree(self, workspace_id: str, force: bool = False) -> None:
+        self._call("remove_worktree", workspace_id=workspace_id, force=force)
         wt = self.worktrees.pop(workspace_id, None)
         if wt is None:
             raise HerdrError("workspace_not_found", f"no workspace {workspace_id}")

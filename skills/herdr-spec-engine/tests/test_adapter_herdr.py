@@ -149,6 +149,9 @@ class SocketHerdrTest(unittest.TestCase):
             "worktree_removed", workspace_id="w7", path="/x", forced=False)
         self.herdr.remove_worktree("w7")
         self.assertEqual(self.server.last("worktree.remove")["params"], {"workspace_id": "w7"})
+        self.herdr.remove_worktree("w7", force=True)
+        self.assertEqual(self.server.last("worktree.remove")["params"],
+                         {"workspace_id": "w7", "force": True})
 
     def test_tabs_and_panes(self):
         self.server.handlers["tab.create"] = lambda p: ok(

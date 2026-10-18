@@ -207,7 +207,7 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | VERIFY | none (synchronous) | `Git.commits_ahead(spec_branch, id) > 0` and `Git.is_clean(worktree)` → OK → REVIEW; else `VERIFY_FAILED` → prompt `verify_failed`, wait turn (schema `implement`), re-VERIFY |
 | REVIEW | prompt `review` (fix runs: `fix_review`) | OK → INTEGRATE (store `review`) |
 | INTEGRATE | enqueue in merge queue | see Merge queue; `INTEGRATED` → CLOSE |
-| CLOSE | ticket: `GitHub.comment` (merge commit, pending findings), `GitHub.close` unless a pending `spec` finding exists (then comment only, status `done` anyway — dependents unblock on merge); remove worktree; fix: remove worktree | OK → status `done` |
+| CLOSE | ticket: `GitHub.comment` (merge commit, pending findings), `GitHub.close` unless a pending `spec` finding exists (then comment only, status `done` anyway — dependents unblock on merge); remove worktree; fix: remove worktree. Removal is forced (the branch is merged; leftovers are gate artifacts such as build output, which a plain `git worktree remove` refuses) | OK → status `done` |
 | AWAIT_HUMAN | raise `hitl-ticket` | resolved `done` → status `done` |
 | PROVISION_TAB | `Herdr.create_tab(cwd=repo_root, label=id)`, `start_agent` | OK → next |
 | SPEC_REVIEW | prompt `spec_review` | OK → `spec_phases.on_spec_review(result)` |
@@ -414,7 +414,7 @@ class Herdr(Protocol):
     def ping(self) -> dict: ...
     def create_worktree(self, cwd: str, branch: str, base: str, label: str) -> Worktree: ...
     def open_worktree(self, cwd: str, branch: str, label: str) -> Worktree: ...
-    def remove_worktree(self, workspace_id: str) -> None: ...
+    def remove_worktree(self, workspace_id: str, force: bool = False) -> None: ...
     def create_tab(self, cwd: str, label: str) -> str: ...            # returns root pane id
     def split_pane(self, pane_id: str, cwd: str) -> str: ...          # returns new pane id
     def close_pane(self, pane_id: str) -> None: ...
@@ -462,7 +462,7 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   `ping`; `worktree.create {cwd, branch, base, label, focus: false}` and `worktree.open {cwd,
   branch, label, focus: false}` → `result.workspace.workspace_id`, `result.root_pane.pane_id`,
   `result.worktree.path` (always present, no git fallback needed); `worktree.remove
-  {workspace_id}`; `tab.create {cwd, label, focus: false}` → `result.root_pane.pane_id`;
+  {workspace_id[, force: true]}`; `tab.create {cwd, label, focus: false}` → `result.root_pane.pane_id`;
   `pane.split {target_pane_id, direction: "right", cwd, focus: false}` → `result.pane.pane_id`;
   `pane.close {pane_id}`; `agent.start {name, kind: "claude", pane_id, args, timeout_ms: 60000}`
   (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text}`; `agent.get {target}` →

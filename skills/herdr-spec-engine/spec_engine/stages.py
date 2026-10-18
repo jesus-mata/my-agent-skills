@@ -290,9 +290,11 @@ def _best_effort(ctx: Context, run: Run, what: str, fn: Callable[[], Any]) -> No
         event(ctx, run, "cleanup_error", what=what, error=str(exc))
 
 
-def remove_worktree(ctx: Context, run: Run) -> None:
+def remove_worktree(ctx: Context, run: Run, force: bool = False) -> None:
+    """Remove the run's worktree (branch kept). ``force`` drops untracked/modified files: only
+    after the branch is merged, when leftovers are gate artifacts (build output, logs)."""
     if run.workspace_id:
-        ctx.herdr.remove_worktree(run.workspace_id)
+        ctx.herdr.remove_worktree(run.workspace_id, force=force)
         event(ctx, run, "worktree_removed", workspace=run.workspace_id)
         run.workspace_id = None
 
@@ -508,7 +510,7 @@ def _poll_close(ctx: Context, run: Run) -> Outcome | None:
             step("note", lambda: run.notes.append("left open on GitHub: pending spec finding"))
         else:
             step("close", lambda: ctx.github.close(run.ticket))
-    step("remove_worktree", lambda: remove_worktree(ctx, run))
+    step("remove_worktree", lambda: remove_worktree(ctx, run, force=True))
     return Outcome.OK
 
 

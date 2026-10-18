@@ -122,8 +122,11 @@ class SocketHerdr:
             "cwd": os.path.abspath(cwd), "branch": branch, "label": label, "focus": False,
         }, timeout=120.0))
 
-    def remove_worktree(self, workspace_id: str) -> None:
-        self.request("worktree.remove", {"workspace_id": workspace_id}, timeout=120.0)
+    def remove_worktree(self, workspace_id: str, force: bool = False) -> None:
+        params: dict[str, Any] = {"workspace_id": workspace_id}
+        if force:
+            params["force"] = True
+        self.request("worktree.remove", params, timeout=120.0)
 
     def create_tab(self, cwd: str, label: str) -> str:
         result = self.request("tab.create", {
