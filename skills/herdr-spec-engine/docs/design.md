@@ -102,21 +102,27 @@ engine plan <N> [--branch spec-<N>] [--gate CMD]... [--from FILE]
 1. Read the spec issue: `GitHub.issue(N)`. Tickets = `sub_issues`. With `--from FILE` (fallback for
    specs without sub-issues) tickets and blockers come from the file: `{"tickets": [{"number": int,
    "blocked_by": [int]}]}`; each ticket is still read from GitHub for title/state/labels.
+   Sub-issues in another repository than the spec are not tickets (they cannot be read by number).
 2. For each ticket: `GitHub.issue(t)`. Blockers = its `blocked_by` that are sub-issues of the same
-   spec. A `blocked_by` outside the spec: closed → ignored; open → recorded as `external_blockers`.
+   spec (same repo and number). A `blocked_by` outside the spec: closed → ignored; open → recorded
+   as `external_blockers` (`"owner/repo#n"`). With `--from`, in-plan blockers come from the file
+   only (a file blocker missing from the file's tickets is a dangling blocker); external blockers
+   are still taken from GitHub.
 3. Classify each **open** ticket: `ready-for-agent` only → `agent`; `ready-for-human` only →
    `human`; neither or both → `unrefined`. Closed tickets → `done` (they satisfy blockers).
 4. Validate: acyclic (report the cycle); no blocker points at a ticket missing from the plan.
 5. Gate: `--gate` values if given, else `discover_gate(repo_root)`: from `package.json` scripts
    (install by lockfile: `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` /
-   `bun install` / `npm ci`; then scripts present among `lint`, `typecheck`|`type-check`,
+   `bun install` / `npm ci` (`npm install` without any lockfile); then scripts present among `lint`, `typecheck`|`type-check`,
    `format:check`, `build`, `test` as `<pm> run <script>`), else `Makefile` targets among
-   `lint test build`, else `go.mod` → `go vet ./...`, `go build ./...`, `go test ./...`, else
+   `lint test build` (a Makefile with none of them falls through), else `go.mod` → `go vet ./...`, `go build ./...`, `go test ./...`, else
    `Cargo.toml` → `cargo build`, `cargo test`, else `pyproject.toml` → `python3 -m pytest`.
    Empty gate is allowed but printed as a warning.
 6. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
-   there are unrefined tickets or a cycle (plan still written so the supervisor can show it).
+   there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
+   supervisor can show it); exit 2 without writing on input errors (unreadable/malformed `--from`
+   file, issue not found).
 
 `Plan` = `{spec: int, title, branch, base: "main", gate: [str], tickets: [PlanTicket]}`;
 `PlanTicket` = `{number, title, klass: agent|human|unrefined|done, blockers: [int],
