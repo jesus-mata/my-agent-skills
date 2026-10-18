@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 
@@ -126,6 +127,27 @@ class MergeQueueTest(unittest.TestCase):
         self.assertEqual(h.run("s7-ticket-1").gate_attempts, 1)
         self.assertEqual(len(self.worktree_merges(h)), 2)  # back to step 1 after the fix
         self.assertEqual(len(self.root_merges(h)), 1)
+
+    def test_test_runner_finding_no_tests_passes_the_gate(self):
+        for cmd in ("python3 -m unittest discover -s pkg -t pkg", "uv run pytest -q"):
+            with self.subTest(cmd=cmd):
+                h = self.harness(gate=(cmd, "make lint"))
+                h.shell.results[cmd] = ShellResult(code=5, output="NO TESTS RAN")
+                h.script_ticket("s7-ticket-1")
+                h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
+                self.assertEqual([n for n, _ in h.rendered if n == "gate_failed"], [])
+                self.assertEqual(len(h.shell.calls_to("run")), 2)  # later commands still run
+                with open(h.store.paths.events, encoding="utf-8") as f:
+                    gates = [e for e in map(json.loads, f) if e["type"] == "gate"]
+                self.assertTrue(gates[0]["no_tests"])
+
+    def test_exit_5_from_other_commands_still_fails_the_gate(self):
+        h = self.harness()
+        h.shell.results["make test"] = [ShellResult(code=5, output="boom"), PASS]
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-ticket-1", GATE_FIXED)
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
+        self.assertEqual(len([n for n, _ in h.rendered if n == "gate_failed"]), 1)
 
     def test_uncommitted_tracked_changes_fail_the_gate_before_it_runs(self):
         # The gate runs on the working tree but only commits are merged: a review or gate fix

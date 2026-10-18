@@ -176,10 +176,9 @@ _CODE_SPAN_RE = re.compile(r"`([^`]+)`")
 GATE_HINT = ("declare the gate in the spec issue body (a `## Gate` section with the commands in a "
              "fenced code block, or a line Gate: `cmd`), or pass --gate.")
 
-UNITTEST_EXIT5_WARNING = (
-    "`unittest discover` exits 5 when it finds no tests (Python >= 3.12), so a ticket without "
-    "tests can fail the gate before a sibling's tests land. Consider a guard, e.g. "
-    "`python3 -m unittest discover ...; c=$?; [ $c -eq 5 ] && c=0; exit $c`.")
+NO_TESTS_NOTE = (
+    "exit 5 (no tests found) from `unittest discover` or `pytest` counts as a gate pass, so a "
+    "ticket without tests can land before a sibling's tests do.")
 
 
 def gate_from_spec(body: str) -> list[str]:
@@ -356,8 +355,8 @@ def format_plan(plan: Plan, problems: list[str], gate_source: str = "") -> str:
         lines.append("  (none)")
         lines.append("WARNING: the gate is empty; runs will integrate without any checks.")
         lines.append(f"Hint: {GATE_HINT}")
-    if any("unittest discover" in cmd for cmd in plan.gate):
-        lines.append(f"WARNING: {UNITTEST_EXIT5_WARNING}")
+    if any(re.search(r"\bunittest\b.*\bdiscover\b|\bpytest\b", cmd) for cmd in plan.gate):
+        lines.append(f"Note: {NO_TESTS_NOTE}")
 
     lines.append("")
     if problems:

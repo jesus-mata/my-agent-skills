@@ -198,12 +198,12 @@ class FormatPlanTest(unittest.TestCase):
         self.assertNotIn("Hint:", text)
 
 
-    def test_unittest_discover_gate_warns_about_exit_5(self):
-        text = format_plan(self.plan(gate=("python3 -m unittest discover -s tests",)), [])
-        self.assertIn("WARNING: `unittest discover` exits 5 when it finds no tests "
-                      "(Python >= 3.12)", text)
-        self.assertIn("Consider a guard", text)
-        self.assertNotIn("exits 5", format_plan(self.plan(), []))
+    def test_test_runner_gate_notes_that_no_tests_passes(self):
+        for cmd in ("python3 -m unittest discover -s tests", "python3 -m pytest"):
+            text = format_plan(self.plan(gate=(cmd,)), [])
+            self.assertIn("Note: exit 5 (no tests found)", text)
+            self.assertNotIn("WARNING", text)
+        self.assertNotIn("exit 5", format_plan(self.plan(), []))
 
 
 class GateFromSpecTest(unittest.TestCase):

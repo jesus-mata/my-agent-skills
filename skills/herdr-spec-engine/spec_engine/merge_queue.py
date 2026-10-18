@@ -13,6 +13,8 @@ run is in the three steps lives in ``run.awaiting``:
 """
 from __future__ import annotations
 
+import re
+
 from .model import (
     EscalationKind, EscalationStatus, Outcome, Run, RunKind, RunStatus, resolver_agent_name,
 )
@@ -22,6 +24,8 @@ from .stages import (
 )
 
 GATE_OUTPUT_LINES = 150
+NO_TESTS_EXIT = 5
+_NO_TESTS_RUNNER_RE = re.compile(r"\bunittest\b.*\bdiscover\b|\bpytest\b|\bpy\.test\b")
 
 
 def head(ctx: Context) -> Run | None:
@@ -167,11 +171,19 @@ def _gate(ctx: Context, run: Run, base: str) -> None:
         return
     for cmd in ctx.plan.gate:
         result = ctx.shell.run(cmd, cwd=run.worktree, timeout=ctx.settings.gate_timeout)
-        event(ctx, run, "gate", cmd=cmd, code=result.code)
-        if result.code != 0:
+        no_tests = is_no_tests(cmd, result.code)
+        event(ctx, run, "gate", cmd=cmd, code=result.code,
+              **({"no_tests": True} if no_tests else {}))
+        if result.code != 0 and not no_tests:
             _gate_failed(ctx, run, base, cmd, result.code, last_lines(result.output))
             return
     _final(ctx, run, base)
+
+
+def is_no_tests(cmd: str, code: int) -> bool:
+    """``unittest discover`` (Python >= 3.12) and ``pytest`` exit 5 when they find no tests: a
+    ticket without tests that lands before a sibling's tests broke nothing, so it passes."""
+    return code == NO_TESTS_EXIT and _NO_TESTS_RUNNER_RE.search(cmd) is not None
 
 
 def last_lines(text: str, n: int = GATE_OUTPUT_LINES) -> str:

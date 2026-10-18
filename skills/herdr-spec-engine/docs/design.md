@@ -130,9 +130,8 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
    pass `--gate`. The printed gate names its source (`--gate`, `spec #<N> body` or
    `discovered from repository files`). The spec issue is read once for both the gate and the
    tickets.
-   A gate command containing `unittest discover` adds a warning: Python ≥ 3.12 exits 5 when no
-   tests are found, so a ticket without tests can fail the gate before a sibling's tests land;
-   it suggests a guard mapping exit 5 to 0.
+   A gate command running `unittest discover` or `pytest` adds a note that their exit 5 (no
+   tests found) counts as a pass (see Merge queue, gate).
 6. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
    there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
@@ -300,7 +299,10 @@ FIFO of run ids persisted in state. Only the head is processed. For the head run
    (a review or gate fix not committed) would pass the gate without being merged, so they count
    as a gate failure (command `git status --porcelain --untracked-files=no`, exit 1); untracked
    files are allowed (earlier gate artifacts). Then each command via `Shell.run(cmd,
-   cwd=worktree, timeout=gate_timeout)`, stop at first failure. Failure → if `gate_attempts < gate_retry_budget`: prompt ticket agent `gate_failed`
+   cwd=worktree, timeout=gate_timeout)`, stop at first failure. Exit 5 from a command running
+   `unittest discover` (Python ≥ 3.12) or `pytest` means no tests were found and counts as a
+   pass (event `gate` with `no_tests`): a ticket without tests may land before a sibling's tests.
+   Failure → if `gate_attempts < gate_retry_budget`: prompt ticket agent `gate_failed`
    (command, exit code, last 150 lines), await `gate_fix`, gate_attempts += 1, go to 1. Else
    escalate `budget-exhausted`.
 3. If `Git.rev_parse(spec_branch) != base` → go to 1. Else in the repo root (spec branch checked

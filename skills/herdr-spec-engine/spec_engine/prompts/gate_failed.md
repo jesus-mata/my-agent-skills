@@ -10,7 +10,7 @@ Last lines of its output:
 $output
 ```
 
-1. Find the root cause and fix the code. Keep every check intact: tests, lint rules and config stay as strict as they are.
+1. Find the root cause and fix the code. Keep every check intact: tests, lint rules and config stay as strict as they are. Never add or change tests, files or checks only to make the command pass: if the failure is not caused by this ticket's work, commit nothing and explain it in `summary`.
 2. Re-run the command until it passes, then the repo's other checks you know of.
 3. Commit the fix on your branch and describe it in `summary`.
 
