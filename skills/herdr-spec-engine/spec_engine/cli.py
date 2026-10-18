@@ -51,9 +51,12 @@ def _err(command: str, message: str) -> None:
 
 def plan_command(
     github: Any, git: Any, cwd: str, spec: int, branch: str | None, gate: list[str] | None,
-    from_file: str | None, out: TextIO,
+    from_file: str | None, out: TextIO, base: str | None = None,
 ) -> int:
-    """Build, validate, save and print the plan. 0 if runnable, 1 if not, 2 on input errors."""
+    """Build, validate, save and print the plan. 0 if runnable, 1 if not, 2 on input errors.
+
+    ``base`` (the spec branch's base) defaults to ``main``, or ``master`` when only that exists.
+    """
     from . import plan as planner
 
     repo_root = git.repo_root(cwd)
@@ -64,6 +67,10 @@ def plan_command(
     except (OSError, ValueError, LookupError) as e:
         _err("plan", str(e))
         return 2
+    if base is None and not git.branch_exists(repo_root, "main") and \
+            git.branch_exists(repo_root, "master"):
+        base = "master"
+    plan.base = base or "main"
     problems = planner.validate_plan(plan)
     store = Store(state_dir_for(common_dir, spec))
     store.save_plan(plan)
@@ -96,7 +103,7 @@ def cmd_plan(args: argparse.Namespace) -> int:
 
     cwd = os.getcwd()
     return plan_command(CliGitHub(cwd), CliGit(), cwd, args.spec, args.branch, args.gate,
-                        args.from_file, sys.stdout)
+                        args.from_file, sys.stdout, base=args.base)
 
 
 # run ------------------------------------------------------------------------------------------
@@ -444,6 +451,8 @@ def build_parser() -> argparse.ArgumentParser:
 
     sp = add("plan", cmd_plan, "build and validate the plan for spec N")
     sp.add_argument("--branch", help="spec branch (default spec-<N>)")
+    sp.add_argument("--base", help="branch the spec branch starts from and the spec review "
+                    "diffs against (default main, or master when there is no main)")
     sp.add_argument("--gate", action="append", default=None, metavar="CMD",
                     help="gate command (repeatable; default: discovered)")
     sp.add_argument("--from", dest="from_file", metavar="FILE",

@@ -11,7 +11,7 @@ You are the **supervisor** of a spec run. The engine owns every transition: it c
 
 # 1. Plan
 
-1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--gate CMD` repeatable, `--from FILE` for specs without sub-issues; see design.md "Plan").
+1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--base B` (default `main`, or `master` if there is no `main`), `--gate CMD` repeatable, `--from FILE` for specs without sub-issues; see design.md "Plan").
 2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands. Get their confirmation.
 3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` if the discovered gate is wrong, then re-run `plan` until it exits 0 and the user confirms.
 

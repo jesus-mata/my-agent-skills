@@ -31,7 +31,8 @@ class ParserTest(unittest.TestCase):
         self.assertEqual((a.spec, a.branch, a.gate, a.from_file), (12, "b", ["make lint", "make test"], "t.json"))
         self.assertIs(a.handler, cli.cmd_plan)
         a = parse("plan", "12")
-        self.assertEqual((a.branch, a.gate, a.from_file), (None, None, None))
+        self.assertEqual((a.branch, a.base, a.gate, a.from_file), (None, None, None, None))
+        self.assertEqual(parse("plan", "12", "--base", "master").base, "master")
 
     def test_run(self):
         a = parse("run", "12", "--max-agents", "2", "--model", "sonnet", "--stage-timeout", "1h",

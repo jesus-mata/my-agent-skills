@@ -96,7 +96,7 @@ gives a JSON example for prompts.
 ## Plan (`plan.py`, `engine plan <N>`)
 
 ```
-engine plan <N> [--branch spec-<N>] [--gate CMD]... [--from FILE]
+engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
 ```
 
 1. Read the spec issue: `GitHub.issue(N)`. Tickets = `sub_issues`. With `--from FILE` (fallback for
@@ -124,7 +124,9 @@ engine plan <N> [--branch spec-<N>] [--gate CMD]... [--from FILE]
    supervisor can show it); exit 2 without writing on input errors (unreadable/malformed `--from`
    file, issue not found).
 
-`Plan` = `{spec: int, title, branch, base: "main", gate: [str], tickets: [PlanTicket]}`;
+`Plan` = `{spec: int, title, branch, base, gate: [str], tickets: [PlanTicket]}`; `base` = `--base`,
+else `main`, else `master` when the repo has no `main` (the engine creates the spec branch from it
+and the spec review diffs against it);
 `PlanTicket` = `{number, title, klass: agent|human|unrefined|done, blockers: [int],
 external_blockers: [str], labels: [str]}`.
 
@@ -503,7 +505,7 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
 ## CLI (`cli.py`)
 
 ```
-engine plan <N> [--branch B] [--gate CMD]... [--from FILE]
+engine plan <N> [--branch B] [--base B] [--gate CMD]... [--from FILE]
 engine run <N> [--max-agents 3] [--model opus] [--stage-timeout 2h] [--retry-budget 1]
                [--gate-retry-budget 2] [--gate-timeout 30m] [--poll 10]
 engine watch <N> [--timeout 4h]

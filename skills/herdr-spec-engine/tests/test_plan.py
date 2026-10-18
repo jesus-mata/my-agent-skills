@@ -290,6 +290,20 @@ class PlanCommandTest(unittest.TestCase):
         self.assertEqual((plan.branch, plan.gate), ("feat", ["make check"]))
         self.assertNotIn("WARNING", out)
 
+    def test_base_defaults_to_master_when_there_is_no_main(self):
+        self.git = FakeGit(root=self.root, branches={"master": 1}, head="master")
+        code, out = self.run_plan(spec_with(make_issue(1, labels=AGENT)), gate=["true"])
+        self.assertEqual(code, 0)
+        self.assertEqual(self.store.load_plan().base, "master")
+        self.assertIn("(base master)", out)
+
+    def test_explicit_base(self):
+        out = io.StringIO()
+        code = plan_command(spec_with(make_issue(1, labels=AGENT)), self.git, self.root, 100,
+                            None, ["true"], None, out, base="develop")
+        self.assertEqual(code, 0)
+        self.assertEqual(self.store.load_plan().base, "develop")
+
     def test_unrunnable_still_writes_plan_and_exits_1(self):
         gh = spec_with(make_issue(1))
         code, out = self.run_plan(gh)
