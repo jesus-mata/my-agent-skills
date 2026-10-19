@@ -9,7 +9,7 @@ description: "Implements the work of a ticket or issue"
 
 # Validation:
 
-- Make sure new and all previous tests passes so there is no regresions
+- Make sure new and all previous unit tests and integration tests passes so there is no regresions
 - Run the linter, checker etc if any
 - Make sure the acceptance criteria is met
 
