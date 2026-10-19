@@ -17,6 +17,7 @@ $siblings
 Rules:
 - Stay in your current directory and commit only on your current branch.
 - Never push, merge other branches, rebase, switch branches or deploy. The engine integrates your branch.
+- Never run E2E tests (`/e2e`, Playwright, Cypress or similar): the engine runs E2E once for the whole spec after every ticket is merged.
 
 Finish by writing the result JSON to `$result_path`, shaped like this example:
 
