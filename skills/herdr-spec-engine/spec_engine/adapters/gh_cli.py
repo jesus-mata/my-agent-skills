@@ -19,6 +19,15 @@ class GhError(RuntimeError):
     """A ``gh`` command exited non-zero."""
 
 
+def authenticated() -> bool:
+    """Whether ``gh auth status`` succeeds (False when ``gh`` cannot run)."""
+    try:
+        proc = subprocess.run(["gh", "auth", "status"], capture_output=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return proc.returncode == 0
+
+
 def repo_of(url: str) -> str:
     """``owner/name`` from an issue or PR url ("" if it can't be parsed)."""
     m = REPO_RE.match(url or "")

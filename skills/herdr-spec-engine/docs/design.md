@@ -4,6 +4,17 @@ The build contract for the engine. Vocabulary is defined in `../GLOSSARY.md`; th
 in `adr/0001-engine-drives-supervisor-escalates.md`. Every module below is written against this
 document — if code and this file disagree, fix one of them in the same change.
 
+## Contents
+
+- [Constraints](#constraints) · [Layout](#layout) · [State directory](#state-directory)
+- [Result files](#result-files-agent--engine-handoff)
+- [Plan](#plan-planpy-engine-plan-n): tickets, classes, gate sources
+- [Runs, stages, outcomes](#runs-stages-outcomes): model conventions, readiness, stage handlers,
+  merge queue
+- [Escalations](#escalations-transitionspy): every kind, its actions and their effects
+- [Scheduler](#scheduler-schedulerpy) · [Spec phases](#spec-phases-spec_phasespy)
+- [Prompts](#prompts-promptspy-promptsmd) · [Ports](#ports-portspy) · [CLI](#cli-clipy)
+
 ## Constraints
 
 - Python **3.11+**, **standard library only**. No `pip install`, no `requirements.txt`.
@@ -22,6 +33,7 @@ skills/herdr-spec-engine/
   SKILL.md                 supervisor playbook
   GLOSSARY.md
   docs/adr/  docs/design.md
+  evals/                   supervisor evals (skill-creator evals.json + fixtures) and trigger evals
   engine                   executable launcher (python3), puts its dir on sys.path, calls spec_engine.cli:main
   spec_engine/
     __init__.py
@@ -38,6 +50,7 @@ skills/herdr-spec-engine/
     scheduler.py           the engine loop: readiness, concurrency, inbox, spec phases, completion
     spec_phases.py         spec review, fix-run creation, e2e, follow-ups phase, final report
     follow_ups.py          collect, dedupe, propose and create follow-up issues
+    preflight.py           tools, gh auth, herdr socket and required skills, checked by plan and run
     cli.py                 argparse: plan, run, watch, resolve, status, stop, abort
     adapters/
       __init__.py
@@ -483,8 +496,8 @@ Content follows the old skill: implement uses `/implement-ticket <n>`; review us
 `/mattpocock-skills:code-review <spec_branch>` with the fix policy (fix every missing/wrong spec
 finding and hard standards violation, test-first with `/mattpocock-skills:tdd`, one commit each,
 only report scope creep; false positives go to `dismissed`, never `pending`; work merged into the
-spec branch after the ticket branch was cut is not a finding); resolver uses `/mattpocock-skills:resolving-merge-conflicts`, finishes
-the merge commit, ESCALATE for big chunks or significant logic changes — leaving the conflicted
+spec branch after the ticket branch was cut is not a finding); resolver resolves each conflicted file hunk by
+hunk keeping both intents (no skill), finishes the merge commit, ESCALATE for big chunks or significant logic changes — leaving the conflicted
 merge in progress (never `git merge --abort`) so the human finishes it in the worktree and
 `resolved-manually` resumes at the gate; spec review runs
 `/code-review high` against `$base`, fixes easy blocker/high findings inline test-first (1–2 files,
@@ -613,6 +626,14 @@ engine stop <N>
 engine abort <N>
 ```
 
+- The launcher exits 2 on Python older than 3.11, before importing anything.
+- `plan` and `run` start with `preflight.check(repo_root)`: `git`, `gh`, `herdr` and `claude` on
+  PATH, `gh auth status`, and the herdr socket (`default_socket_path`) are errors (one line each,
+  exit 2, nothing else runs); a skill of `preflight.REQUIRED_SKILLS` not found as a personal
+  (`$CLAUDE_CONFIG_DIR` or `~/.claude`), project (`<repo>/.claude/skills`) or enabled plugin skill
+  is a warning, since the lookup cannot see every place a skill can live. `/code-review` is
+  built in. `tests/test_preflight.py` keeps `REQUIRED_SKILLS` equal to the skills the prompts
+  invoke.
 - Durations accept `90`, `90s`, `30m`, `2h` (`cli.parse_duration`, also `--poll`).
 - Each subcommand is handled by `cmd_<name>(args) -> int` (exit code). `run` flags default to
   `None` (dest = the `Settings` field name, `--poll` → `poll_seconds`) so

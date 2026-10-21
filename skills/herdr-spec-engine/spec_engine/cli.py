@@ -111,11 +111,23 @@ def _no_state(command: str, store: Store, spec: int) -> int:
     return 1
 
 
+def preflight_ok(command: str, report: Any, err: TextIO) -> bool:
+    """Print the preflight report; False when it has errors (the command then exits 2)."""
+    for warning in report.warnings:
+        err.write(f"engine {command}: warning: {warning}\n")
+    for error in report.errors:
+        err.write(f"engine {command}: {error}\n")
+    return not report.errors
+
+
 def cmd_plan(args: argparse.Namespace) -> int:
+    from . import preflight
     from .adapters.gh_cli import CliGitHub
     from .adapters.git_cli import CliGit
 
     cwd = os.getcwd()
+    if not preflight_ok("plan", preflight.check(CliGit().repo_root(cwd)), sys.stderr):
+        return 2
     return plan_command(CliGitHub(cwd), CliGit(), cwd, args.spec, args.branch, args.gate,
                         args.from_file, sys.stdout, base=args.base)
 
@@ -186,7 +198,11 @@ def cmd_run(args: argparse.Namespace) -> int:
     from .adapters import real_ports
     from .adapters.git_cli import CliGit
 
+    from . import preflight
+
     cwd = CliGit().repo_root(os.getcwd())
+    if not preflight_ok("run", preflight.check(cwd), sys.stderr):
+        return 2
     return run_command(real_ports(cwd), cwd, args.spec, settings_overrides(args), sys.stdout)
 
 

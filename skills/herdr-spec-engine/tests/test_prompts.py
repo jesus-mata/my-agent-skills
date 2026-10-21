@@ -136,7 +136,7 @@ class ContentTest(unittest.TestCase):
             "fix_review": ["/mattpocock-skills:code-review <spec_branch-value>",
                            "/mattpocock-skills:tdd", "`dismissed`", "is not a finding",
                            "`follow_ups`"],
-            "resolver": ["/mattpocock-skills:resolving-merge-conflicts", "ESCALATE", "RESOLVED"],
+            "resolver": ["hunk by hunk", "keeping both intents", "ESCALATE", "RESOLVED"],
             "spec_review": ["/code-review high", "against `<base-value>`",
                             "/mattpocock-skills:tdd", "Never create worktrees",
                             "scope rule", "`out-of-scope`", "Never open issues yourself"],

@@ -1,0 +1,6 @@
+$ git ls-files 'src/**/*.test.ts'
+src/export/format.test.ts
+src/export/totals.test.ts
+src/invoices/list.test.ts
+src/invoices/filters.test.ts
+src/__tests__/legacy-api.test.ts

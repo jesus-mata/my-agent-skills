@@ -6,7 +6,7 @@ Unmerged paths:
 $conflicts
 ```
 
-1. Run `/mattpocock-skills:resolving-merge-conflicts`. Read spec #$spec (`gh issue view $spec`) and the work on both sides to understand each change's intent, and keep both intents.
+1. Read spec #$spec (`gh issue view $spec`) and the work on both sides to understand each change's intent. Resolve each conflicted file hunk by hunk, keeping both intents.
 2. Finish the merge: stage the resolved files and commit the merge. The tree must end clean with no unmerged paths.
 3. Report verdict `"RESOLVED"` with a summary of how you resolved each file.
 4. Report verdict `"ESCALATE"` instead when resolving means rewriting big chunks, making significant logic changes, or choosing between intents that truly contradict. Leave the merge in progress exactly as it is (never run `git merge --abort`): a human finishes it in this worktree. Explain in `summary` which files conflict and why.

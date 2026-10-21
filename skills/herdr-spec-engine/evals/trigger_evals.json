@@ -1,0 +1,13 @@
+[
+  {"query": "implementa el spec #42 completo, todos sus sub-issues, en paralelo con herdr", "should_trigger": true},
+  {"query": "Here's the PRD for the billing CSV export, it's issue #120. Get all of its tickets implemented and merged into one branch.", "should_trigger": true},
+  {"query": "tengo el epic #88 con 6 tickets ready-for-agent; sácalos todos con agentes y pasa la e2e al final", "should_trigger": true},
+  {"query": "el engine del spec 42 se murió anoche a medio run, retómalo", "should_trigger": true},
+  {"query": "Implement every sub-issue of #301 and E2E test the result when they're all merged", "should_trigger": true},
+  {"query": "implementa el ticket #43", "should_trigger": false},
+  {"query": "usa herdr-implement-spec para el spec #42, esta vez no quiero el engine", "should_trigger": false},
+  {"query": "escríbeme un PRD para la exportación de facturas a CSV", "should_trigger": false},
+  {"query": "divide el spec #42 en tickets con sus dependencias", "should_trigger": false},
+  {"query": "revisa el código de la rama spec-42 contra main", "should_trigger": false},
+  {"query": "abre un pane de herdr con otro claude para que mire los tests", "should_trigger": false}
+]

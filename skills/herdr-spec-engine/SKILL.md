@@ -1,24 +1,27 @@
 ---
 name: herdr-spec-engine
-description: "Implement every ticket of a spec/PRD with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec while you supervise its escalations. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or sub-issues implemented, not just a single ticket."
+description: "Implements every ticket of a spec, PRD or epic with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec; Claude only supervises its escalations. Use when the user hands over a spec or PRD (or its GitHub issue) and wants all its tickets or sub-issues implemented, not a single ticket. Default choice over herdr-implement-spec."
 ---
 
-You are the **supervisor** of a spec run. The engine owns every transition: it claims tickets, starts and prompts agents, checks their result files, runs the gate, merges into the spec branch, closes tickets, then runs spec review and E2E. You start it, sleep until it escalates, and resolve each escalation from its closed set of actions. Vocabulary: [GLOSSARY.md](GLOSSARY.md). Engine internals, stages and escalation effects: [docs/design.md](docs/design.md).
+You are the **supervisor** of a spec run. The engine owns every transition: it claims tickets, starts and prompts agents, checks their result files, runs the gate, merges into the spec branch, closes tickets, then runs spec review and E2E. You start it, sleep until it escalates, and resolve each escalation from its closed set of actions. Vocabulary: [GLOSSARY.md](GLOSSARY.md). What each escalation action does: [docs/design.md](docs/design.md) "Escalations"; how the plan and its gate are built: "Plan".
 
 - `<N>` is the spec issue number. `<SKILL_DIR>` is this skill's base directory.
-- Requires: running inside herdr (`herdr` CLI), an authenticated `gh`, `python3` 3.11+, Claude Code, and these skills available to the engine's agents: `/implement-ticket`, `/e2e`, `/code-review`, `/mattpocock-skills:code-review`, `/mattpocock-skills:tdd`, `/mattpocock-skills:resolving-merge-conflicts`.
+- `plan` and `run` check their own requirements (tools, `gh` auth, herdr, Python 3.11+): on exit 2, relay each printed error to the user. A `warning: skill … not found` does not stop the run; tell the user, since the agents that invoke that skill will fail without it.
 - Your hands stay off the run: you never move tickets, merge, touch the repo root's working tree (the engine keeps the spec branch checked out there), or prompt engine agents, except to answer a blocked one. Anything the engine does not model reaches you as an escalation.
 
 # 1. Plan
 
-1. `<SKILL_DIR>/engine plan <N>` (flags: `--branch B`, `--base B` (default `main`, or `master` if there is no `main`), `--gate CMD` repeatable (else the gate declared in the spec issue body — a `## Gate` section with a fenced block of commands, or a line ``Gate: `cmd` `` — else one discovered from the repo's build files), `--from FILE` for specs without sub-issues — keep that file outside the repo, an untracked file in the repo root blocks every merge as `repo-dirty`; see design.md "Plan").
+1. `<SKILL_DIR>/engine plan <N>`. Flags:
+   - `--branch B` (default `spec-<N>`), `--base B` (default `main`, else `master`).
+   - `--gate CMD`, repeatable. Without it the gate comes from a `## Gate` section of the spec body, else is discovered from the repo's build files (design.md "Plan").
+   - `--from FILE` for specs without sub-issues. Keep FILE outside the repo: an untracked file in the repo root blocks every merge as `repo-dirty`.
 2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands with their source, and any gate warning (e.g. the `unittest discover` exit-5 one: suggest the printed guard to the user). Get their confirmation.
 3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` (or add a `## Gate` section to the spec body) if the gate is wrong or empty, then re-run `plan` until it exits 0 and the user confirms.
 
 # 2. Start the engine
 
 1. From the repo root: `herdr tab create --cwd "$PWD" --label engine-spec-<N> --no-focus` → PANE_ID is `.result.root_pane.pane_id`.
-2. `herdr pane run <PANE_ID> "<SKILL_DIR>/engine run <N>"`, adding run flags only when the user asks: `--max-agents N` (default 3), `--model M` (opus), `--stage-timeout D` (2h), `--retry-budget N` (1), `--gate-retry-budget N` (2), `--gate-timeout D` (30m), `--poll D` (10s); durations take `90`, `90s`, `30m`, `2h`. A resumed run keeps its stored settings and overrides only the flags given. `run` exits 1 without starting when `plan.json` is missing or unrunnable, another engine for `<N>` is alive, or the run was aborted; read the pane (`herdr pane read <PANE_ID>`) if `watch` reports `ENGINE NOT RUNNING` right away.
+2. `herdr pane run <PANE_ID> "<SKILL_DIR>/engine run <N>"`. Add run flags (agents, model, timeouts, retry budgets) only when the user asks; `engine run --help` lists them with their defaults. A resumed run keeps its stored settings and overrides only the flags given. `run` exits without starting on a failed preflight (2), or (1) when `plan.json` is missing or unrunnable, another engine for `<N>` is alive, or the run was aborted; read the pane (`herdr pane read <PANE_ID>`) if `watch` reports `ENGINE NOT RUNNING` right away.
 
 # 3. Supervise
 
