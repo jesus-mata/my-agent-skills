@@ -1,0 +1,32 @@
+2 open escalation(s) for spec #42:
+
+ESCALATION e3
+  run:     s42-ticket-43 (#43)
+  kind:    agent-blocked
+  stage:   implement
+  summary: s42-ticket-43 is blocked in implement
+  details:
+      The CSV export needs a column set. Ticket #43 lists date, number, customer and total,
+      but the invoices also carry the customer's tax ID (NIF), which is personal data.
+    
+      Should the export include the customer's NIF?
+      ❯ 1. Yes, add a `nif` column
+        2. No, leave it out
+        3. Type something else
+  actions: answered, hand-to-human
+  resolve: /Users/dev/.claude/skills/herdr-spec-engine/engine resolve 42 e3 <action> [--note TEXT]
+
+ESCALATION e4
+  run:     s42-ticket-44 (#44)
+  kind:    agent-blocked
+  stage:   implement
+  summary: s42-ticket-44 is blocked in implement
+  details:
+      I'm adding tests for the CSV formatter. This repo has both colocated tests
+      (src/export/format.test.ts) and a few under src/__tests__/. Ticket #44 says nothing.
+    
+      Where should the new test file go?
+      ❯ 1. src/export/csv.test.ts, next to the code
+        2. src/__tests__/csv.test.ts
+  actions: answered, hand-to-human
+  resolve: /Users/dev/.claude/skills/herdr-spec-engine/engine resolve 42 e4 <action> [--note TEXT]

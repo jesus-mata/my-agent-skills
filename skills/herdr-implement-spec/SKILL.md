@@ -1,6 +1,6 @@
 ---
 name: herdr-implement-spec
-description: "Implement every ticket of a spec/PRD by orchestrating parallel Claude instances in herdr worktrees, wave by wave, merging each into a spec branch, then code-review and E2E-test the whole spec. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or slices implemented, not just a single ticket."
+description: "Implement every ticket of a spec/PRD by orchestrating parallel Claude instances in herdr worktrees, wave by wave, merging each into a spec branch, then code-review and E2E-test the whole spec. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or slices implemented, not just a single ticket. Use only when the user explicitly asks for it instead of herdr-spec-engine."
 ---
 
 Implements the spec given, or the spec GitHub issue provided, by orchestrating Claude agents with herdr: implement every ticket wave by wave, then review and E2E-test the spec branch.

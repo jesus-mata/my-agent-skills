@@ -1,0 +1,8 @@
+$ herdr pane read p_7 --lines 12
+herdr-spec-engine: starting spec #42 (Export invoices to CSV) on branch spec-42; 5 tickets, max 3 agents, model opus
+state: /Users/dev/src/billing/.git/herdr-spec-engine/spec-42
+Traceback (most recent call last):
+  File "/Users/dev/.claude/skills/herdr-spec-engine/spec_engine/adapters/herdr_socket.py", line 88, in _call
+    sock.connect(self.socket_path)
+ConnectionRefusedError: [Errno 61] Connection refused
+dev@mac billing %

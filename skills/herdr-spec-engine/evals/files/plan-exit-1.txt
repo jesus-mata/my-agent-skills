@@ -1,0 +1,26 @@
+$ engine plan 42
+Spec #42: Export invoices to CSV
+Spec branch: spec-42 (base main)
+
+Wave 0:
+  #43 [agent] CSV column set and formatter
+  #46 [human] Approve the CSV layout with accounting
+Wave 1:
+  #44 [agent] Export endpoint  blocked by #43
+Wave 2:
+  #45 [agent] Export button in the invoice list  blocked by #44
+  #47 [unrefined] Scheduled monthly export by email  blocked by #44
+
+Unrefined tickets (need exactly one of ready-for-agent / ready-for-human):
+  #47 Scheduled monthly export by email  labels: needs-triage
+
+Gate (spec #42 body):
+  pnpm install --frozen-lockfile
+  pnpm run lint
+  pnpm run test
+
+NOT RUNNABLE:
+  - unrefined tickets (label each ready-for-agent or ready-for-human): #47
+Plan written to /Users/dev/src/billing/.git/herdr-spec-engine/spec-42/plan.json
+$ echo $?
+1

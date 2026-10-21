@@ -1,0 +1,1 @@
+ENGINE NOT RUNNING: restart with `/Users/dev/.claude/skills/herdr-spec-engine/engine run 42`

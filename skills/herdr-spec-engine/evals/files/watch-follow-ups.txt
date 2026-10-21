@@ -1,0 +1,23 @@
+1 open escalation(s) for spec #42:
+
+ESCALATION e9
+  run:     s42-follow-ups
+  kind:    follow-ups
+  stage:   follow_ups
+  summary: 3 follow-up issue(s) proposed by the reviews; create them?
+  details:
+    f1 [high] pre-existing: Invoice totals round per line instead of per invoice (src/invoices/totals.ts:58) — found by s42-ticket-43
+        problem: Totals sum rounded line amounts, so an invoice can be off by a cent.
+        why separate: The bug predates this spec and changing it alters every stored total.
+    f2 [medium] tech-debt: Duplicate date formatting helpers (src/utils/dates.ts) — found by s42-review, s42-ticket-45
+        problem: formatDate and toDisplayDate do the same with different locales.
+        why separate: Merging them touches 14 call sites outside the export.
+    f3 [medium] out-of-scope: Export should stream large result sets (src/export/csv.ts:12) — found by s42-review
+        already open as #31: not created again
+    f4 [medium] needs-decision: Export ignores the user's timezone (src/export/csv.ts:40) — found by s42-fix-1
+        problem: Dates are written in UTC; users in other timezones see the previous day.
+        why separate: Which timezone to use is a product decision the spec does not make.
+    
+    create-all creates f1 f2 f4; create-selected creates only the ids in --note (e.g. --note "f1"); discard creates none.
+  actions: create-all, create-selected, discard, hand-to-human
+  resolve: /Users/dev/.claude/skills/herdr-spec-engine/engine resolve 42 e9 <action> [--note TEXT]

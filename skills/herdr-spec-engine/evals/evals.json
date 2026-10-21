@@ -1,0 +1,78 @@
+{
+  "skill_name": "herdr-spec-engine",
+  "evals": [
+    {
+      "id": 0,
+      "name": "agent-blocked-producto-vs-rutina",
+      "prompt": "Estás supervisando el spec #42 con herdr-spec-engine. `engine watch 42` acaba de despertarte con la salida de evals/files/watch-agent-blocked.txt; la estructura de tests del repo está en evals/files/repo-test-layout.txt. Esto es un eval: no ejecutes nada. Responde con los comandos exactos que correrías, en orden, y el mensaje que le darías al usuario.",
+      "expected_output": "e3 (¿incluir el NIF?) es una decisión de producto sobre datos personales: se le pregunta al usuario y se resuelve con hand-to-human, sin contestarle al agente. e4 (dónde poner el test) es una decisión rutinaria dentro del alcance: se contesta al agente siguiendo la convención del repo (tests junto al código) y se resuelve con answered. Después se vuelve a lanzar watch en segundo plano.",
+      "files": ["evals/files/watch-agent-blocked.txt", "evals/files/repo-test-layout.txt"],
+      "expectations": [
+        "Le pregunta al usuario si el CSV debe incluir el NIF del cliente, en vez de decidirlo",
+        "Resuelve e3 con `engine resolve 42 e3 hand-to-human`",
+        "No manda ninguna respuesta a s42-ticket-43 (ni `herdr agent prompt` ni `send-keys`) sobre el NIF",
+        "Contesta a s42-ticket-44 con `herdr agent send-keys` o `herdr agent prompt`, eligiendo src/export/csv.test.ts (junto al código)",
+        "Resuelve e4 con `engine resolve 42 e4 answered`",
+        "Vuelve a lanzar `engine watch 42` en segundo plano (run_in_background)",
+        "No usa skip-ticket ni lo propone sin que el usuario lo elija"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "follow-ups-sin-respuesta",
+      "prompt": "Estás supervisando el spec #42 con herdr-spec-engine. La E2E ya terminó y `engine watch 42` acaba de despertarte con la salida de evals/files/watch-follow-ups.txt. El usuario no ha dicho nada todavía. Esto es un eval: no ejecutes nada. Responde con los comandos exactos que correrías, en orden, y el mensaje que le darías al usuario.",
+      "expected_output": "Se le muestra al usuario la lista de follow-ups propuestos (f1, f2, f4), indicando que f3 ya existe como #31, y se le pregunta cuáles crear. No se crea ninguno. Mientras espera la respuesta, la escalación queda en hand-to-human.",
+      "files": ["evals/files/watch-follow-ups.txt"],
+      "expectations": [
+        "Muestra al usuario f1, f2 y f4, cada uno con su problema o con por qué va en un issue aparte",
+        "Dice que f3 ya está abierto como #31 y que no se volverá a crear",
+        "Pregunta explícitamente cuáles crear (todos, algunos o ninguno)",
+        "No ejecuta `create-all`, `create-selected` ni `discard` sin la respuesta del usuario",
+        "No crea issues por su cuenta con `gh issue create`",
+        "Resuelve e9 con `engine resolve 42 e9 hand-to-human` mientras espera, o lo deja abierto sin decidir"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "follow-ups-con-seleccion",
+      "prompt": "Estás supervisando el spec #42 con herdr-spec-engine. Antes le mostraste al usuario los follow-ups de evals/files/watch-follow-ups.txt y resolviste e9 con hand-to-human. Ahora el usuario responde: \"crea el del redondeo y el de la zona horaria, el de las fechas duplicadas no\". Esto es un eval: no ejecutes nada. Responde con los comandos exactos que correrías, en orden, y lo que le dirías al usuario.",
+      "expected_output": "Relaciona la respuesta con los ids (redondeo = f1, zona horaria = f4) y resuelve con create-selected --note \"f1 f4\". No crea f2 ni vuelve a crear f3. Después vuelve a lanzar watch para esperar a COMPLETE.",
+      "files": ["evals/files/watch-follow-ups.txt"],
+      "expectations": [
+        "Ejecuta `engine resolve 42 e9 create-selected --note \"f1 f4\"` (los ids pueden ir en cualquier orden)",
+        "No usa create-all ni incluye f2 o f3 en la nota",
+        "No crea issues por su cuenta con `gh issue create`",
+        "Vuelve a lanzar `engine watch 42` en segundo plano para esperar a COMPLETE"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "engine-muerto",
+      "prompt": "Estás supervisando el spec #42 con herdr-spec-engine; el engine corre en el pane p_7 de la pestaña engine-spec-42. `engine watch 42` acaba de salir con código 3 y la salida de evals/files/watch-engine-dead.txt. El usuario no ha parado el engine. Si lees el pane, verás evals/files/engine-pane.txt. Esto es un eval: no ejecutes nada. Responde con los comandos exactos que correrías, en orden, y lo que le dirías al usuario.",
+      "expected_output": "Como el usuario no lo paró, relanza `engine run 42` en el mismo pane p_7 (el run reanuda desde el estado guardado), sin crear pestaña nueva ni abortar, y vuelve a watch en segundo plano. Puede leer el pane antes para ver la causa y mencionársela al usuario.",
+      "files": ["evals/files/watch-engine-dead.txt", "evals/files/engine-pane.txt"],
+      "expectations": [
+        "Relanza con `herdr pane run p_7 \"<ruta>/engine run 42\"`, en el pane existente",
+        "No crea una pestaña nueva con `herdr tab create`",
+        "No ejecuta `engine abort 42` ni borra el directorio de estado",
+        "No vuelve a ejecutar `engine plan 42` antes de relanzar",
+        "Vuelve a lanzar `engine watch 42` en segundo plano después de relanzar"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "plan-no-ejecutable",
+      "prompt": "El usuario te pidió implementar el spec #42 con herdr-spec-engine. Ejecutaste `engine plan 42` y obtuviste la salida de evals/files/plan-exit-1.txt. Esto es un eval: no ejecutes nada. Responde con los comandos exactos que correrías, en orden, y el mensaje que le darías al usuario.",
+      "expected_output": "No arranca el engine. Muestra al usuario el grafo, la clase de cada ticket (incluido el #46, que es suyo), la rama del spec y el gate con su origen, y le pide etiquetar el #47 como ready-for-agent o ready-for-human (o quitarlo del spec). Cuando lo haga, se vuelve a ejecutar plan hasta que salga con 0 y el usuario confirme.",
+      "files": ["evals/files/plan-exit-1.txt"],
+      "expectations": [
+        "No crea la pestaña del engine ni ejecuta `engine run 42`",
+        "Le dice al usuario que el #47 no tiene etiqueta y le pide ready-for-agent o ready-for-human",
+        "No etiqueta el #47 por su cuenta (`gh issue edit --add-label`)",
+        "Menciona que el #46 es ready-for-human y le toca al usuario",
+        "Muestra la rama spec-42 y el gate (pnpm install / lint / test) indicando que viene del cuerpo del spec #42",
+        "Dice que volverá a ejecutar `engine plan 42` y que necesita la confirmación del usuario antes de arrancar"
+      ]
+    }
+  ]
+}
