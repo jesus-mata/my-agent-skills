@@ -43,7 +43,7 @@ Per wave: steps 1–3 for every ticket (fan out), steps 4–5 once for the wave,
 
    Then `<SKILL_DIR>/wait-agents.sh ticket-<ID_1> ticket-<ID_2> ...` and handle states as in step 4. Check each `herdr agent read ticket-<ID>` has the report; if not, prompt once more for it.
 6. Merge each ticket branch, one at a time: `git merge --no-ff ticket-<ID>`.
-   - On conflict, spawn a built-in `Agent` subagent with `model: "opus"`: tell it to use `/mattpocock-skills:resolving-merge-conflicts`, give it the spec, both tickets and the order the spec defines, and have it finish with `RESOLVED: <summary>` or `ESCALATE: <reason>`. On `ESCALATE` (big chunks, significant logic changes), hand off to a human and wait.
+   - On conflict, spawn a built-in `Agent` subagent with `model: "opus"`: tell it to resolve each conflicted file hunk by hunk, keeping both intents, give it the spec, both tickets and the order the spec defines, and have it finish with `RESOLVED: <summary>` or `ESCALATE: <reason>`. On `ESCALATE` (big chunks, significant logic changes), hand off to a human and wait.
    - After the wave's last merge, run the repo's install, lint/type check, format check, build and full test suite on the spec branch. Fix formatting yourself; hand anything else back to the responsible ticket's agent.
 7. Close the ticket with a comment pointing at its merge commit and listing any pending review findings. If a pending finding is `[spec]` (missing or wrong), comment but leave the ticket open — its dependents still unblock, since they wait on the merge. `herdr worktree remove --workspace <WORKSPACE_ID>`.
 8. Compute the next wave and repeat.
