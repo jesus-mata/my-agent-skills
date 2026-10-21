@@ -6,10 +6,12 @@ import re
 import subprocess
 from typing import Any
 
-from ..ports import Issue, IssueRef
+from ..ports import Issue, IssueRef, OpenIssue
 
 ISSUE_FIELDS = "number,title,state,labels,url,subIssues,blockedBy,body"
 REPO_RE = re.compile(r"^https?://[^/]+/([^/]+/[^/]+)/(?:issues|pull)/\d+")
+ISSUE_NUMBER_RE = re.compile(r"/issues/(\d+)\s*$")
+OPEN_ISSUES_LIMIT = 1000
 NOT_FOUND_MARKERS = ("could not resolve to an issue", "not found", "no issue")
 
 
@@ -76,3 +78,20 @@ class CliGitHub:
 
     def close(self, number: int) -> None:
         self._gh("issue", "close", str(number))
+
+    def open_issues(self) -> list[OpenIssue]:
+        data = json.loads(self._gh("issue", "list", "--state", "open", "--limit",
+                                   str(OPEN_ISSUES_LIMIT), "--json", "number,title,url"))
+        return [OpenIssue(number=int(i["number"]), title=str(i.get("title", "")),
+                          url=str(i.get("url", ""))) for i in data]
+
+    def create_issue(self, title: str, body: str, labels: list[str]) -> OpenIssue:
+        args = ["issue", "create", "--title", title, "--body-file", "-"]
+        for label in labels:
+            args += ["--label", label]
+        lines = self._gh(*args, input=body).strip().splitlines()
+        url = lines[-1].strip() if lines else ""
+        m = ISSUE_NUMBER_RE.search(url)
+        if not m:
+            raise GhError(f"gh issue create printed no issue url: {url!r}")
+        return OpenIssue(number=int(m.group(1)), title=title, url=url)

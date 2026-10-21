@@ -35,6 +35,22 @@ class ResultsTest(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(results.SCHEMAS[name](data), (data, None))
 
+    def test_follow_ups_are_optional_and_checked(self):
+        for name in ("review", "spec_review"):
+            with self.subTest(name=name):
+                good = bad(name, follow_ups=KeyError)
+                self.assertEqual(results.SCHEMAS[name](good), (good, None))
+                entry = GOOD[name]["follow_ups"][0]
+                self.assertInvalid(name, bad(name, follow_ups=[{**entry, "category": "bug"}]),
+                                   f"{name}.follow_ups[0].category", "'pre-existing'")
+                self.assertInvalid(name, bad(name, follow_ups=[{**entry, "severity": "low"}]),
+                                   f"{name}.follow_ups[0].severity", "'medium'")
+                no_why = {k: v for k, v in entry.items() if k != "why_separate"}
+                self.assertInvalid(name, bad(name, follow_ups=[no_why]),
+                                   f"{name}.follow_ups[0].why_separate", "missing")
+                self.assertInvalid(name, bad(name, follow_ups=[{**entry, "acceptance": "x"}]),
+                                   f"{name}.follow_ups[0].acceptance", "list")
+
     def test_empty_lists_and_unknown_keys_allowed(self):
         ok = {"fixed": [], "pending": [], "scope_creep": [], "extra": 1}
         self.assertEqual(results.validate_review(ok)[1], None)

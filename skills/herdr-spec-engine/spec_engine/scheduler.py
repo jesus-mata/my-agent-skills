@@ -10,7 +10,7 @@ import math
 import os
 from typing import Any, Callable
 
-from . import merge_queue, spec_phases, stages
+from . import follow_ups, merge_queue, spec_phases, stages
 from .model import (
     EngineStatus, Escalation, EscalationKind, EscalationStatus, Phase, Run, RunKind, RunState,
     RunStatus, TicketClass, run_id_for,
@@ -212,7 +212,7 @@ class Engine:
         for _, run in sorted(pending, key=self._start_key):
             if run.kind in TICKET_KINDS and not self._blockers_done(run):
                 continue
-            if run.kind is RunKind.HUMAN:
+            if run.kind not in AGENT_KINDS:
                 self._activate(run)
                 continue
             if slots <= 0:
@@ -303,7 +303,12 @@ class Engine:
                 if run.status is RunStatus.DONE:
                     spec_phases.on_e2e(self, run, run.review or {})
                 else:
-                    state.phase = Phase.COMPLETE
+                    spec_phases.start_follow_ups(self)
+        if state.phase is Phase.FOLLOW_UPS:
+            run = next(iter(self._runs_of(RunKind.FOLLOW_UPS)), None)
+            if run is not None and run.terminal:
+                state.phase = Phase.COMPLETE
+                self.event(run, "phase", phase=state.phase.value)
         if state.phase is Phase.COMPLETE and state.status is EngineStatus.RUNNING:
             self.ctx.store.write_report(spec_phases.write_report(self))
             state.status = EngineStatus.COMPLETE
@@ -383,6 +388,9 @@ class Engine:
             "done": self._human_done,
             "relabeled": self._recheck,
             "cleared": self._recheck,
+            "create-all": self._create_follow_ups,
+            "create-selected": self._create_selected_follow_ups,
+            "discard": self._discard_follow_ups,
         }[action]
 
     def _resume(self, esc: Escalation, run: Run) -> None:
@@ -451,3 +459,23 @@ class Engine:
     def _recheck(self, esc: Escalation, run: Run) -> None:
         run.status = RunStatus.PENDING
         run.awaiting = None
+
+    def _create_follow_ups(self, esc: Escalation, run: Run, ids: list[str] | None = None) -> None:
+        follow_ups.create(self.ctx.github, self.ctx.plan, run.review["follow_ups"], ids)
+        self._follow_ups_decided(run)
+
+    def _create_selected_follow_ups(self, esc: Escalation, run: Run) -> bool:
+        ids, problem = follow_ups.parse_selection(esc.note, run.review["follow_ups"])
+        if problem:
+            esc.details = f"{esc.details}\ncreate-selected refused: {problem}".strip()
+            return False
+        self._create_follow_ups(esc, run, ids)
+        return True
+
+    def _discard_follow_ups(self, esc: Escalation, run: Run) -> None:
+        follow_ups.discard(run.review["follow_ups"])
+        self._follow_ups_decided(run)
+
+    def _follow_ups_decided(self, run: Run) -> None:
+        run.status = RunStatus.ACTIVE
+        run.awaiting = {"type": "sync"}

@@ -32,7 +32,7 @@ Loop until COMPLETE:
    - **3 `ENGINE NOT RUNNING`**: the engine died or was stopped. Unless the user stopped it, re-run step 2.2 in the same pane; `engine run <N>` resumes from saved state. Then go to 1.
    - **1** (watch timeout): go to 1.
 
-Resolve with `<SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`, using only an action the escalation lists (exit 0 = queued; exit 2 = unknown id or action not allowed, and it prints the allowed ones). The engine applies it on its next tick. Read an agent's screen with `herdr agent read <agent> --source recent --lines 120`; engine agents, their branches and tabs are named after their run: `s<N>-ticket-<n>`, `s<N>-fix-<k>`, `s<N>-review`, `s<N>-e2e`, merge resolvers `s<N>-resolve-<run>` (e.g. `s7-resolve-ticket-12`). `<SKILL_DIR>/engine status <N>` (`--json` for the raw state) shows every run, the merge queue and all unresolved escalations.
+Resolve with `<SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`, using only an action the escalation lists (exit 0 = queued; exit 2 = unknown id or action not allowed, and it prints the allowed ones). The engine applies it on its next tick. Read an agent's screen with `herdr agent read <agent> --source recent --lines 120`; engine agents, their branches and tabs are named after their run: `s<N>-ticket-<n>`, `s<N>-fix-<k>`, `s<N>-review`, `s<N>-e2e` (the last run, `s<N>-follow-ups`, has no agent), merge resolvers `s<N>-resolve-<run>` (e.g. `s7-resolve-ticket-12`). `<SKILL_DIR>/engine status <N>` (`--json` for the raw state) shows every run, the merge queue and all unresolved escalations.
 
 Every kind also allows `hand-to-human`: use it whenever you are waiting on the user, so `watch` stops reporting the escalation; resolve it later with another action when the user reports back.
 
@@ -48,12 +48,13 @@ Every kind also allows `hand-to-human`: use it whenever you are waiting on the u
 | `unrefined-ticket` | Ask the user to label the ticket, or whether to skip it. | `hand-to-human`, later `relabeled` / `skip-ticket` |
 | `external-blocker` | Tell the user which outside issue blocks it. Once closed, or if the user says skip: | `hand-to-human`, later `cleared` / `skip-ticket` |
 | `repo-dirty` | Show the user `git status` of the repo root; it must be on the spec branch and clean. Leave their changes for them to commit or stash, then: | `hand-to-human`, later `retry` |
+| `follow-ups` | After E2E: the reviews found work that belongs in separate issues (details list `f1, f2, …` with category, severity, problem and why separate; ones already open on GitHub are marked and never re-created). Show the user the list and ask which to create. Never create them without the user's answer. | `create-all` / `create-selected --note "f1 f3"` / `discard`; `hand-to-human` while waiting |
 
 `skip-ticket` drops a ticket and everything it blocks; issue it only when the user chooses it. A handed-off escalation disappears from `watch`; track it yourself and resolve it when the user reports back (`engine status <N>` lists it).
 
 # 4. Finish
 
-On `COMPLETE`, relay `report.md` (printed by `watch`) to the user: tickets done, left open and skipped with reasons, pending review findings and dismissed ones (judged false positives by the reviewer; they never keep a ticket open), spec review fixed / still-pending hard / not fixed findings (offer to open follow-up issues for the not-fixed ones worth keeping), fix runs, E2E passed / fixed / pending, and any open or handed-off escalations. The spec branch is local and nothing was pushed; push or open a PR only when the user asks. The spec review and E2E tabs stay open for inspection.
+On `COMPLETE`, relay `report.md` (printed by `watch`) to the user: tickets done, left open and skipped with reasons, pending review findings and dismissed ones (judged false positives by the reviewer; they never keep a ticket open), spec review fixed / still-pending hard / not fixed findings, fix runs, E2E passed / fixed / pending, follow-ups created / already open / discarded (with issue links), and any open or handed-off escalations. The spec branch is local and nothing was pushed; push or open a PR only when the user asks. The spec review and E2E tabs stay open for inspection.
 
 # Stopping
 

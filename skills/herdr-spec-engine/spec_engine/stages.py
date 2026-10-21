@@ -13,7 +13,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Callable, NamedTuple
 
-from . import prompts, results
+from . import follow_ups, prompts, results
 from .model import (
     Escalation, EscalationKind, Outcome, Plan, Run, RunKind, RunState, RunStatus, Settings, Stage,
 )
@@ -646,7 +646,8 @@ def _enter_await_human(ctx: Context, run: Run) -> None:
              details=issue.url, awaiting={"type": "escalation"})
 
 
-def _poll_await_human(ctx: Context, run: Run) -> Outcome | None:
+def _poll_synced(ctx: Context, run: Run) -> Outcome | None:
+    """OK once a resolution set ``awaiting`` to sync (stages that wait on the supervisor)."""
     return Outcome.OK if run.awaiting.get("type") == "sync" else None
 
 
@@ -657,6 +658,21 @@ def _enter_spec_review(ctx: Context, run: Run) -> None:
 
 def _enter_e2e(ctx: Context, run: Run) -> None:
     send_turn(ctx, run, template="e2e", schema="e2e", name="e2e", spec_branch=ctx.spec_branch)
+
+
+def _enter_follow_ups(ctx: Context, run: Run) -> None:
+    """Collect the reviews' follow-ups once, then propose the new ones to the supervisor."""
+    if run.review is None:
+        entries = follow_ups.collect(ctx.state.runs.values(), ctx.github.open_issues())
+        run.review = {"follow_ups": entries}
+    entries = run.review["follow_ups"]
+    new = follow_ups.proposed(entries)
+    if not new:
+        run.awaiting = dict(SYNC)
+        return
+    escalate(ctx, run, EscalationKind.FOLLOW_UPS,
+             f"{len(new)} follow-up issue(s) proposed by the reviews; create them?",
+             details=follow_ups.details(entries), awaiting={"type": "escalation"})
 
 
 class Handler(NamedTuple):
@@ -673,10 +689,11 @@ HANDLERS: dict[Stage, Handler] = {
     Stage.REVIEW: Handler(_enter_review, poll_turn, _store_result),
     Stage.INTEGRATE: Handler(_enter_integrate, _poll_integrate),
     Stage.CLOSE: Handler(_enter_close, _poll_close),
-    Stage.AWAIT_HUMAN: Handler(_enter_await_human, _poll_await_human),
+    Stage.AWAIT_HUMAN: Handler(_enter_await_human, _poll_synced),
     Stage.PROVISION_TAB: Handler(_enter_provision_tab, _poll_agent_ready),
     Stage.SPEC_REVIEW: Handler(_enter_spec_review, poll_turn, _store_result),
     Stage.E2E: Handler(_enter_e2e, poll_turn, _store_result),
+    Stage.FOLLOW_UPS: Handler(_enter_follow_ups, _poll_synced),
 }
 
 

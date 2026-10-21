@@ -57,6 +57,13 @@ _Avoid_: Subworkflow, job, pipeline
 A ticket run with no ticket of its own, created by the engine for a hard finding from spec review.
 _Avoid_: Fix ticket, hotfix
 
+**Follow-up**:
+A review finding, medium or higher, that the reviewed work must not fix and that deserves its own
+issue: pre-existing, out of scope, needing a decision, too large, or tech debt. The engine
+proposes follow-ups to the user at the end of a run and creates only the issues the user
+confirms.
+_Avoid_: Out-of-scope finding, backlog item, TODO
+
 **Stage**:
 One named state of a ticket run, such as Implement, Review or Integrate.
 _Avoid_: Node, step, phase

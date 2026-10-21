@@ -10,7 +10,9 @@ from collections import defaultdict, deque
 from dataclasses import replace
 from typing import Any, Callable, Iterable
 
-from spec_engine.ports import HerdrError, Issue, IssueRef, MergeResult, ShellResult, Worktree
+from spec_engine.ports import (
+    HerdrError, Issue, IssueRef, MergeResult, OpenIssue, ShellResult, Worktree,
+)
 
 # Absolute path of a result file inside a prompt: .../.herdr-spec/<run_id>.<stage>.json
 RESULT_PATH_RE = re.compile(r"(/[^\s`'\"<>()]*/\.herdr-spec/[^\s`'\"<>()/]+\.json)")
@@ -260,6 +262,8 @@ class FakeGitHub(_Recorder):
         self.assigned: list[int] = []
         self.comments: dict[int, list[str]] = defaultdict(list)
         self.closed: list[int] = []
+        self.created: list[dict[str, Any]] = []  # {"number", "title", "body", "labels"}
+        self.next_number = 1000
 
     def add(self, issue: Issue) -> None:
         self.issues[issue.number] = issue
@@ -283,6 +287,20 @@ class FakeGitHub(_Recorder):
         self.closed.append(number)
         if number in self.issues:
             self.issues[number] = replace(self.issues[number], state="CLOSED")
+
+    def open_issues(self) -> list[OpenIssue]:
+        self._call("open_issues")
+        return [OpenIssue(number=i.number, title=i.title, url=i.url)
+                for i in self.issues.values() if i.state == "OPEN"]
+
+    def create_issue(self, title: str, body: str, labels: list[str]) -> OpenIssue:
+        self._call("create_issue", title=title, body=body, labels=list(labels))
+        self.next_number += 1
+        number = self.next_number
+        self.add(make_issue(number, title=title, labels=labels))
+        self.created.append({"number": number, "title": title, "body": body,
+                             "labels": list(labels)})
+        return OpenIssue(number=number, title=title, url=self.issues[number].url)
 
 
 class FakeShell(_Recorder):

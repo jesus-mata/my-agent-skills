@@ -94,8 +94,7 @@ class SpecPhasesTest(unittest.TestCase):
             "Hard findings still pending (1):\n- [high] Leaky cache (src/cache.py) — s7-fix-2 "
             "skipped — skipped by supervisor (budget-exhausted)",
             "Not fixed, medium/low (2):\n- [medium] Naming\n"
-            "- [low] CI skips tests — out of scope: nothing outside src/ changes\n"
-            "Suggestion: open follow-up issues for the not-fixed findings worth keeping.",
+            "- [low] CI skips tests — out of scope: nothing outside src/ changes\n\n## Fix runs",
             "- s7-fix-1 Race on save — merged as c2",
             "  - finding: Race on save (blocker); File: src/save.py:3; "
             "Failure scenario: two saves lose one",
@@ -116,7 +115,18 @@ class SpecPhasesTest(unittest.TestCase):
         self.assertIn("## Fix runs\n\n- none", report)
         self.assertNotIn("follow-up issues", report)
         self.assertIn("## E2E\n\n- not run", report)
+        self.assertIn("## Follow-ups\n\n- not run", report)
         self.assertIn("## Open or handed-off escalations\n\n- none", report)
+
+    def test_report_when_follow_ups_were_not_collected_or_none(self):
+        state = self.h.state
+        state.runs["s7-follow-ups"] = run(RunKind.FOLLOW_UPS, "s7-follow-ups",
+                                          RunStatus.SKIPPED, notes=["skipped by supervisor"])
+        self.assertIn("## Follow-ups\n\n- not collected: skipped — skipped by supervisor",
+                      spec_phases.write_report(self.engine))
+        state.runs["s7-follow-ups"].review = {"follow_ups": []}
+        self.assertIn("## Follow-ups\n\n- none proposed by the reviews",
+                      spec_phases.write_report(self.engine))
 
 
 class DismissedFindingTest(unittest.TestCase):
