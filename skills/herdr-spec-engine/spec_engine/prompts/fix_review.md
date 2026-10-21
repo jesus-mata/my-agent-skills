@@ -10,6 +10,15 @@ $finding
 4. Record fixes in `fixed` with commit shas, real unfixed findings in `pending` with reasons, scope creep in `scope_creep`.
 5. A finding you judge a false positive or not applicable goes in `dismissed` with the reason, never in `pending`.
 
+Follow-ups: a real finding of severity medium or higher that this fix run must not touch goes in `follow_ups`, never in `pending`, when it fits one category:
+- `pre-existing`: the bug was already there before this fix run. Evidence: it reproduces on `$spec_branch` without your commits, or `git blame` points at an older commit.
+- `out-of-scope`: fixing it would break an explicit scope rule of spec #$spec. Evidence: the rule.
+- `needs-decision`: fixing it needs a product, public API or design decision the spec does not make. Evidence: the question to decide.
+- `too-large`: it needs acceptance criteria of its own, a migration, or changes to modules or contracts the spec does not describe. Evidence: what makes it too large.
+- `tech-debt`: duplication or an architecture problem that predates this fix run and spans beyond it. Evidence: where it repeats.
+
+Give each one its real severity, `problem` (the failure scenario, or what the debt costs), `why_separate` and `acceptance` (criteria for its own issue). If you cannot say why it cannot be fixed here, it is not a follow-up: fix it or list it as usual. Never open issues yourself: the engine proposes them to the user, who decides.
+
 Your branch was cut from `$spec_branch` when this fix run started. Work merged into `$spec_branch` after that can be missing from your branch. Its absence is not a finding: dismiss it.
 
 Rules:

@@ -44,6 +44,13 @@ class Issue:
 
 
 @dataclass(frozen=True)
+class OpenIssue:
+    number: int
+    title: str
+    url: str
+
+
+@dataclass(frozen=True)
 class MergeResult:
     ok: bool
     conflict: bool
@@ -98,6 +105,8 @@ class GitHub(Protocol):
     def assign_self(self, number: int) -> None: ...
     def comment(self, number: int, body: str) -> None: ...
     def close(self, number: int) -> None: ...
+    def open_issues(self) -> list[OpenIssue]: ...
+    def create_issue(self, title: str, body: str, labels: list[str]) -> OpenIssue: ...
 
 
 class Shell(Protocol):

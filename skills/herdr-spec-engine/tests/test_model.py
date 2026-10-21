@@ -120,7 +120,7 @@ class TransitionsTest(unittest.TestCase):
         self.assertIsNone(transitions.next_stage(RunKind.HUMAN, Stage.AWAIT_HUMAN))
 
     def test_actions(self):
-        self.assertEqual(len(transitions.ACTIONS), 10)
+        self.assertEqual(len(transitions.ACTIONS), 11)
         self.assertEqual(set(transitions.ACTIONS), set(EscalationKind))
         self.assertTrue(transitions.is_valid_action("agent-blocked", "hand-to-human"))
         self.assertTrue(transitions.is_valid_action(EscalationKind.HITL_TICKET, "done"))

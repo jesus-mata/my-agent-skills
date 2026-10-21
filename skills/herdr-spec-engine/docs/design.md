@@ -36,7 +36,8 @@ skills/herdr-spec-engine/
     stages.py              stage handlers: enter() and poll()
     merge_queue.py         integrate sub-machine
     scheduler.py           the engine loop: readiness, concurrency, inbox, spec phases, completion
-    spec_phases.py         spec review, fix-run creation, e2e, final report
+    spec_phases.py         spec review, fix-run creation, e2e, follow-ups phase, final report
+    follow_ups.py          collect, dedupe, propose and create follow-up issues
     cli.py                 argparse: plan, run, watch, resolve, status, stop, abort
     adapters/
       __init__.py
@@ -85,14 +86,30 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
 `[]`):
 
 - **implement** — `{"status": "implemented" | "outward-denied", "summary": str, "denied_actions": [str]}`
-- **review** — `{"fixed": [{"kind": "spec"|"standards", "title": str, "commit": str}], "pending": [{"kind": "spec"|"standards", "title": str, "reason": str}], "dismissed": [{"kind": "spec"|"standards", "title": str, "reason": str}] (optional), "scope_creep": [str]}`.
-  `pending` holds real findings left unfixed; `dismissed` holds findings the agent judged false
-  positives or not applicable. Only a pending `spec` finding keeps the ticket open.
+- **review** — `{"fixed": [{"kind": "spec"|"standards", "title": str, "commit": str}], "pending": [{"kind": "spec"|"standards", "title": str, "reason": str}], "dismissed": [{"kind": "spec"|"standards", "title": str, "reason": str}] (optional), "scope_creep": [str], "follow_ups": [FollowUp] (optional)}`.
+  `pending` holds real findings left unfixed in this ticket's own work; `dismissed` holds
+  findings the agent judged false positives or not applicable. Only a pending `spec` finding
+  keeps the ticket open.
 - **gate_fix** — `{"summary": str}`
 - **resolve** — `{"verdict": "RESOLVED" | "ESCALATE", "summary": str}`
-- **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "medium"|"low", "title": str, "reason": str (optional)}]}`.
-  A finding whose fix would break an explicit scope rule of the spec is out of scope: `not_fixed`,
-  `low`, with `reason` naming the rule.
+- **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "medium"|"low", "title": str, "reason": str (optional)}], "follow_ups": [FollowUp] (optional)}`.
+  `hard` holds findings the spec introduced and can fix within its rules. A finding whose fix
+  would break an explicit scope rule of the spec keeps its real severity: medium or higher is a
+  follow-up (`out-of-scope`), low goes to `not_fixed` with `reason` naming the rule.
+- **FollowUp** (in `review` and `spec_review`) — `{"category": "pre-existing"|"out-of-scope"|"needs-decision"|"too-large"|"tech-debt", "severity": "blocker"|"high"|"medium", "title": str, "file": str, "line": int|null, "problem": str, "why_separate": str, "evidence": str, "acceptance": [str]}`.
+  A real finding, medium or higher, that the reviewed work must not fix and that deserves its own
+  issue. Categories, each with the evidence it requires:
+
+  | Category | When | Evidence |
+  | --- | --- | --- |
+  | `pre-existing` | the bug predates the reviewed work | it reproduces on the base, or `git blame` points at an older commit |
+  | `out-of-scope` | fixing it would break an explicit scope rule of the spec | the rule |
+  | `needs-decision` | fixing it needs a product, public API or design decision the spec does not make | the question to decide |
+  | `too-large` | it needs acceptance criteria of its own, a migration, or modules or contracts the spec does not describe | what makes it too large |
+  | `tech-debt` | duplication or architecture that predates the work and spans beyond it | where it repeats |
+
+  A finding without a `why_separate` is not a follow-up; low findings never are. Agents never
+  open issues: the engine proposes them (see Spec phases).
 - **e2e** — `{"passed": [str], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason": str}]}`
 
 `results.SCHEMAS: dict[str, Validator]` keyed by the names above; `results.example(name) -> str`
@@ -155,6 +172,7 @@ A **Run** is one entity the scheduler advances. Kinds and their stage sequence:
 | `fix` | `s<N>-fix-<k>` | PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
 | `spec_review` | `s<N>-review` | PROVISION_TAB → SPEC_REVIEW |
 | `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E |
+| `follow_ups` | `s<N>-follow-ups` | FOLLOW_UPS (no agent) |
 
 Run ids double as herdr agent names, branch names and tab labels (e.g. spec 7: `s7-ticket-12`,
 `s7-fix-1`, tabs `s7-review` / `s7-e2e`). herdr agent names are global to the herdr server, so the
@@ -186,7 +204,7 @@ or `{"type": "escalation"}`.
   "result_invalid"`); this value is the `<stage>` in result-file and `out/` archive names and the
   key of `Run.attempts`. Outcomes: `OK, RESULT_INVALID, AGENT_BLOCKED, TIMEOUT, AGENT_UNKNOWN,
   AGENT_LOST, VERIFY_FAILED, INTEGRATED`.
-- Other enums: `RunKind` (`ticket|human|fix|spec_review|e2e`), `RunStatus`, `Phase`,
+- Other enums: `RunKind` (`ticket|human|fix|spec_review|e2e|follow_ups`), `RunStatus`, `Phase`,
   `EngineStatus` (`running|complete|aborted`), `TicketClass` (`agent|human|unrefined|done`),
   `EscalationKind` (the kinds below; defined in `model.py`, re-exported by `transitions.py`),
   `EscalationStatus` (`open|handed_off|resolved`). `STAGES_BY_KIND` holds the stage sequences.
@@ -236,7 +254,8 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | AWAIT_HUMAN | raise `hitl-ticket` | resolved `done` → status `done` |
 | PROVISION_TAB | `Herdr.create_tab(cwd=repo_root, label=id)`, `start_agent`; awaits `agent_ready` | OK once registered → next |
 | SPEC_REVIEW | prompt `spec_review` | OK → `spec_phases.on_spec_review(result)` |
-| E2E | prompt `e2e` | OK → status `done`, then report |
+| E2E | prompt `e2e` | OK → status `done`, then the follow-ups phase |
+| FOLLOW_UPS | once: `GitHub.open_issues()`, `follow_ups.collect` into `run.review["follow_ups"]`; none proposed → sync, else raise `follow-ups` | OK once a resolution decided them (or none were proposed) → status `done` |
 
 Generic outcomes, any agent-turn stage:
 - `RESULT_INVALID` → if `attempts[stage] < retry_budget`: prompt `result_retry` (path, error,
@@ -347,6 +366,7 @@ status: open|handed_off|resolved, resolution: str|None, note}`. While a run's es
 | `unrefined-ticket` | `relabeled`, `skip-ticket`, `hand-to-human` | relabeled → re-read labels, reclassify |
 | `external-blocker` | `cleared`, `skip-ticket`, `hand-to-human` | cleared → re-read blockers; all closed → proceed |
 | `repo-dirty` | `retry`, `hand-to-human` | retry → re-check |
+| `follow-ups` | `create-all`, `create-selected`, `discard`, `hand-to-human` | create-all → `GitHub.create_issue` for every proposed follow-up; create-selected → only the ids in the note (`f1 f3`; none, unknown or not proposed → stays open with the reason in details); discard → none. Follow-ups not created are `discarded`. A failed create leaves the escalation open; already created ones are never created again |
 
 `hand-to-human` (every kind) sets status `handed_off`: the escalation stays unresolved, `watch`
 stops reporting it, and the supervisor resolves it later with one of the other actions. Every
@@ -379,7 +399,8 @@ loop:    consume resolutions inbox -> apply
 
 State top level: `{version: 1, spec, branch, status: running|complete|aborted, settings,
 runs: {id: Run}, queue: [id], escalations: {id: Escalation}, consumed_resolutions: [id...],
-seq: int, fix_seq: int, phase: tickets|spec_review|fixes|e2e|complete, started_at, updated_at}`.
+seq: int, fix_seq: int, phase: tickets|spec_review|fixes|e2e|follow_ups|complete, started_at,
+updated_at}`.
 
 Resume: `engine run <N>` with existing state reconciles every active run: agent missing →
 `AGENT_LOST` path; otherwise continue polling. Never re-sends a prompt to a live agent that is
@@ -394,7 +415,8 @@ Unrefined / externally blocked tickets are re-read from GitHub only when a slot 
 external blocker escalates only if it is still open (a `blocked_by` not among the plan's
 tickets); a ticket closed on GitHub before it starts → `done`; one relabeled `ready-for-human`
 is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec review → phase
-`fixes` with no fix runs; a non-`done` e2e → phase `complete`.
+`fixes` with no fix runs; a non-`done` e2e → phase `follow_ups` all the same; a terminal
+follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
 
 ## Spec phases (`spec_phases.py`)
 
@@ -402,20 +424,30 @@ is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec re
 - `on_spec_review(result)`: one `fix` run per `hard` finding (`finding` = the entry), phase
   `fixes`. Fix runs go through the same scheduler and merge queue.
 - When all fix runs are terminal (or there were none): create the `e2e` run, phase `e2e`.
-- E2E OK → phase `complete`; write `report.md`: tickets done / left open / skipped (with reasons
+- E2E terminal → create the `follow_ups` run, phase `follow_ups`. It collects the `follow_ups`
+  of every ticket, fix and spec review result, merges duplicates (same file and title, compared
+  lowercase with punctuation collapsed; `found_by` lists every run that reported it), and marks
+  those whose title matches an open GitHub issue `already_open`. The rest are `proposed`, with
+  ids `f1, f2, …`, in one `follow-ups` escalation; nothing is created without a resolution.
+  Created issues get a body with the spec, category, severity, location, problem, why separate,
+  evidence and acceptance criteria as a checklist. `needs-decision` ones are labeled
+  `ready-for-human`; the rest get no label (they need triage before a spec takes them). They
+  are not sub-issues of the spec, so they never join its plan. Entry states: `proposed`,
+  `already_open`, `created`, `discarded`.
+- Follow-ups run terminal → phase `complete`; write `report.md`: tickets done / left open / skipped (with reasons
   from `run.notes`, pending review findings (`[spec]` ones flagged as keeping the issue open) and
   dismissed review findings),
   tickets already closed before the run, spec review fixed / hard findings still pending (their
-  fix run not `done`) / not fixed (medium/low, with reasons, followed by a one-line suggestion to
-  open follow-up issues for them), fix runs (merge commit, finding, pending and
-  dismissed review findings), e2e passed / fixed / pending, open or handed-off escalations, and
+  fix run not `done`) / not fixed (medium/low, with reasons), fix runs (merge commit, finding,
+  pending and dismissed review findings), e2e passed / fixed / pending, follow-ups created /
+  already open / discarded (with issue numbers), open or handed-off escalations, and
   "Spec branch `<b>` is local; nothing was pushed." A spec review or e2e that did not finish is
   reported as such.
 - Spec review and e2e tabs are never closed by the engine.
 
 Implementation notes (`spec_phases.py`): the scheduler owns every phase transition and calls
 `start_spec_review`, `on_spec_review` (idempotent: a finding that already has a fix run gets no
-second one), `maybe_start_e2e`, `on_e2e`, and `write_report` (returns the Markdown; the scheduler
+second one), `maybe_start_e2e`, `on_e2e` / `start_follow_ups`, and `write_report` (returns the Markdown; the scheduler
 writes it). A hard finding reaches the fix-run prompts through `stages.format_finding`
 (`<title> (<severity>)`, `File: <file>:<line>`, `Failure scenario: …`).
 
@@ -456,9 +488,10 @@ the merge commit, ESCALATE for big chunks or significant logic changes — leavi
 merge in progress (never `git merge --abort`) so the human finishes it in the worktree and
 `resolved-manually` resumes at the gate; spec review runs
 `/code-review high` against `$base`, fixes easy blocker/high findings inline test-first (1–2 files,
-no design/API change), lists the rest as `hard`, grades findings that would break an explicit
-spec scope rule as out of scope (`not_fixed`, with the reason), **never creates worktrees or
-agents**; e2e runs
+no design/API change), lists the rest it can fix within the spec as `hard`, never fixes a finding
+that would break an explicit spec scope rule (medium or higher → `out-of-scope` follow-up, low →
+`not_fixed` with the reason), **never creates worktrees or agents**; review, fix_review and
+spec_review list follow-ups by the categories above and never open issues themselves; e2e runs
 `/e2e`, fixes issues test-first with built-in subagents, max 2 fix rounds.
 
 ## Ports (`ports.py`)
@@ -472,6 +505,7 @@ AgentStatus = Literal["idle", "working", "blocked", "done", "unknown", "missing"
                                          labels: tuple[str, ...]; url: str
                                          sub_issues: tuple[IssueRef, ...]; blocked_by: tuple[IssueRef, ...]
                                          body: str = ""
+@dataclass(frozen=True) class OpenIssue: number: int; title: str; url: str
 @dataclass(frozen=True) class MergeResult: ok: bool; conflict: bool; commit: str | None; output: str
 @dataclass(frozen=True) class ShellResult: code: int; output: str   # stdout+stderr merged
 
@@ -510,6 +544,8 @@ class GitHub(Protocol):
     def assign_self(self, number: int) -> None: ...
     def comment(self, number: int, body: str) -> None: ...
     def close(self, number: int) -> None: ...
+    def open_issues(self) -> list[OpenIssue]: ...                     # {number, title, url}
+    def create_issue(self, title: str, body: str, labels: list[str]) -> OpenIssue: ...
 
 class Shell(Protocol):
     def run(self, cmd: str, cwd: str, timeout: float) -> ShellResult: ...
@@ -548,7 +584,9 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   its `url` (`https://<host>/<owner>/<name>/issues/<n>`). A "could not resolve"/"not found" failure
   raises `LookupError` (like `FakeGitHub`), other failures `GhError` (a `RuntimeError`).
   `gh issue edit <n> --add-assignee @me`; `gh issue comment <n> --body-file -` (body on stdin);
-  `gh issue close <n>`.
+  `gh issue close <n>`; `gh issue list --state open --limit 1000 --json number,title,url`;
+  `gh issue create --title T --body-file - [--label L]...` (the number is parsed from the issue
+  url it prints last; no url → error).
 - **git_cli**: plain `git -C <cwd> …`, failures raise `GitError` (a `RuntimeError`).
   `common_dir` = `rev-parse --git-common-dir` made absolute against `cwd`; `is_clean` =
   `git status --porcelain` empty (honours `.gitignore` and `info/exclude`; `untracked=False` adds

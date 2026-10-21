@@ -71,6 +71,12 @@ class RealTemplateScenarioTest(unittest.TestCase):
         for name in ("implement", "review", "fix_implement", "fix_review"):
             self.assertIn("spec-wide rule", h.text_of(name))  # scope rules reach every agent
             self.assertIn("gh issue view 7", h.text_of(name))
+        for name in ("review", "fix_review", "spec_review"):
+            text = h.text_of(name)
+            self.assertIn("goes in `follow_ups`", text)
+            self.assertIn("Never open issues yourself", text)
+            self.assertIn('"follow_ups": [{"category":', text)  # the example shows the shape
+        self.assertIn("it reproduces on `main`", h.text_of("spec_review"))
         self.assert_prompt_hygiene(h)
         implement = h.text_of("implement")
         self.assertIn("ticket #1 (Export endpoint) on branch `s7-ticket-1`", implement)

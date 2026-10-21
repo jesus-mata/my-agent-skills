@@ -27,6 +27,7 @@ class Stage(str, Enum):
     PROVISION_TAB = "provision_tab"
     SPEC_REVIEW = "spec_review"
     E2E = "e2e"
+    FOLLOW_UPS = "follow_ups"
 
 
 class Outcome(str, Enum):
@@ -46,6 +47,7 @@ class RunKind(str, Enum):
     FIX = "fix"
     SPEC_REVIEW = "spec_review"
     E2E = "e2e"
+    FOLLOW_UPS = "follow_ups"
 
 
 class RunStatus(str, Enum):
@@ -72,6 +74,7 @@ class Phase(str, Enum):
     SPEC_REVIEW = "spec_review"
     FIXES = "fixes"
     E2E = "e2e"
+    FOLLOW_UPS = "follow_ups"
     COMPLETE = "complete"
 
 
@@ -99,6 +102,7 @@ class EscalationKind(str, Enum):
     UNREFINED_TICKET = "unrefined-ticket"
     EXTERNAL_BLOCKER = "external-blocker"
     REPO_DIRTY = "repo-dirty"
+    FOLLOW_UPS = "follow-ups"
 
 
 class EscalationStatus(str, Enum):
@@ -119,6 +123,7 @@ STAGES_BY_KIND: dict[RunKind, tuple[Stage, ...]] = {
     ),
     RunKind.SPEC_REVIEW: (Stage.PROVISION_TAB, Stage.SPEC_REVIEW),
     RunKind.E2E: (Stage.PROVISION_TAB, Stage.E2E),
+    RunKind.FOLLOW_UPS: (Stage.FOLLOW_UPS,),
 }
 
 
@@ -139,6 +144,8 @@ def run_id_for(
         return f"{prefix}fix-{_need(k, 'k')}"
     if kind is RunKind.SPEC_REVIEW:
         return f"{prefix}review"
+    if kind is RunKind.FOLLOW_UPS:
+        return f"{prefix}follow-ups"
     return f"{prefix}e2e"
 
 

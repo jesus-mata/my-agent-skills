@@ -16,6 +16,17 @@ HARD = {"severity": "blocker", "title": "Race on save", "file": "src/save.py", "
         "failure_scenario": "two saves lose one"}
 
 
+def follow_up(category, severity, title, file, line):
+    return {"category": category, "severity": severity, "title": title, "file": file,
+            "line": line, "problem": "it breaks", "why_separate": "not this spec's work",
+            "evidence": "see the code", "acceptance": ["it works"]}
+
+
+LEAK = follow_up("pre-existing", "high", "Session never expires", "src/auth.py", 9)
+DEBT = follow_up("tech-debt", "high", "Old cache debt", "src/cache.py", 1)
+LOCALE = follow_up("needs-decision", "medium", "Export ignores locale", "src/export.py", None)
+
+
 class SchedulerTest(unittest.TestCase):
     def harness(self, tickets, **kw) -> Harness:
         h = Harness(tickets, **kw)
@@ -355,6 +366,115 @@ class SchedulerTest(unittest.TestCase):
         spec_review = [v for n, v in h.rendered if n == "spec_review"][0]
         self.assertEqual(spec_review["base"], "main")
         self.assertTrue(spec_review["result_path"].startswith(h.root))
+        # no review proposed a follow-up: no escalation, nothing created
+        self.assertEqual(h.state.escalations, {})
+        self.assertEqual(h.run("s7-follow-ups").status, RunStatus.DONE)
+        self.assertEqual(h.github.calls_to("create_issue"), [])
+
+    # follow-ups -----------------------------------------------------------------------------
+
+    def follow_ups_harness(self) -> Harness:
+        """Ticket and spec review both report LEAK; the spec review adds DEBT and LOCALE;
+        DEBT is already open on GitHub. Runs until the follow-ups escalation."""
+        h = self.harness([ticket(1)]).start()
+        h.github.add(make_issue(50, title="Old cache debt"))
+        h.script_ticket("s7-ticket-1", review={**REVIEW_CLEAN, "follow_ups": [LEAK]})
+        h.turn("s7-review", {**SPEC_REVIEW_CLEAN, "follow_ups": [LEAK, DEBT, LOCALE]})
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(lambda: h.open_escalations(), max_ticks=80)
+        return h
+
+    def complete(self, h: Harness) -> str:
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE)
+        with open(h.store.paths.report) as f:
+            return f.read()
+
+    def test_follow_ups_wait_for_the_user_before_anything_is_created(self):
+        h = self.follow_ups_harness()
+        esc = h.only_escalation()
+        self.assertEqual((esc.kind, esc.run), (EscalationKind.FOLLOW_UPS, "s7-follow-ups"))
+        self.assertEqual(esc.actions, ["create-all", "create-selected", "discard",
+                                       "hand-to-human"])
+        self.assertEqual(esc.summary, "2 follow-up issue(s) proposed by the reviews; "
+                                      "create them?")
+        self.assertIn("f1 [high] pre-existing: Session never expires (src/auth.py:9) — found "
+                      "by s7-ticket-1, s7-review", esc.details)
+        self.assertIn("already open as #50", esc.details)
+        self.assertEqual((h.state.phase, h.state.status), (Phase.FOLLOW_UPS, EngineStatus.RUNNING))
+        h.tick(5)
+        self.assertEqual(h.github.calls_to("create_issue"), [])
+        self.assertTrue(h.engine.tick())  # the engine keeps waiting
+
+    def test_create_selected_creates_only_the_named_ones(self):
+        h = self.follow_ups_harness()
+        h.resolve(h.only_escalation().id, "create-selected", "f3")
+        report = self.complete(h)
+        self.assertEqual([(c["title"], c["labels"]) for c in h.github.created],
+                         [("Export ignores locale", ["ready-for-human"])])
+        number = h.github.created[0]["number"]
+        self.assertIn("## Follow-ups\n\nCreated (1):\n- f3 [medium] needs-decision: Export "
+                      f"ignores locale (src/export.py) — #{number} "
+                      f"https://github.com/o/r/issues/{number}", report)
+        self.assertIn("Already open (1):\n- f2 [high] tech-debt: Old cache debt (src/cache.py:1) "
+                      "— #50", report)
+        self.assertIn("Discarded (1):\n- f1 [high] pre-existing: Session never expires", report)
+
+    def test_create_all_and_discard(self):
+        h = self.follow_ups_harness()
+        h.resolve(h.only_escalation().id, "create-all")
+        self.complete(h)
+        self.assertEqual([c["title"] for c in h.github.created],
+                         ["Session never expires", "Export ignores locale"])
+
+        h = self.follow_ups_harness()
+        h.resolve(h.only_escalation().id, "discard")
+        report = self.complete(h)
+        self.assertEqual(h.github.created, [])
+        self.assertIn("Created (0):\n- none", report)
+
+    def test_create_selected_without_valid_ids_is_refused(self):
+        h = self.follow_ups_harness()
+        esc = h.only_escalation()
+        h.resolve(esc.id, "create-selected", "f2")  # already open, not proposed
+        h.tick()
+        self.assertEqual(esc.status, EscalationStatus.OPEN)
+        self.assertIn("create-selected refused: not proposed for creation: f2", esc.details)
+        self.assertEqual(h.github.created, [])
+        h.resolve(esc.id, "create-selected", "f1")
+        self.complete(h)
+        self.assertEqual([c["title"] for c in h.github.created], ["Session never expires"])
+
+    def test_a_failed_create_stays_open_and_a_retry_creates_each_once(self):
+        h = self.follow_ups_harness()
+        esc = h.only_escalation()
+        original = h.github.create_issue
+
+        def fails_on_locale(title, body, labels):
+            if title == "Export ignores locale":
+                raise RuntimeError("HTTP 502")
+            return original(title, body, labels)
+
+        h.github.create_issue = fails_on_locale
+        h.resolve(esc.id, "create-all")
+        h.tick()
+        self.assertEqual(esc.status, EscalationStatus.OPEN)
+        self.assertIn("resolution 'create-all' failed: HTTP 502", esc.details)
+        h.github.create_issue = original
+        h.clock.advance(1)
+        h.resolve(esc.id, "create-all")
+        self.complete(h)
+        self.assertEqual([c["title"] for c in h.github.created],
+                         ["Session never expires", "Export ignores locale"])
+
+    def test_listing_open_issues_failing_is_retried(self):
+        h = self.harness([ticket(1)]).start()
+        h.script_ticket("s7-ticket-1", review={**REVIEW_CLEAN, "follow_ups": [LEAK]})
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.github.fail_next("open_issues", RuntimeError("HTTP 502"))
+        h.run_until(lambda: h.open_escalations(), max_ticks=80)
+        self.assertEqual(h.only_escalation().kind, EscalationKind.FOLLOW_UPS)
+        self.assertEqual(len(h.github.calls_to("open_issues")), 2)
 
 
 if __name__ == "__main__":

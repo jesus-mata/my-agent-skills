@@ -105,6 +105,22 @@ def _implement(d: dict, w: str) -> None:
     _str_list(d, "denied_actions", w)
 
 
+FOLLOW_UP_CATEGORIES = ("pre-existing", "out-of-scope", "needs-decision", "too-large", "tech-debt")
+FOLLOW_UP_SEVERITIES = ("blocker", "high", "medium")
+
+
+def _follow_up(e: dict, p: str) -> None:
+    _enum(e, "category", p, FOLLOW_UP_CATEGORIES)
+    _enum(e, "severity", p, FOLLOW_UP_SEVERITIES)
+    _str(e, "title", p)
+    _str(e, "file", p)
+    _int_or_null(e, "line", p)
+    _str(e, "problem", p)
+    _str(e, "why_separate", p)
+    _str(e, "evidence", p)
+    _str_list(e, "acceptance", p)
+
+
 def _review(d: dict, w: str) -> None:
     kinds = ("spec", "standards")
 
@@ -122,6 +138,7 @@ def _review(d: dict, w: str) -> None:
     _obj_list(d, "pending", w, with_reason)
     _opt_obj_list(d, "dismissed", w, with_reason)
     _str_list(d, "scope_creep", w)
+    _opt_obj_list(d, "follow_ups", w, _follow_up)
 
 
 def _gate_fix(d: dict, w: str) -> None:
@@ -157,6 +174,7 @@ def _spec_review(d: dict, w: str) -> None:
     _obj_list(d, "fixed", w, fixed)
     _obj_list(d, "hard", w, hard)
     _obj_list(d, "not_fixed", w, not_fixed)
+    _opt_obj_list(d, "follow_ups", w, _follow_up)
 
 
 def _e2e(d: dict, w: str) -> None:
@@ -200,6 +218,14 @@ _EXAMPLES: dict[str, dict] = {
                        "reason": "Not a finding: #3 merged into the spec branch after this "
                                  "branch was cut"}],
         "scope_creep": ["Renamed unrelated helper"],
+        "follow_ups": [{
+            "category": "pre-existing", "severity": "high",
+            "title": "Session cookie never expires", "file": "src/auth/session.py", "line": 88,
+            "problem": "A stolen cookie stays valid forever.",
+            "why_separate": "The bug predates this spec and the fix touches auth, which the spec "
+                            "does not cover.",
+            "evidence": "git blame: line 88 last changed in a1b2c3d, two years before this spec.",
+            "acceptance": ["Session cookies expire after the configured TTL"]}],
     },
     "gate_fix": {"summary": "Fixed the failing lint rule in api.py."},
     "resolve": {"verdict": "RESOLVED", "summary": "Kept both import blocks; tests pass."},
@@ -210,6 +236,14 @@ _EXAMPLES: dict[str, dict] = {
         "not_fixed": [{"severity": "low", "title": "Inconsistent log wording"},
                       {"severity": "low", "title": "CI does not run the new tests",
                        "reason": "Out of scope: the spec allows no changes outside src/"}],
+        "follow_ups": [{
+            "category": "needs-decision", "severity": "medium",
+            "title": "Export ignores the user's locale", "file": "src/export.py", "line": None,
+            "problem": "Dates in exported CSVs are always US-formatted.",
+            "why_separate": "Which locale wins (account or browser) is a product decision the "
+                            "spec does not make.",
+            "evidence": "Decide: format exports by account locale or by browser locale?",
+            "acceptance": ["Exported dates follow the chosen locale"]}],
     },
     "e2e": {
         "passed": ["User can export a report"],

@@ -1,4 +1,4 @@
-"""Spec phases: spec review, fix-run creation, e2e and the final report.
+"""Spec phases: spec review, fix-run creation, e2e, follow-ups and the final report.
 
 The scheduler decides *when* each function runs (phase transitions); this module decides *what*
 each phase creates or records. Callers persist the state afterwards.
@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from . import follow_ups
 from .model import EscalationStatus, Phase, Run, RunKind, RunStatus, run_id_for
 from .stages import format_finding, pending_spec_findings, ticket_title
 
@@ -61,10 +62,21 @@ def maybe_start_e2e(engine: Engine) -> Run | None:
     return run
 
 
-def on_e2e(engine: Engine, run: Run, result: dict) -> None:
-    """E2E finished: phase ``complete`` (the scheduler then writes the report)."""
-    engine.state.phase = Phase.COMPLETE
-    engine.event(run, "phase", phase=Phase.COMPLETE.value)
+def on_e2e(engine: Engine, run: Run, result: dict) -> Run:
+    """E2E finished: on to the follow-ups."""
+    return start_follow_ups(engine)
+
+
+def start_follow_ups(engine: Engine) -> Run:
+    """Create the follow-ups run; phase ``follow_ups``. Once it is terminal the scheduler moves
+    to ``complete`` and writes the report."""
+    state = engine.state
+    run_id = run_id_for(RunKind.FOLLOW_UPS, spec=state.spec)
+    run = state.runs.get(run_id) or Run.new(RunKind.FOLLOW_UPS, run_id)
+    state.runs[run_id] = run
+    state.phase = Phase.FOLLOW_UPS
+    engine.event(run, "phase", phase=state.phase.value)
+    return run
 
 
 # report -------------------------------------------------------------------------------------
@@ -80,6 +92,7 @@ def write_report(engine: Engine) -> str:
     lines += _spec_review_section(runs)
     lines += _fix_runs_section(runs)
     lines += _e2e_section(runs)
+    lines += _follow_ups_section(runs)
     lines += _escalations_section(engine)
     lines += ["", f"Spec branch `{state.branch}` is local; nothing was pushed.", ""]
     return "\n".join(lines)
@@ -165,12 +178,9 @@ def _spec_review_section(runs: list[Run]) -> list[str]:
     not_fixed = [f"[{f['severity']}] {f['title']}"
                  + (f" — {f['reason']}" if f.get("reason") else "")
                  for f in review.get("not_fixed", [])]
-    follow_up = (["Suggestion: open follow-up issues for the not-fixed findings worth keeping."]
-                 if not_fixed else [])
     return out + [f"Fixed in review ({len(fixed)}):", *_bullets(fixed),
                   "", f"Hard findings still pending ({len(pending)}):", *_bullets(pending),
-                  "", f"Not fixed, medium/low ({len(not_fixed)}):", *_bullets(not_fixed),
-                  *follow_up, ""]
+                  "", f"Not fixed, medium/low ({len(not_fixed)}):", *_bullets(not_fixed), ""]
 
 
 def _fix_runs_section(runs: list[Run]) -> list[str]:
@@ -201,6 +211,33 @@ def _e2e_section(runs: list[Run]) -> list[str]:
     return out + [f"Passed ({len(passed)}):", *_bullets(passed),
                   "", f"Fixed ({len(fixed)}):", *_bullets(fixed),
                   "", f"Pending ({len(pending)}):", *_bullets(pending), ""]
+
+
+def _follow_ups_section(runs: list[Run]) -> list[str]:
+    run = next((r for r in runs if r.kind is RunKind.FOLLOW_UPS), None)
+    out = ["## Follow-ups", ""]
+    if run is None:
+        return out + ["- not run", ""]
+    entries = (run.review or {}).get("follow_ups")
+    if entries is None:
+        return out + [f"- not collected: {run.status.value}{_reason(run)}", ""]
+    if not entries:
+        return out + ["- none proposed by the reviews", ""]
+    by_state = {state: [e for e in entries if e["state"] == state] for state in follow_ups.STATES}
+
+    def issue_line(e: dict) -> str:
+        return f"{follow_ups.line(e)} — #{e['issue']['number']} {e['issue']['url']}"
+
+    created = [issue_line(e) for e in by_state[follow_ups.CREATED]]
+    already = [issue_line(e) for e in by_state[follow_ups.ALREADY_OPEN]]
+    discarded = [follow_ups.line(e) for e in by_state[follow_ups.DISCARDED]]
+    undecided = [follow_ups.line(e) for e in by_state[follow_ups.PROPOSED]]
+    out += [f"Created ({len(created)}):", *_bullets(created),
+            "", f"Already open ({len(already)}):", *_bullets(already),
+            "", f"Discarded ({len(discarded)}):", *_bullets(discarded)]
+    if undecided:
+        out += ["", f"Not decided ({len(undecided)}):", *_bullets(undecided)]
+    return out + [""]
 
 
 def _escalations_section(engine: Engine) -> list[str]:

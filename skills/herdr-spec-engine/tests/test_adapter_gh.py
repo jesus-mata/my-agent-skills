@@ -5,7 +5,7 @@ from unittest import mock
 
 from spec_engine.adapters import gh_cli
 from spec_engine.adapters.gh_cli import CliGitHub, GhError, parse_issue, repo_of
-from spec_engine.ports import IssueRef
+from spec_engine.ports import IssueRef, OpenIssue
 
 ISSUE_JSON = {
     "number": 12,
@@ -95,6 +95,30 @@ class CliGitHubTest(unittest.TestCase):
         self.assertEqual(self.run.call_args.kwargs["input"], "multi\nline `body` $HOME")
         self.gh.close(5)
         self.assertEqual(self.argv(), ["gh", "issue", "close", "5"])
+
+    def test_open_issues(self):
+        self.run.return_value = completed(json.dumps(
+            [{"number": 3, "title": "Leak", "url": "https://github.com/o/r/issues/3"}]))
+        self.assertEqual(self.gh.open_issues(),
+                         [OpenIssue(3, "Leak", "https://github.com/o/r/issues/3")])
+        self.assertEqual(self.argv(), ["gh", "issue", "list", "--state", "open", "--limit",
+                                       "1000", "--json", "number,title,url"])
+
+    def test_create_issue_passes_labels_and_parses_the_url(self):
+        self.run.return_value = completed("Creating issue in o/r\n\n"
+                                          "https://github.com/o/r/issues/41\n")
+        issue = self.gh.create_issue("Leak", "body `x`", ["ready-for-human"])
+        self.assertEqual(issue, OpenIssue(41, "Leak", "https://github.com/o/r/issues/41"))
+        self.assertEqual(self.argv(), ["gh", "issue", "create", "--title", "Leak",
+                                       "--body-file", "-", "--label", "ready-for-human"])
+        self.assertEqual(self.run.call_args.kwargs["input"], "body `x`")
+        self.gh.create_issue("Debt", "b", [])
+        self.assertNotIn("--label", self.argv())
+
+    def test_create_issue_without_a_url_raises(self):
+        self.run.return_value = completed("")
+        with self.assertRaises(GhError):
+            self.gh.create_issue("Leak", "b", [])
 
     def test_repo_of(self):
         self.assertEqual(repo_of("https://github.com/acme/lib/issues/7"), "acme/lib")
