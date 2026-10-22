@@ -24,7 +24,8 @@ ephemeral (write it, run it, report, delete it).
 3. **Pick the surface** from the _How to test_ table — web, api, cli or desktop.
    The table says which tool and where the tests live.
 4. **Write the test**, starting from the project's helper (see _Helper
-   discipline_). Ephemeral by default.
+   discipline_). Ephemeral by default. On the web surface, explore with
+   `playwright-cli` first (see _Surfaces → web_).
 5. **Report with evidence**: cite screenshot / trace / output file paths. A UI
    change verified without a visual artifact is not verified.
 6. **Teardown**: stop only the services _you_ started, and only if the user asks.
@@ -79,6 +80,10 @@ Name the concrete identifiers tests will need.
 
 | Surface | Type | Tool | Tests live in | Run one |
 
+For a web surface, also give the `playwright-cli` command, its config file
+(real desktop UA, the same TLS settings as the runner) and the `storageState`
+path to load.
+
 ## Gotchas
 
 The things that cost a failed run. Symptom first, then cause, then fix.
@@ -90,15 +95,42 @@ How to stop each service, and what is safe to leave running.
 
 ## Surfaces
 
-### web — `@playwright/test`
+### web — explore with `playwright-cli`, verify with `@playwright/test`
 
+Two tools, one engine, two different jobs. Do not swap them.
+
+**1. Explore — `playwright-cli`.** Look at the real page before writing any
+selector. Recent Playwright ships it as `playwright cli` (check with `playwright cli
+--help`; 1.62 has it), so it uses the runner's version and browser. Use the global
+`@playwright/cli` package only when the project has no local Playwright.
+
+- One named session per run (`-s=<name>`), opened with the project's CLI config
+  (`--config=…`, declared in `E2E.md`). Reuse the runner's login with
+  `state-load <storageState>` instead of logging in by hand.
+- `snapshot` (cap it with `--depth`, or snapshot one ref) and `find "<text>"` /
+  `find --regex` show the real tree. `generate-locator <ref>` returns the
+  Playwright locator to paste into the spec. `console` and `requests` show what
+  the page did.
+- **Headless sets a bot user-agent.** Pin a real desktop UA in the CLI config.
+  Bot detection can change what the server renders (full HTML instead of a
+  stream, for example), and then you are exploring a different page.
+- **Nothing you see here is a verdict or evidence.** Exploring finds selectors
+  and confirms that a flow is reachable. `close` the session when you are done.
+
+**2. Verify — `@playwright/test`.** The spec is the only source of a verdict.
+
+- One `test` per acceptance criterion, asserted with `expect`. The spec can be
+  re-run unchanged, including the final cold-stack re-run, and it exits non-zero
+  on failure. A CLI command history can do neither.
 - `globalSetup` does the health check **and** one real login, persisted with
   `storageState`. Per-test logins are slow and they are what makes a suite crawl.
 - Fixtures: `authedPage` (loads the storage state) and `flows` (the project's
   helper). Keep a separate, un-authenticated fixture for tests that exercise
   login itself.
 - Config: `trace: "retain-on-failure"`, `screenshot: "only-on-failure"`. The trace
-  viewer is the reason to use the runner at all.
+  viewer is the reason to use the runner at all. Evidence is the runner's
+  screenshot or trace. Take an explicit `page.screenshot()` for every UI AC,
+  because on a pass the runner keeps nothing.
 
 ### api — `hurl`, falling back to `curl`
 
@@ -144,9 +176,9 @@ waits and retries in there are exactly the knowledge that is expensive to rebuil
 
 ## Craft rules
 
-- **Dump the DOM before inventing a selector.** One `page.evaluate` that lists the
-  real candidates costs one run and saves three blind ones against a selector you
-  imagined.
+- **Never invent a selector.** Every locator in a spec comes from a
+  `playwright-cli` snapshot or from `generate-locator`. One look at the real tree
+  saves three blind runs against a selector you imagined.
 - **Module resolution is relative to the script's file.** A script written to a
   scratch directory cannot `require` the project's test deps. Write it inside the
   test directory and delete it afterwards.
