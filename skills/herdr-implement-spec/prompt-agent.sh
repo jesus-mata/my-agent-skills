@@ -20,7 +20,7 @@ agent="$1"
 
 slash_prompt_ "$2"
 if out=$(herdr agent prompt "$agent" "$SLASH_PROMPT" \
-    --wait --until working --until blocked --until idle --until done --timeout 20000 2>&1); then
+    --wait --until working --until blocked --until idle --until "done" --timeout 20000 2>&1); then
   exit 0
 fi
 case "$out" in

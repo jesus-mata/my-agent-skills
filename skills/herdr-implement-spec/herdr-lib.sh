@@ -1,11 +1,10 @@
 #!/usr/bin/env bash
 # herdr-lib.sh — helpers shared by wait-agents.sh and prompt-agent.sh.
 # Not run directly: `source` it.
+# shellcheck disable=SC2034  # SLASH_PROMPT* are read by the scripts that source this
 #
 # Copied from skills/work-ticket/herdr-report.sh, where each quirk below was
 # found the hard way. A fix there likely belongs here too.
-
-HERDR_LIB_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # clean_report_  (stdin -> stdout)
 # Keeps only the agent's last turn: from the last prompt actually sent to the
@@ -140,7 +139,7 @@ wait_one_() {
       2>/dev/null) || status="?"
     full=$(read_turn_ "$pane" "$lines")
 
-    [ -n "$end_re" ] && [ "$status" != blocked ] || break
+    if [ -z "$end_re" ] || [ "$status" = blocked ]; then break; fi
     if printf '%s\n' "$full" | grep -Eq "$end_re"; then break; fi
 
     # Turn ended without the end line: wait until it is woken again.
