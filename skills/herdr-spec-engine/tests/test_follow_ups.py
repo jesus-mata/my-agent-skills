@@ -132,3 +132,40 @@ class CreateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ApplyDedupTest(unittest.TestCase):
+    def entries(self):
+        return [{"id": "f1", "title": "A", "found_by": ["s7-ticket-1"], "state": "proposed",
+                 "issue": None},
+                {"id": "f2", "title": "B", "found_by": ["s7-review"], "state": "already_open",
+                 "issue": {"number": 5, "url": "u5"}},
+                {"id": "f3", "title": "C", "found_by": ["s7-review"], "state": "proposed",
+                 "issue": None}]
+
+    def test_unknown_and_not_proposed_ids_are_ignored(self):
+        from spec_engine.ports import OpenIssue
+        entries = self.entries()
+        seen = []
+
+        def open_issue(n):
+            seen.append(n)
+            return OpenIssue(n, "t", f"u{n}")
+
+        notes = follow_ups.apply_dedup(entries, {"matches": [
+            {"id": "f9", "verdict": "COVERED", "issue": 7, "reason": ""},
+            {"id": "f2", "verdict": "COVERED", "issue": 8, "reason": ""},
+            {"id": "f3", "verdict": "NEW", "issue": None, "reason": ""}],
+            "duplicates": [["f2", "f3"], ["f9", "f1"]]}, open_issue)
+        self.assertEqual((notes, seen), ([], []))
+        self.assertEqual([(e["id"], e["state"]) for e in entries],
+                         [("f1", "proposed"), ("f2", "already_open"), ("f3", "proposed")])
+
+    def test_duplicates_keep_the_first_and_merge_found_by(self):
+        entries = self.entries()
+        entries[1]["state"] = "proposed"
+        follow_ups.apply_dedup(entries, {"matches": [], "duplicates": [["f3", "f1", "f2"]]},
+                               lambda n: None)
+        self.assertEqual([e["id"] for e in entries], ["f3"])
+        self.assertEqual(entries[0]["found_by"], ["s7-review", "s7-ticket-1"])
+        self.assertEqual(entries[0]["also"], ["f1 A", "f2 B"])

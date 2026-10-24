@@ -18,6 +18,7 @@ TEMPLATE_NAMES: tuple[str, ...] = (
     "fix_implement",
     "fix_review",
     "e2e",
+    "dedup",
 )
 
 

@@ -28,7 +28,8 @@ class ResultsTest(unittest.TestCase):
 
     def test_schema_names(self):
         self.assertEqual(set(results.SCHEMAS),
-                         {"implement", "review", "gate_fix", "resolve", "spec_review", "e2e"})
+                         {"implement", "review", "gate_fix", "resolve", "spec_review", "e2e",
+                          "dedup"})
 
     def test_examples_pass_their_validator(self):
         for name, data in GOOD.items():

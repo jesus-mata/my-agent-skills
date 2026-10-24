@@ -17,13 +17,13 @@ from . import follow_ups, prompts, results
 from .model import (
     Escalation, EscalationKind, Outcome, Plan, Run, RunKind, RunState, RunStatus, Settings, Stage,
 )
-from .ports import Clock, Git, GitHub, Herdr, HerdrError, Shell
+from .ports import Clock, Git, GitHub, Herdr, HerdrError, OpenIssue, Shell
 from .store import Store
 from .transitions import ACTIONS, next_stage
 
 RESULT_DIR = ".herdr-spec"
 BLOCKED_SCREEN_LINES = 60
-TAB_KINDS = frozenset({RunKind.SPEC_REVIEW, RunKind.E2E})
+TAB_KINDS = frozenset({RunKind.SPEC_REVIEW, RunKind.E2E, RunKind.FOLLOW_UPS})
 # herdr errors meaning "the agent is not ready yet": the pane's shell is still booting
 # (agent.start) or the agent is not registered as active yet (agent.prompt). Waited for, never
 # charged to the retry budget, until ``Settings.agent_ready_timeout``.
@@ -752,11 +752,107 @@ def e2e_comment(ctx: Context, result: dict) -> str:
                       f"The spec branch `{ctx.spec_branch}` is local; nothing was pushed."])
 
 
-def _enter_follow_ups(ctx: Context, run: Run) -> None:
-    """Collect the reviews' follow-ups once, then propose the new ones to the supervisor."""
+def _collect(ctx: Context, run: Run) -> None:
     if run.review is None:
         entries = follow_ups.collect(ctx.state.runs.values(), ctx.github.open_issues())
         run.review = {"follow_ups": entries}
+
+
+def _enter_collect(ctx: Context, run: Run) -> None:
+    """Collect the reviews' follow-ups once (merged, matched by title against open issues)."""
+    _collect(ctx, run)
+    run.awaiting = dict(SYNC)
+
+
+def _complete_collect(ctx: Context, run: Run, value: dict) -> None:
+    """Nothing left to propose: no dedup agent, straight to FOLLOW_UPS."""
+    goto_next(ctx, run)
+    if not follow_ups.proposed(run.review["follow_ups"]):
+        event(ctx, run, "stage", frm=run.stage.value, to=Stage.FOLLOW_UPS.value,
+              reason="nothing to dedup")
+        run.stage = Stage.FOLLOW_UPS
+
+
+def _enter_dedup(ctx: Context, run: Run) -> None:
+    """Open the dedup agent's tab and prompt it. Any failure but a not-ready wait drops the
+    dedup (``_dedup_fallback``): it only refines the title match, so it never blocks the run."""
+    try:
+        if run.pane_id is None:
+            run.pane_id = ctx.herdr.create_tab(ctx.repo_root, run.id)
+            run.worktree = ctx.repo_root
+            persist(ctx)
+        if run.agent is None:
+            start_run_agent(ctx, run)
+            persist(ctx)
+        send_turn(ctx, run, template="dedup", schema="dedup", name="dedup",
+                  candidates=follow_ups.candidates(run.review["follow_ups"]))
+    except PROGRAMMING_ERRORS:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        since = (run.ready_wait or {}).get("since", ctx.now())
+        if is_not_ready(exc) and ctx.now() - since < ctx.settings.agent_ready_timeout:
+            raise  # port_failure waits for the agent, uncharged
+        _dedup_fallback(ctx, run, f"{type(exc).__name__}: {exc}")
+
+
+def _poll_dedup(ctx: Context, run: Run) -> Outcome | None:
+    if run.awaiting.get("type") == "sync":
+        return Outcome.OK
+    outcome = poll_turn(ctx, run)
+    if outcome is None:
+        if ctx.now() - run.stage_started_at > ctx.settings.dedup_timeout:
+            _dedup_fallback(ctx, run, f"no result after {ctx.settings.dedup_timeout:g}s")
+            return Outcome.OK
+        return None
+    if outcome is Outcome.OK:
+        return outcome
+    if outcome is Outcome.RESULT_INVALID and can_retry(ctx, run):
+        return outcome  # the generic retry prompt
+    if outcome is Outcome.AGENT_LOST and can_retry(ctx, run):
+        return outcome  # the generic re-provision and resend
+    _dedup_fallback(ctx, run, f"{outcome.value}: {run.awaiting.get('error', '')}".rstrip(": "))
+    return Outcome.OK
+
+
+def _dedup_fallback(ctx: Context, run: Run, reason: str) -> None:
+    run.notes.append(f"follow-up dedup dropped ({reason}); matched by title only")
+    event(ctx, run, "dedup_dropped", reason=reason)
+    _close_dedup_tab(ctx, run)
+    run.awaiting = {"type": "sync", "value": {}}
+
+
+def _close_dedup_tab(ctx: Context, run: Run) -> None:
+    if run.agent:
+        best_effort(ctx, run, "interrupt", lambda: ctx.herdr.interrupt_agent(run.agent))
+    if run.pane_id:
+        best_effort(ctx, run, "close dedup tab", lambda: ctx.herdr.close_pane(run.pane_id))
+    run.agent = run.pane_id = None
+
+
+def _complete_dedup(ctx: Context, run: Run, value: dict) -> None:
+    """Apply the dedup verdicts; an issue that cannot be confirmed open is not trusted."""
+
+    def open_issue(number: int) -> OpenIssue | None:
+        try:
+            issue = ctx.github.issue(number)
+        except PROGRAMMING_ERRORS:
+            raise
+        except Exception:  # noqa: BLE001 - unconfirmed: the follow-up stays proposed
+            return None
+        if issue.state != "OPEN":
+            return None
+        return OpenIssue(number=issue.number, title=issue.title, url=issue.url)
+
+    if value:
+        run.notes += follow_ups.apply_dedup(run.review["follow_ups"], value, open_issue)
+        _close_dedup_tab(ctx, run)
+    goto_next(ctx, run)
+
+
+def _enter_follow_ups(ctx: Context, run: Run) -> None:
+    """Propose the new follow-ups to the supervisor (collected by COLLECT; a state saved
+    before that stage existed collects here)."""
+    _collect(ctx, run)
     entries = run.review["follow_ups"]
     new = follow_ups.proposed(entries)
     if not new:
@@ -786,6 +882,8 @@ HANDLERS: dict[Stage, Handler] = {
     Stage.SPEC_REVIEW: Handler(_enter_spec_review, poll_turn, _store_result),
     Stage.E2E: Handler(_enter_e2e, poll_turn, _store_result),
     Stage.E2E_REPORT: Handler(_enter_e2e_report, _poll_e2e_report),
+    Stage.COLLECT: Handler(_enter_collect, _poll_sync, _complete_collect),
+    Stage.DEDUP: Handler(_enter_dedup, _poll_dedup, _complete_dedup),
     Stage.FOLLOW_UPS: Handler(_enter_follow_ups, _poll_synced),
 }
 

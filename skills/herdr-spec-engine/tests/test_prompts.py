@@ -20,6 +20,7 @@ DOCUMENTED = {
     "fix_implement": (("branch", "spec_branch", "finding"), "implement"),
     "fix_review": (("spec_branch", "finding"), "review"),
     "e2e": (("spec_branch", "tickets", "not_integrated"), "e2e"),
+    "dedup": (("candidates",), "dedup"),
 }
 
 RESULT_PATH = "/repo/wt/s7-ticket-12/.herdr-spec/s7-ticket-12.implement.json"

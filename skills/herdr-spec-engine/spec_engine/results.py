@@ -254,12 +254,31 @@ def _e2e(d: dict, w: str) -> None:
                        "(PASS only if every AC is PASS; any FAIL is FAIL; otherwise PARTIAL)")
 
 
+def _dedup(d: dict, w: str) -> None:
+    def match(e: dict, p: str) -> None:
+        _str(e, "id", p)
+        verdict = _enum(e, "verdict", p, ("COVERED", "NEW"))
+        issue = _int_or_null(e, "issue", p)
+        _str(e, "reason", p)
+        if verdict == "COVERED" and issue is None:
+            raise _Invalid(f"{p}.issue: a COVERED follow-up names the open issue covering it")
+
+    _obj_list(d, "matches", w, match)
+    groups = _list(d, "duplicates", w)
+    for i, group in enumerate(groups):
+        path = f"{w}.duplicates[{i}]"
+        if not isinstance(group, list) or len(group) < 2 or \
+                not all(isinstance(x, str) for x in group):
+            raise _Invalid(f"{path}: expected a list of two or more follow-up ids")
+
+
 validate_implement = _validator("implement", _implement)
 validate_review = _validator("review", _review)
 validate_gate_fix = _validator("gate_fix", _gate_fix)
 validate_resolve = _validator("resolve", _resolve)
 validate_spec_review = _validator("spec_review", _spec_review)
 validate_e2e = _validator("e2e", _e2e)
+validate_dedup = _validator("dedup", _dedup)
 
 SCHEMAS: dict[str, Validator] = {
     "implement": validate_implement,
@@ -268,6 +287,7 @@ SCHEMAS: dict[str, Validator] = {
     "resolve": validate_resolve,
     "spec_review": validate_spec_review,
     "e2e": validate_e2e,
+    "dedup": validate_dedup,
 }
 
 _EXAMPLES: dict[str, dict] = {
@@ -327,6 +347,18 @@ _EXAMPLES: dict[str, dict] = {
         "follow_ups": [],
         "notes": ["Used the admin test user: E2E.md lists no plain user"],
     },
+}
+
+
+_EXAMPLES["dedup"] = {
+    "matches": [
+        {"id": "f1", "verdict": "COVERED", "issue": 31,
+         "reason": "#31 'Sessions never expire' is the same bug in src/auth/session.py"},
+        {"id": "f2", "verdict": "NEW", "issue": None,
+         "reason": "searched 'locale', 'export date format', src/export.py: nothing open"},
+        {"id": "f3", "verdict": "NEW", "issue": None, "reason": "may overlap #40 (date utils)"},
+    ],
+    "duplicates": [["f2", "f4"]],
 }
 
 

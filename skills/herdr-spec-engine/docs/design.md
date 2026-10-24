@@ -123,6 +123,9 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
 
   A finding without a `why_separate` is not a follow-up; low findings never are. Agents never
   open issues: the engine proposes them (see Spec phases).
+- **dedup** — `{"matches": [{"id": str, "verdict": "COVERED"|"NEW", "issue": int|null, "reason":
+  str}], "duplicates": [[str, str, ...]]}`; `COVERED` needs `issue`. The agent searches the open
+  issues by symptom, file or symbol and component (read-only); uncertain overlap is `NEW`.
 - **e2e** — `{"verdict": "PASS"|"FAIL"|"PARTIAL"|"BLOCKED", "blocked_by": str, "acs": [{"ticket": int,
   "ac": str, "criterion": str, "derived": bool, "verdict": "PASS"|"FAIL"|"NOT VERIFIABLE",
   "evidence": str}], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason":
@@ -202,7 +205,7 @@ A **Run** is one entity the scheduler advances. Kinds and their stage sequence:
 | `fix` | `s<N>-fix-<k>` | PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
 | `spec_review` | `s<N>-review` | PROVISION_TAB → SPEC_REVIEW |
 | `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E → E2E_REPORT |
-| `follow_ups` | `s<N>-follow-ups` | FOLLOW_UPS (no agent) |
+| `follow_ups` | `s<N>-follow-ups` | COLLECT → DEDUP → FOLLOW_UPS (an agent only in DEDUP) |
 
 Run ids double as herdr agent names, branch names and tab labels (e.g. spec 7: `s7-ticket-12`,
 `s7-fix-1`, tabs `s7-review` / `s7-e2e`). herdr agent names are global to the herdr server, so the
@@ -242,7 +245,8 @@ or `{"type": "escalation"}`.
   `run_id_for(kind, spec=, ticket=, k=)` and `resolver_agent_name(run_id)` build names.
 - `Settings` = `max_agents=3, model="opus", stage_timeout=7200, retry_budget=1,
   gate_retry_budget=2, gate_timeout=1800, poll_seconds=10, settle_seconds=15,
-  unknown_grace=120, agent_ready_timeout=120, retry_backoff=5, retry_backoff_max=60` (seconds);
+  unknown_grace=120, agent_ready_timeout=120, retry_backoff=5, retry_backoff_max=60,
+  dedup_timeout=900` (seconds);
   `Settings.agent_args` gives the agent args.
 - Every dataclass has `to_dict()` / `from_dict()` round-tripping through JSON.
 
@@ -286,7 +290,9 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | SPEC_REVIEW | prompt `spec_review` | OK → `spec_phases.on_spec_review(result)` |
 | E2E | prompt `e2e` (`tickets`: closed before the run, merged or done by a human; `not_integrated`: left open, skipped) | OK → E2E_REPORT (store the result) |
 | E2E_REPORT | `GitHub.comment(spec, …)`: verdict, the AC table, fixes, pending, collateral, notes (`stages.e2e_lines`, shared with `report.md`); `awaiting.done` records the posted comment, so a retry never posts twice | OK → status `done`, then the follow-ups phase |
-| FOLLOW_UPS | once: `GitHub.open_issues()`, `follow_ups.collect` into `run.review["follow_ups"]`; none proposed → sync, else raise `follow-ups` | OK once a resolution decided them (or none were proposed) → status `done` |
+| COLLECT | once: `GitHub.open_issues()`, `follow_ups.collect` into `run.review["follow_ups"]` (sync) | OK → DEDUP; none proposed → straight to FOLLOW_UPS (no agent, no tab) |
+| DEDUP | opens tab `s<N>-follow-ups` in the repo root, starts its agent, prompts `dedup` (the proposed follow-ups) | OK → `follow_ups.apply_dedup`: `COVERED #n` → `already_open` once `GitHub.issue(n)` is confirmed OPEN (else ignored, with a note); each `duplicates` group keeps its first proposed follow-up (the others' `found_by` merged in, their titles in `also`) and drops the rest; then the tab is closed → FOLLOW_UPS. Never escalates: a failure (tab or start error, an invalid result after its one retry, blocked, unknown, lost twice, or no result after `dedup_timeout`, 15 min) drops the dedup with a run note — "matched by title only" — closes the tab and goes on to FOLLOW_UPS. A not-ready agent is waited for as usual |
+| FOLLOW_UPS | none proposed → sync, else raise `follow-ups` (a state saved before COLLECT existed collects here) | OK once a resolution decided them (or none were proposed) → status `done` |
 
 Generic outcomes, any agent-turn stage:
 - `RESULT_INVALID` → if `attempts[stage] < retry_budget`: prompt `result_retry` (path, error,
@@ -447,7 +453,8 @@ external blocker escalates only if it is still open (a `blocked_by` not among th
 tickets); a ticket closed on GitHub before it starts → `done`; one relabeled `ready-for-human`
 is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec review → phase
 `fixes` with no fix runs; a non-`done` e2e → phase `follow_ups` all the same; a terminal
-follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
+follow-ups run → phase `complete`. The follow-ups run takes no agent slot (nothing else runs
+then; its dedup agent is the only one).
 
 ## Spec phases (`spec_phases.py`)
 
@@ -456,12 +463,15 @@ follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
   `fixes`. Fix runs go through the same scheduler and merge queue.
 - When all fix runs are terminal (or there were none): create the `e2e` run, phase `e2e`.
 - E2E terminal → create the `follow_ups` run, phase `follow_ups`. It collects the `follow_ups`
-  of every ticket, fix and spec review result, merges duplicates (same file and title, compared
-  lowercase with punctuation collapsed; `found_by` lists every run that reported it), and marks
-  those whose title matches an open GitHub issue `already_open`. The rest are `proposed`, with
-  ids `f1, f2, …`, in one `follow-ups` escalation; nothing is created without a resolution.
-  Created issues get a body with the spec, category, severity, location, problem, why separate,
-  evidence and acceptance criteria as a checklist. `needs-decision` ones are labeled
+  of every ticket, fix, spec review and E2E result, merges duplicates (same file and title,
+  compared lowercase with punctuation collapsed; `found_by` lists every run that reported it), and
+  marks those whose title matches an open GitHub issue `already_open`. A read-only dedup agent
+  then searches the open issues for the rest (DEDUP: a title match misses an issue filed under
+  other words) and may mark more `already_open` or merge duplicates; it never blocks the run. The
+  rest are `proposed`, with ids `f1, f2, …`, in one `follow-ups` escalation; nothing is created
+  without a resolution. Created issues get a body with the spec, category, severity, location,
+  merged duplicates (`Also reported as`), problem, why separate, evidence and acceptance criteria
+  as a checklist. `needs-decision` ones are labeled
   `ready-for-human`; the rest get no label (they need triage before a spec takes them). They
   are not sub-issues of the spec, so they never join its plan. Entry states: `proposed`,
   `already_open`, `created`, `discarded`.
@@ -514,6 +524,7 @@ branches or deploy; end your turn by writing the result JSON to `$result_path` (
 | `fix_implement` | `branch`, `spec_branch`, `finding` (formatted title/file/line/failure scenario) |
 | `fix_review` | `spec_branch`, `finding` |
 | `e2e` | `spec_branch`, `tickets`, `not_integrated` (pre-formatted bullet lists, `- #n title`, or `none`) |
+| `dedup` | `candidates` (`follow_ups.candidates`: each proposed follow-up's line, problem and why separate) |
 
 Implement, review, fix_implement and fix_review send the agent to the spec issue for its
 spec-wide rules (paths that must not change, off-limits dependencies); review and fix_review

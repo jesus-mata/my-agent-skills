@@ -233,6 +233,8 @@ def _follow_ups_section(runs: list[Run]) -> list[str]:
             "", f"Discarded ({len(discarded)}):", *_bullets(discarded)]
     if undecided:
         out += ["", f"Not decided ({len(undecided)}):", *_bullets(undecided)]
+    if run.notes:
+        out += ["", "Notes:", *_bullets(run.notes)]
     return out + [""]
 
 

@@ -28,6 +28,8 @@ class Stage(str, Enum):
     SPEC_REVIEW = "spec_review"
     E2E = "e2e"
     E2E_REPORT = "e2e_report"
+    COLLECT = "collect"
+    DEDUP = "dedup"
     FOLLOW_UPS = "follow_ups"
 
 
@@ -124,7 +126,7 @@ STAGES_BY_KIND: dict[RunKind, tuple[Stage, ...]] = {
     ),
     RunKind.SPEC_REVIEW: (Stage.PROVISION_TAB, Stage.SPEC_REVIEW),
     RunKind.E2E: (Stage.PROVISION_TAB, Stage.E2E, Stage.E2E_REPORT),
-    RunKind.FOLLOW_UPS: (Stage.FOLLOW_UPS,),
+    RunKind.FOLLOW_UPS: (Stage.COLLECT, Stage.DEDUP, Stage.FOLLOW_UPS),
 }
 
 
@@ -258,6 +260,8 @@ class Settings(_Serialisable):
     # Spacing of port-error retries: retry_backoff, doubling per attempt, capped.
     retry_backoff: float = 5
     retry_backoff_max: float = 60
+    # The follow-up dedup agent only searches issues; past this it is dropped, never escalated.
+    dedup_timeout: float = 900
 
     @property
     def agent_args(self) -> list[str]:
