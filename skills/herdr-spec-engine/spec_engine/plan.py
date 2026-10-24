@@ -17,6 +17,14 @@ AGENT_LABEL = "ready-for-agent"
 HUMAN_LABEL = "ready-for-human"
 
 _REPO_URL_RE = re.compile(r"github\.com/([^/\s]+/[^/\s]+)/(?:issues|pull)/\d+")
+# Acceptance criteria in an issue body: a heading, bold label or "Acceptance criteria:" line
+# naming them (also "AC" / "ACs"), or a Markdown task list.
+_ACCEPTANCE_RE = re.compile(
+    r"^\s{0,3}#{1,6}\s+(?:acceptance|acs?\b)"                               # ## Acceptance ...
+    r"|^\s*(?:\*\*|__)?\s*(?:acceptance(?:\s+criteria)?|acs?)\s*(?::|(?:\*\*|__)\s*(?::|$))"  # label
+    r"|^\s*[-*+]\s+\[[ xX]\]\s+\S",                                          # - [ ] task list
+    re.IGNORECASE | re.MULTILINE)
+E2E_MD = "E2E.md"
 
 
 # build ------------------------------------------------------------------------------------------
@@ -57,6 +65,11 @@ def read_from_file(path: str) -> list[tuple[int, list[int]]]:
             raise ValueError(f"{path}: tickets[{i}].blocked_by must be a list of integers")
         out.append((t["number"], list(blocked_by)))
     return out
+
+
+def has_acceptance_criteria(body: str) -> bool:
+    """Whether an issue body states acceptance criteria (see ``_ACCEPTANCE_RE``)."""
+    return bool(_ACCEPTANCE_RE.search(body or ""))
 
 
 def _is_int(value: Any) -> bool:
@@ -105,6 +118,7 @@ def build_plan(
             blockers=sorted(dict.fromkeys(blockers)),
             external_blockers=sorted(dict.fromkeys(external)),
             labels=list(issue.labels),
+            has_acceptance=has_acceptance_criteria(issue.body),
         ))
     tickets.sort(key=lambda t: t.number)
     return Plan(spec=spec, title=spec_issue.title, branch=branch, gate=list(gate),
@@ -327,8 +341,27 @@ def _ticket_line(t: PlanTicket) -> str:
     return line
 
 
-def format_plan(plan: Plan, problems: list[str], gate_source: str = "") -> str:
-    """The plan as text: waves, unrefined tickets, branch, gate with its source, problems."""
+def plan_warnings(plan: Plan, repo_root: str | None = None) -> list[str]:
+    """What will weaken the run without stopping it: agent tickets stating no acceptance
+    criteria (review and E2E derive them from the goal, or skip a ticket without one) and, with
+    ``repo_root``, a repository without ``E2E.md`` (the E2E phase then ends BLOCKED)."""
+    warnings = []
+    no_acs = [t for t in plan.tickets if t.klass is TicketClass.AGENT and not t.has_acceptance]
+    if no_acs:
+        warnings.append("tickets without acceptance criteria (review and E2E will derive them "
+                        "from each ticket's goal; add an `## Acceptance criteria` section to "
+                        "make them exact): " + ", ".join(f"#{t.number} {t.title}" for t in no_acs))
+    if repo_root is not None and not os.path.isfile(os.path.join(repo_root, E2E_MD)):
+        warnings.append(f"no {E2E_MD} at the repository root: the E2E phase will end BLOCKED "
+                        "(it never guesses how to bring the stack up); add one, e.g. with "
+                        "`/e2e`, before the run reaches E2E")
+    return warnings
+
+
+def format_plan(plan: Plan, problems: list[str], gate_source: str = "",
+                warnings: list[str] | None = None) -> str:
+    """The plan as text: waves, unrefined tickets, branch, gate with its source, warnings,
+    problems."""
     lines = [f"Spec #{plan.spec}: {plan.title}", f"Spec branch: {plan.branch} (base {plan.base})", ""]
     waves = depths(plan)
     if not plan.tickets:
@@ -357,6 +390,9 @@ def format_plan(plan: Plan, problems: list[str], gate_source: str = "") -> str:
         lines.append(f"Hint: {GATE_HINT}")
     if any(re.search(r"\bunittest\b.*\bdiscover\b|\bpytest\b", cmd) for cmd in plan.gate):
         lines.append(f"Note: {NO_TESTS_NOTE}")
+    if warnings:
+        lines.append("")
+        lines.extend(f"WARNING: {w}" for w in warnings)
 
     lines.append("")
     if problems:

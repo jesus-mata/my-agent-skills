@@ -88,7 +88,8 @@ def plan_command(
     problems = planner.validate_plan(plan)
     store = Store(state_dir_for(common_dir, spec))
     store.save_plan(plan)
-    out.write(planner.format_plan(plan, problems, gate_source))
+    out.write(planner.format_plan(plan, problems, gate_source,
+                                  planner.plan_warnings(plan, repo_root)))
     out.write(f"Plan written to {store.paths.plan}\n")
     return 0 if not problems else 1
 

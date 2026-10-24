@@ -9,8 +9,8 @@ import unittest
 from spec_engine.cli import plan_command
 from spec_engine.model import Plan, PlanTicket, TicketClass
 from spec_engine.plan import (
-    build_plan, choose_gate, depths, discover_gate, format_plan, gate_from_spec, plan_runnable,
-    validate_plan,
+    build_plan, choose_gate, depths, discover_gate, format_plan, gate_from_spec,
+    has_acceptance_criteria, plan_runnable, plan_warnings, validate_plan,
 )
 from spec_engine.store import Store, state_dir_for
 from tests.fakes import FakeGit, FakeGitHub, make_issue, ref
@@ -319,6 +319,51 @@ class DiscoverGateTest(unittest.TestCase):
         self.assertEqual(discover_gate(self.root), ["npm install", "npm run test"])
 
 
+class AcceptanceCriteriaTest(unittest.TestCase):
+    def test_bodies_with_criteria(self):
+        for body in ("## Acceptance criteria\n- exports CSV", "### Acceptance Criteria",
+                     "**Acceptance criteria**\n1. x", "Acceptance criteria:\n- x",
+                     "## ACs\n- x", "**AC:** exports", "AC: exports", "**ACs**",
+                     "## Acceptance Criteria (must pass)", "Do it.\n\n- [ ] exports CSV",
+                     "  * [x] done already"):
+            self.assertTrue(has_acceptance_criteria(body), body)
+
+    def test_bodies_without_criteria(self):
+        for body in ("", "Fix login", "## Goal\nUsers can export.\n- a bullet",
+                     "We accept that this is slow.", "ACME integration",
+                     "Acceptance of the risk is out of scope", "The account page"):
+            self.assertFalse(has_acceptance_criteria(body), body)
+
+
+class PlanWarningsTest(unittest.TestCase):
+    def test_agent_tickets_without_criteria_and_missing_e2e_md(self):
+        with tempfile.TemporaryDirectory() as root:
+            plan = Plan(spec=7, title="S", branch="spec-7", tickets=[
+                PlanTicket(1, "Has ACs", TicketClass.AGENT),
+                PlanTicket(2, "Bare", TicketClass.AGENT, has_acceptance=False),
+                PlanTicket(3, "Human", TicketClass.HUMAN, has_acceptance=False),
+                PlanTicket(4, "Closed", TicketClass.DONE, has_acceptance=False)])
+            warnings = plan_warnings(plan, root)
+            self.assertEqual(len(warnings), 2)
+            self.assertIn("without acceptance criteria", warnings[0])
+            self.assertIn("#2 Bare", warnings[0])
+            self.assertNotIn("#3", warnings[0])
+            self.assertNotIn("#4", warnings[0])
+            self.assertIn("no E2E.md", warnings[1])
+            with open(os.path.join(root, "E2E.md"), "w"):
+                pass
+            self.assertEqual(plan_warnings(plan, root), [warnings[0]])
+            text = format_plan(plan, [], warnings=warnings)
+            self.assertIn("WARNING: tickets without acceptance criteria", text)
+            self.assertIn("WARNING: no E2E.md", text)
+
+    def test_has_acceptance_round_trips_and_defaults_true(self):
+        t = PlanTicket(2, "Bare", TicketClass.AGENT, has_acceptance=False)
+        self.assertFalse(PlanTicket.from_dict(t.to_dict()).has_acceptance)
+        legacy = {k: v for k, v in t.to_dict().items() if k != "has_acceptance"}
+        self.assertTrue(PlanTicket.from_dict(legacy).has_acceptance)
+
+
 class PlanCommandTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -331,6 +376,17 @@ class PlanCommandTest(unittest.TestCase):
         out = io.StringIO()
         code = plan_command(gh, self.git, self.root, 100, branch, gate, from_file, out)
         return code, out.getvalue()
+
+    def test_plan_reads_acceptance_criteria_and_warns(self):
+        gh = spec_with(make_issue(1, labels=AGENT), make_issue(2, labels=AGENT))
+        gh.add(dataclasses.replace(gh.issues[2], body="## Acceptance criteria\n- [ ] works"))
+        code, out = self.run_plan(gh, gate=["make check"])
+        self.assertEqual(code, 0)  # a warning never makes the plan unrunnable
+        self.assertEqual([t.has_acceptance for t in self.store.load_plan().tickets],
+                         [False, True])
+        self.assertIn("WARNING: tickets without acceptance criteria", out)
+        self.assertIn("#1 Issue 1", out)
+        self.assertIn("WARNING: no E2E.md", out)
 
     def test_runnable_writes_plan_and_exits_0(self):
         with open(os.path.join(self.root, "Cargo.toml"), "w"):
@@ -369,7 +425,7 @@ class PlanCommandTest(unittest.TestCase):
         self.assertEqual(code, 0)
         plan = self.store.load_plan()
         self.assertEqual((plan.branch, plan.gate), ("feat", ["make check"]))
-        self.assertNotIn("WARNING", out)
+        self.assertNotIn("WARNING: the gate", out)
 
     def test_base_defaults_to_master_when_there_is_no_main(self):
         self.git = FakeGit(root=self.root, branches={"master": 1}, head="master")

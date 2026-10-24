@@ -200,6 +200,9 @@ class PlanTicket(_Serialisable):
     blockers: list[int] = field(default_factory=list)
     external_blockers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
+    # Whether the issue body states acceptance criteria (a heading or label naming them, or a
+    # task list). Without them review and E2E derive criteria from the ticket's goal.
+    has_acceptance: bool = True
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PlanTicket:
@@ -210,6 +213,7 @@ class PlanTicket(_Serialisable):
             blockers=[int(b) for b in d.get("blockers", [])],
             external_blockers=list(d.get("external_blockers", [])),
             labels=list(d.get("labels", [])),
+            has_acceptance=bool(d.get("has_acceptance", True)),
         )
 
 

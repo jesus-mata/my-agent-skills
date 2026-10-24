@@ -174,7 +174,12 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
    tickets.
    A gate command running `unittest discover` or `pytest` adds a note that their exit 5 (no
    tests found) counts as a pass (see Merge queue, gate).
-6. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
+6. Warnings (`plan_warnings`, printed as `WARNING:` lines; they never make a plan unrunnable):
+   `agent` tickets whose body states no acceptance criteria (`has_acceptance_criteria`: a
+   heading starting "Acceptance" or "AC"/"ACs", a label line `Acceptance criteria:` / `**AC:**` /
+   `**ACs**`, or a Markdown task list) — review and E2E then derive criteria from the goal —, and
+   no `E2E.md` at the repository root, which ends the E2E phase BLOCKED.
+7. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
    there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
    supervisor can show it); exit 2 without writing on input errors (unreadable/malformed `--from`
@@ -184,7 +189,7 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
 else `main`, else `master` when the repo has no `main` (the engine creates the spec branch from it
 and the spec review diffs against it);
 `PlanTicket` = `{number, title, klass: agent|human|unrefined|done, blockers: [int],
-external_blockers: [str], labels: [str]}`.
+external_blockers: [str], labels: [str], has_acceptance: bool (default true)}`.
 
 ## Runs, stages, outcomes
 

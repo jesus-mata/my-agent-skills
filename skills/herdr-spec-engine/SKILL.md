@@ -15,7 +15,7 @@ You are the **supervisor** of a spec run. The engine owns every transition: it c
    - `--branch B` (default `spec-<N>`), `--base B` (default `main`, else `master`).
    - `--gate CMD`, repeatable. Without it the gate comes from a `## Gate` section of the spec body, else is discovered from the repo's build files (design.md "Plan").
    - `--from FILE` for specs without sub-issues. Keep FILE outside the repo: an untracked file in the repo root blocks every merge as `repo-dirty`.
-2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands with their source, and any gate warning (e.g. the `unittest discover` exit-5 one: suggest the printed guard to the user). Get their confirmation.
+2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands with their source, and every `WARNING` or gate note (e.g. the `unittest discover` exit-5 one: suggest the printed guard to the user). Tickets without acceptance criteria: the user may add them before the run, since review and E2E otherwise derive them from each ticket's goal. No `E2E.md`: the E2E phase will end BLOCKED unless the user adds one before the run gets there. Get their confirmation.
 3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` (or add a `## Gate` section to the spec body) if the gate is wrong or empty, then re-run `plan` until it exits 0 and the user confirms.
 
 # 2. Start the engine
