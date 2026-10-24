@@ -172,6 +172,26 @@ def result_path(run: Run, name: str) -> str:
     return os.path.join(run.worktree or "", RESULT_DIR, f"{run.id}.{name}.json")
 
 
+def instructions_path(path: str) -> str:
+    """``<run_id>.<name>.prompt.md`` next to the result file ``path``."""
+    return path[:-len(".json")] + ".prompt.md" if path.endswith(".json") else path + ".prompt.md"
+
+
+def as_sent(path: str, text: str) -> str:
+    """The prompt as typed into the agent: a rendered prompt starting with a slash command goes
+    as that command on one short line, the rest written to the instructions file beside the
+    result file (kept, so a re-sent prompt still finds it)."""
+    split = prompts.split_command(text)
+    if split is None:
+        return text
+    command, rest = split
+    file = instructions_path(path)
+    os.makedirs(os.path.dirname(file), exist_ok=True)
+    with open(file, "w", encoding="utf-8") as f:
+        f.write(rest)
+    return prompts.command_line(command, file)
+
+
 def _remove(path: str) -> None:
     try:
         os.remove(path)
@@ -224,7 +244,7 @@ def send_turn(
         ensure_agent(ctx, run)
         agent = run.agent
     path = result_path(run, name)
-    text = ctx.render(template, **common_vars(ctx, path, schema), **vars)
+    text = as_sent(path, ctx.render(template, **common_vars(ctx, path, schema), **vars))
     _remove(path)
     ctx.herdr.prompt_agent(agent, text)
     now = ctx.now()

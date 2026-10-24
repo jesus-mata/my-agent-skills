@@ -178,8 +178,9 @@ class SocketHerdrTest(unittest.TestCase):
             "name": "s7-ticket-3", "kind": "claude", "pane_id": "w7:p1",
             "args": ["--model", "opus"], "timeout_ms": 60000})
         self.herdr.prompt_agent("s7-ticket-3", "do it")
-        self.assertEqual(self.server.last("agent.prompt")["params"],
-                         {"target": "s7-ticket-3", "text": "do it"})
+        self.assertEqual(self.server.last("agent.prompt")["params"], {
+            "target": "s7-ticket-3", "text": "do it",
+            "wait": {"until": ["working", "blocked"], "timeout_ms": 20000}})
         self.assertEqual(self.herdr.read_agent("s7-ticket-3", 40), "hello\nworld\n")
         self.assertEqual(self.server.last("agent.read")["params"], {
             "target": "s7-ticket-3", "source": "recent", "lines": 40, "format": "text",
@@ -218,6 +219,36 @@ class SocketHerdrTest(unittest.TestCase):
         with self.assertRaises(HerdrError) as cm:
             self.herdr.prompt_agent("s7-ticket-3", "x")
         self.assertEqual(cm.exception.code, "agent_not_found")
+
+    def test_stalled_prompt_gets_a_second_enter(self):
+        self.server.handlers["agent.prompt"] = lambda p: err("agent_prompt_stalled", "no turn")
+        self.server.handlers["agent.send_keys"] = lambda p: ok("ok")
+        self.server.handlers["agent.wait"] = lambda p: ok(
+            "agent_status", agent=agent_info("w7:p1", "working", "s7-ticket-3"))
+        self.herdr.prompt_agent("s7-ticket-3", "line 1\nline 2")
+        self.assertEqual(self.server.methods(), ["agent.prompt", "agent.send_keys", "agent.wait"])
+        self.assertEqual(self.server.last("agent.send_keys")["params"],
+                         {"target": "s7-ticket-3", "keys": ["Enter"]})
+        self.assertEqual(self.server.last("agent.wait")["params"], {
+            "target": "s7-ticket-3", "until": ["working", "blocked"], "timeout_ms": 10000})
+
+    def test_prompt_still_stalled_after_enter_raises_stalled(self):
+        self.server.handlers["agent.prompt"] = lambda p: err("agent_prompt_stalled", "no turn")
+        self.server.handlers["agent.send_keys"] = lambda p: ok("ok")
+        self.server.handlers["agent.wait"] = lambda p: err("timeout", "no match")
+        with self.assertRaises(HerdrError) as cm:
+            self.herdr.prompt_agent("s7-ticket-3", "x")
+        self.assertEqual(cm.exception.code, "agent_prompt_stalled")
+        # Never Esc: it would interrupt a late turn or open the rewind menu.
+        self.assertEqual([r["params"]["keys"] for r in self.server.requests
+                          if r["method"] == "agent.send_keys"], [["Enter"]])
+
+    def test_prompt_to_blocked_agent_raises_without_enter(self):
+        self.server.handlers["agent.prompt"] = lambda p: err("agent_blocked", "waiting")
+        with self.assertRaises(HerdrError) as cm:
+            self.herdr.prompt_agent("s7-ticket-3", "x")
+        self.assertEqual(cm.exception.code, "agent_blocked")
+        self.assertEqual(self.server.methods(), ["agent.prompt"])
 
     # wait_for_change -------------------------------------------------------------------------
 

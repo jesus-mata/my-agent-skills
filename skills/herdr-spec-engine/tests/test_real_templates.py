@@ -90,6 +90,20 @@ class RealTemplateScenarioTest(unittest.TestCase):
             self.assertIn("Race on save (blocker)\nFile: src/save.py:3\n"
                           "Failure scenario: two saves at once lose the first write", text)
         self.assertIn("branch `s7-fix-1`", h.text_of("fix_implement"))
+        # /e2e has disable-model-invocation: it must arrive as a command on one short line,
+        # with the rest of the prompt in a file beside the result file.
+        sent = h.herdr.prompts["s7-e2e"][0]
+        instructions = os.path.join(h.root, ".herdr-spec", "s7-e2e.e2e.prompt.md")
+        self.assertEqual(sent, f"/e2e Your full instructions for this command are in "
+                               f"{instructions} — read that whole file first and follow it.")
+        with open(instructions) as f:
+            body = f.read()
+        self.assertEqual(body, h.text_of("e2e")[len("/e2e "):])
+        self.assertIn(os.path.join(h.root, ".herdr-spec", "s7-e2e.e2e.json"), body)
+        for name in ("implement", "review", "spec_review"):
+            self.assertFalse(h.herdr.prompts[{"implement": "s7-ticket-1", "review": "s7-ticket-1",
+                                              "spec_review": "s7-review"}[name]][0]
+                             .startswith("/"), name)
 
         self.assertEqual(h.state.phase, Phase.COMPLETE)
         self.assertEqual(h.status("s7-fix-1"), RunStatus.DONE)

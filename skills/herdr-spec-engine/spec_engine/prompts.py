@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import os
+import re
 from string import Template
 
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts")
@@ -18,6 +19,25 @@ TEMPLATE_NAMES: tuple[str, ...] = (
     "fix_review",
     "e2e",
 )
+
+
+# A rendered prompt that starts with a slash command (``/e2e ...``) must reach Claude as that
+# command, alone on a short line: a multi-line prompt enters the TUI as pasted text, and pasted
+# text is never run as a command. A skill with ``disable-model-invocation`` (e2e) can only be
+# loaded that way; asked for in the text, the Skill tool refuses it.
+COMMAND_RE = re.compile(r"^(/[a-z][a-z0-9:_-]*)[ \t]*")
+
+
+def split_command(text: str) -> tuple[str, str] | None:
+    """``(command, rest)`` when ``text`` starts with a slash command, else None."""
+    m = COMMAND_RE.match(text)
+    return (m.group(1), text[m.end():].lstrip("\n")) if m else None
+
+
+def command_line(command: str, instructions_path: str) -> str:
+    """The one-line prompt that runs ``command`` and points it at the rest of the prompt."""
+    return (f"{command} Your full instructions for this command are in {instructions_path} "
+            f"— read that whole file first and follow it.")
 
 
 def template_path(name: str) -> str:

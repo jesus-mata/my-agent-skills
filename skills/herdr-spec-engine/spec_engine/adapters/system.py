@@ -51,3 +51,15 @@ class SystemClock:
     def sleep(self, seconds: float) -> None:
         if seconds > 0:
             time.sleep(seconds)
+
+
+def herdr_integration_status() -> str | None:
+    """The output of ``herdr integration status``, or None when it cannot run."""
+    try:
+        proc = subprocess.run(["herdr", "integration", "status"], capture_output=True,
+                              timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    if proc.returncode != 0:
+        return None
+    return _decode(proc.stdout) + _decode(proc.stderr)

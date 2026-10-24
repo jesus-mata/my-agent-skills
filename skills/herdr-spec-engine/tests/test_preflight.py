@@ -10,6 +10,9 @@ from spec_engine import cli, preflight
 
 PROMPTS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                            "spec_engine", "prompts")
+HEALTHY_INTEGRATION = ("pi: not installed (/h/.pi/x.ts)\n"
+                       "claude: installed (v11) (/h/.claude/hooks/herdr-agent-state.sh)\n"
+                       "codex: not installed (/h/.codex/x.sh)\n")
 SKILL_RE = re.compile(r"`/([a-z][a-z0-9-]*(?::[a-z0-9-]+)?)")
 
 
@@ -40,9 +43,11 @@ class PreflightTest(unittest.TestCase):
         write(os.path.join(self.config, "plugins", "installed_plugins.json"), json.dumps(
             {"plugins": {"mattpocock-skills@official": [{"installPath": plugin}]}}))
 
-    def check(self, which=lambda tool: f"/bin/{tool}", authenticated=True):
+    def check(self, which=lambda tool: f"/bin/{tool}", authenticated=True,
+              integration=HEALTHY_INTEGRATION):
         return preflight.check(self.repo, env=self.env, which=which,
-                               gh_authenticated=lambda: authenticated)
+                               gh_authenticated=lambda: authenticated,
+                               integration_status=lambda: integration)
 
     def test_all_present_is_clean(self):
         self.install_all_skills()
@@ -72,6 +77,53 @@ class PreflightTest(unittest.TestCase):
         report = self.check()
         self.assertEqual(len(report.errors), 1)
         self.assertIn("no herdr socket", report.errors[0])
+
+    def test_outdated_claude_integration_is_an_error(self):
+        self.install_all_skills()
+        report = self.check(integration="pi: not installed (/x)\n"
+                                        "claude: outdated (v7 < v11) (/h/hook.sh)\n")
+        self.assertEqual(len(report.errors), 1)
+        self.assertIn("claude integration is outdated (v7 < v11)", report.errors[0])
+        self.assertIn("herdr integration install claude", report.errors[0])
+
+    def test_missing_claude_integration_is_an_error(self):
+        self.install_all_skills()
+        report = self.check(integration="claude: not installed (/h/hook.sh)\n")
+        self.assertIn("claude integration is not installed", report.errors[0])
+
+    def test_unreadable_integration_status_is_a_warning(self):
+        self.install_all_skills()
+        for status in (None, "pi: not installed (/x)\n"):
+            report = self.check(integration=status)
+            self.assertEqual(report.errors, [])
+            self.assertEqual(len(report.warnings), 1)
+            self.assertIn("herdr integration status", report.warnings[0])
+
+    def test_integration_not_checked_without_herdr(self):
+        self.install_all_skills()
+        report = self.check(which=lambda tool: None if tool == "herdr" else f"/bin/{tool}",
+                            integration=None)
+        self.assertEqual(report.warnings, [])
+
+    def test_skill_asked_for_in_text_must_allow_model_invocation(self):
+        self.install_all_skills()
+        write(os.path.join(self.config, "skills", "implement-ticket", "SKILL.md"),
+              "---\nname: implement-ticket\ndisable-model-invocation: true\n---\nbody\n")
+        write(os.path.join(self.config, "skills", "e2e", "SKILL.md"),
+              "---\nname: e2e\ndisable-model-invocation: true\n---\nbody\n")
+        report = self.check()
+        self.assertEqual(report.errors, [])
+        self.assertEqual(len(report.warnings), 1)  # e2e is sent as a command: allowed
+        self.assertIn("`/implement-ticket` sets disable-model-invocation", report.warnings[0])
+
+    def test_command_skills_are_the_templates_leading_commands(self):
+        leading = set()
+        for name in os.listdir(PROMPTS_DIR):
+            with open(os.path.join(PROMPTS_DIR, name), encoding="utf-8") as f:
+                m = re.match(r"/([a-z][a-z0-9:-]*)", f.read())
+            if m:
+                leading.add(m.group(1))
+        self.assertEqual(leading, set(preflight.COMMAND_SKILLS))
 
     def test_missing_skills_are_warnings(self):
         report = self.check()

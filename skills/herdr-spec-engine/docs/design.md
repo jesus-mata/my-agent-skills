@@ -470,6 +470,14 @@ writes it). A hard finding reaches the fix-run prompts through `stages.format_fi
 Every variable is text (or an int) by the time it reaches `render`: lists and findings are
 formatted by the stage. `tests/test_real_templates.py` drives whole scenarios through the real
 templates to keep both sides in step.
+A rendered prompt that starts with a slash command (only `e2e`, which starts with `/e2e`) is
+sent as that command alone on one line, `"/e2e Your full instructions for this command are in
+<file> — read that whole file first and follow it."`, with the rest of the prompt written to
+`<run_id>.<name>.prompt.md` beside the result file (`stages.as_sent`; kept, so a re-sent prompt
+still finds it). A multi-line prompt enters Claude's TUI as pasted text, which is never run as a
+command, and `/e2e` sets `disable-model-invocation`: asked for in the text, the Skill tool refuses
+it ("Do not replicate this skill's workflow by other means"). `preflight.COMMAND_SKILLS` lists
+these skills; any other skill a prompt asks for must allow model invocation.
 Every template states: you are a sub Claude instance started by herdr-spec-engine for spec #$spec;
 work only in your cwd; commit on your branch; never push, merge, rebase onto other branches, switch
 branches or deploy; end your turn by writing the result JSON to `$result_path` (example:
@@ -568,7 +576,7 @@ class Clock(Protocol):
     def sleep(self, seconds: float) -> None: ...
 ```
 
-Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protocol 22):
+Adapter notes (verified against `herdr api schema --json`, herdr 0.9.5 / protocol 22):
 - **herdr_socket**: socket path = `HERDR_SOCKET_PATH`, else `~/.config/herdr/sessions/$HERDR_SESSION/herdr.sock`
   if `HERDR_SESSION` is set, else `~/.config/herdr/herdr.sock`. One connection per request: send
   `{"id","method","params"}\n`, read one line; `error {code, message}` → raise
@@ -580,7 +588,13 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   {workspace_id[, force: true]}`; `tab.create {cwd, label, focus: false}` → `result.root_pane.pane_id`;
   `pane.split {target_pane_id, direction: "right", cwd, focus: false}` → `result.pane.pane_id`;
   `pane.close {pane_id}`; `agent.start {name, kind: "claude", pane_id, args, timeout_ms: 60000}`
-  (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text}`; `agent.get {target}` →
+  (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text, wait: {until: ["working",
+  "blocked"], timeout_ms: 20000}}` confirms the turn started — on `agent_prompt_stalled` (text
+  typed, Enter lost) it sends `agent.send_keys ["Enter"]` and `agent.wait {until: ["working",
+  "blocked"], timeout_ms: 10000}`; still nothing raises `HerdrError("agent_prompt_stalled")`, a
+  port failure like any other. It never clears the input box: Esc interrupts a turn that started
+  late, and on an empty box opens Claude's rewind menu. `agent_blocked` (prompting a blocked agent)
+  is rejected by herdr before any input is sent, and raised as is; `agent.get {target}` →
   `result.agent.agent_status` (`agent_pane`: `result.agent.pane_id`) (error code `agent_not_found` → `missing`; any status outside the
   enum → `unknown`); `agent.read {target, source: "recent", lines, format: "text", strip_ansi:
   true}` → `result.read.text`; `agent.send_keys {target, keys: ["ctrl+c"]}`. `agent.prompt`,
@@ -610,6 +624,7 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
 - **system**: `SubprocessShell.run` = `shell=True` in its own process group, stdout+stderr merged;
   on timeout the whole group is killed and it returns code 124 with the partial output plus a
   `command timed out` note. `SystemClock` = `time.time` / `time.sleep`.
+  `herdr_integration_status()` = output of `herdr integration status` (None if it cannot run).
 - **factory**: `adapters.real_ports(cwd, socket_path=None) -> Ports(herdr, git, github, shell,
   clock)`; `gh` runs in `cwd`.
 
@@ -628,10 +643,14 @@ engine abort <N>
 
 - The launcher exits 2 on Python older than 3.11, before importing anything.
 - `plan` and `run` start with `preflight.check(repo_root)`: `git`, `gh`, `herdr` and `claude` on
-  PATH, `gh auth status`, and the herdr socket (`default_socket_path`) are errors (one line each,
-  exit 2, nothing else runs); a skill of `preflight.REQUIRED_SKILLS` not found as a personal
-  (`$CLAUDE_CONFIG_DIR` or `~/.claude`), project (`<repo>/.claude/skills`) or enabled plugin skill
-  is a warning, since the lookup cannot see every place a skill can live. `/code-review` is
+  PATH, `gh auth status`, the herdr socket (`default_socket_path`), and the `claude:` line of
+  `herdr integration status` reading `outdated …` or `not installed …` are errors (one line each,
+  exit 2, nothing else runs) — that integration is the hook reporting an agent's real status,
+  which every stage waits on; an unreadable status is a warning. A skill of
+  `preflight.REQUIRED_SKILLS` not found as a personal (`$CLAUDE_CONFIG_DIR` or `~/.claude`),
+  project (`<repo>/.claude/skills`) or enabled plugin skill is a warning, since the lookup cannot
+  see every place a skill can live; so is a found skill outside `COMMAND_SKILLS` whose SKILL.md
+  sets `disable-model-invocation: true` (the agents ask for it in text, and it will not load). `/code-review` is
   built in. `tests/test_preflight.py` keeps `REQUIRED_SKILLS` equal to the skills the prompts
   invoke.
 - Durations accept `90`, `90s`, `30m`, `2h` (`cli.parse_duration`, also `--poll`).
