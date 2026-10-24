@@ -57,7 +57,7 @@ Every kind also allows `hand-to-human`: use it whenever you are waiting on the u
 
 # 4. Finish
 
-On `COMPLETE`, relay `report.md` (printed by `watch`) to the user: tickets done, left open and skipped with reasons, pending review findings and dismissed ones (judged false positives by the reviewer; they never keep a ticket open), spec review fixed / still-pending hard / not fixed findings, fix runs, E2E passed / fixed / pending, follow-ups created / already open / discarded (with issue links), and any open or handed-off escalations. The spec branch is local and nothing was pushed; push or open a PR only when the user asks. The spec review and E2E tabs stay open for inspection.
+On `COMPLETE`, relay `report.md` (printed by `watch`) to the user: tickets done, left open and skipped with reasons, pending review findings and dismissed ones (judged false positives by the reviewer; they never keep a ticket open), spec review fixed / still-pending hard / not fixed findings, fix runs, the E2E verdict (PASS, FAIL, PARTIAL or BLOCKED with its reason) with the per-criterion table and its fixed / pending / collateral (the engine already posted it on the spec issue), follow-ups created / already open / discarded (with issue links), and any open or handed-off escalations. The spec branch is local and nothing was pushed; push or open a PR only when the user asks. The spec review and E2E tabs stay open for inspection.
 
 # Stopping
 

@@ -11,7 +11,10 @@ from tests.engine_harness import (
 from tests.fakes import make_issue, ref
 
 SPEC_REVIEW_CLEAN = {"fixed": [], "hard": [], "not_fixed": []}
-E2E_OK = {"passed": ["flow works"], "fixed": [], "pending": []}
+E2E_OK = {"verdict": "PASS", "blocked_by": "", "collateral": [],
+          "acs": [{"ticket": 1, "ac": "AC1", "criterion": "flow works", "derived": False,
+                   "verdict": "PASS", "evidence": "out/flow.png"}],
+          "fixed": [], "pending": []}
 HARD = {"severity": "blocker", "title": "Race on save", "file": "src/save.py", "line": 3,
         "failure_scenario": "two saves lose one"}
 
@@ -370,6 +373,65 @@ class SchedulerTest(unittest.TestCase):
         self.assertEqual(h.state.escalations, {})
         self.assertEqual(h.run("s7-follow-ups").status, RunStatus.DONE)
         self.assertEqual(h.github.calls_to("create_issue"), [])
+
+    def test_e2e_tests_integrated_tickets_and_posts_its_verdict_on_the_spec_issue(self):
+        h = self.harness([ticket(1, klass="done"), ticket(2), ticket(3, klass="unrefined"),
+                          ticket(4, blockers=[3])]).start()
+        h.script_ticket("s7-ticket-2")
+        h.tick()
+        h.resolve(h.only_escalation().id, "skip-ticket")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=80)
+
+        e2e = [v for n, v in h.rendered if n == "e2e"][0]
+        self.assertEqual(e2e["tickets"], "- #1 Ticket 1\n- #2 Ticket 2")
+        self.assertEqual(e2e["not_integrated"], "- #3 Ticket 3 (skipped)\n- #4 Ticket 4 (skipped)")
+        self.assertEqual(h.run("s7-e2e").stage, Stage.E2E_REPORT)
+        [comment] = h.github.comments[7]
+        self.assertIn("E2E of spec #7 on `spec-7`", comment)
+        self.assertIn("Verdict: **PASS**", comment)
+        self.assertIn("| #1 | AC1 | flow works | PASS | out/flow.png |", comment)
+        self.assertIn("nothing was pushed", comment)
+        with open(h.store.paths.report) as f:
+            report = f.read()
+        self.assertIn("| #1 | AC1 | flow works | PASS | out/flow.png |", report)
+
+    @staticmethod
+    def e2e_prompted(h):
+        """Once the E2E agent was prompted: the next comment is the spec issue's."""
+        return lambda: bool(h.herdr.prompts.get("s7-e2e"))
+
+    def test_e2e_comment_failure_is_retried_and_posted_once(self):
+        h = self.harness([ticket(1)]).start()
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(self.e2e_prompted(h), max_ticks=80)
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.run_until(lambda: bool(h.open_escalations()), max_ticks=40)
+        esc = h.only_escalation()
+        self.assertEqual((esc.kind, esc.stage), (EscalationKind.BUDGET_EXHAUSTED, Stage.E2E_REPORT))
+        h.resolve(esc.id, "retry")
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=40)
+        self.assertEqual(len(h.github.comments[7]), 1)
+
+    def test_e2e_skipped_after_its_result_still_reports_it(self):
+        h = self.harness([ticket(1)]).start()
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(self.e2e_prompted(h), max_ticks=80)
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.run_until(lambda: bool(h.open_escalations()), max_ticks=40)
+        h.resolve(h.only_escalation().id, "skip-ticket")
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=40)
+        with open(h.store.paths.report) as f:
+            report = f.read()
+        self.assertIn("not posted on the spec issue: skipped", report)
+        self.assertIn("Verdict: **PASS**", report)
 
     # follow-ups -----------------------------------------------------------------------------
 

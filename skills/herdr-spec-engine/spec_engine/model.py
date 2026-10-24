@@ -27,6 +27,7 @@ class Stage(str, Enum):
     PROVISION_TAB = "provision_tab"
     SPEC_REVIEW = "spec_review"
     E2E = "e2e"
+    E2E_REPORT = "e2e_report"
     FOLLOW_UPS = "follow_ups"
 
 
@@ -122,7 +123,7 @@ STAGES_BY_KIND: dict[RunKind, tuple[Stage, ...]] = {
         Stage.REVIEW, Stage.INTEGRATE, Stage.CLOSE,
     ),
     RunKind.SPEC_REVIEW: (Stage.PROVISION_TAB, Stage.SPEC_REVIEW),
-    RunKind.E2E: (Stage.PROVISION_TAB, Stage.E2E),
+    RunKind.E2E: (Stage.PROVISION_TAB, Stage.E2E, Stage.E2E_REPORT),
     RunKind.FOLLOW_UPS: (Stage.FOLLOW_UPS,),
 }
 

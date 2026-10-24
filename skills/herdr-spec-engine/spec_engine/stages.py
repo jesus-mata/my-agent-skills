@@ -427,7 +427,7 @@ def reenter(ctx: Context, run: Run) -> None:
         run.awaiting = {"type": "queue"}
         if run.id not in ctx.state.queue:
             ctx.state.queue.append(run.id)
-    elif run.stage is Stage.CLOSE and aw.get("type") == "close":
+    elif (run.stage, aw.get("type")) in ((Stage.CLOSE, "close"), (Stage.E2E_REPORT, "e2e_report")):
         pass  # keep the finished steps: a retry never comments or closes twice
     else:
         run.awaiting = None
@@ -676,8 +676,80 @@ def _enter_spec_review(ctx: Context, run: Run) -> None:
               spec_branch=ctx.spec_branch, base=ctx.plan.base)
 
 
+def _e2e_tickets(ctx: Context) -> tuple[str, str]:
+    """Bullet lists of the tickets whose criteria E2E tests (closed before the run, merged or
+    done by a human) and of those it must not (left open, skipped)."""
+    integrated, not_integrated = [], []
+    runs = {r.ticket: r for r in ctx.state.runs.values()
+            if r.kind in (RunKind.TICKET, RunKind.HUMAN)}
+    for t in sorted(ctx.plan.tickets, key=lambda t: t.number):
+        run = runs.get(t.number)
+        line = f"- #{t.number} {t.title}"
+        if run is None or run.status is RunStatus.DONE:
+            (integrated if run is not None or t.klass.value == "done" else not_integrated
+             ).append(line)
+        else:
+            not_integrated.append(f"{line} ({run.status.value})")
+    return "\n".join(integrated) or "none", "\n".join(not_integrated) or "none"
+
+
 def _enter_e2e(ctx: Context, run: Run) -> None:
-    send_turn(ctx, run, template="e2e", schema="e2e", name="e2e", spec_branch=ctx.spec_branch)
+    tickets, not_integrated = _e2e_tickets(ctx)
+    send_turn(ctx, run, template="e2e", schema="e2e", name="e2e", spec_branch=ctx.spec_branch,
+              tickets=tickets, not_integrated=not_integrated)
+
+
+def _enter_e2e_report(ctx: Context, run: Run) -> None:
+    run.awaiting = {"type": "e2e_report", "done": []}
+
+
+def _poll_e2e_report(ctx: Context, run: Run) -> Outcome | None:
+    """Post the E2E verdict and AC table on the spec issue, once (a retry never re-posts)."""
+    done = run.awaiting.setdefault("done", [])
+    if "comment" not in done:
+        ctx.github.comment(ctx.plan.spec, e2e_comment(ctx, run.review or {}))
+        done.append("comment")
+    return Outcome.OK
+
+
+def _cell(text: Any) -> str:
+    return " ".join(str(text).split()).replace("|", "\\|")
+
+
+def e2e_lines(result: dict) -> list[str]:
+    """The E2E result as Markdown: verdict, the AC table, fixes, pending, collateral, notes.
+    Shared by the spec issue comment and report.md. Results from before per-AC verdicts
+    (``passed``) are listed as they were."""
+    lines = [f"Verdict: **{result.get('verdict', 'unknown')}**"]
+    if result.get("blocked_by"):
+        lines.append(f"Blocked by: {result['blocked_by']}")
+    acs = result.get("acs") or []
+    if acs:
+        lines += ["", "| Ticket | AC | Criterion | Verdict | Evidence |",
+                  "| --- | --- | --- | --- | --- |"]
+        lines += [f"| #{a['ticket']} | {_cell(a['ac'])}{' (derived)' if a.get('derived') else ''}"
+                  f" | {_cell(a['criterion'])} | {a['verdict']} | {_cell(a['evidence'])} |"
+                  for a in acs]
+    if result.get("passed"):
+        lines += ["", f"Passed ({len(result['passed'])}):"] + [f"- {p}" for p in result["passed"]]
+    sections = (
+        ("Fixed", [f"{f['title']} ({f['commit']})" for f in result.get("fixed", [])]),
+        ("Pending", [f"{p['title']}: {p['reason']}" for p in result.get("pending", [])]),
+        ("Collateral", [f"[{c['severity']}] {c['title']} — {c['action']}"
+                        f"{'' if c.get('caused_by_spec') else ' (pre-existing)'}: {c['detail']}"
+                        for c in result.get("collateral", [])]),
+        ("Notes", list(result.get("notes", []))),
+    )
+    for title, items in sections:
+        if items or title in ("Fixed", "Pending"):
+            lines += ["", f"{title} ({len(items)}):"] + ([f"- {i}" for i in items] or ["- none"])
+    return lines
+
+
+def e2e_comment(ctx: Context, result: dict) -> str:
+    return "\n".join([f"E2E of spec #{ctx.plan.spec} on `{ctx.spec_branch}` by "
+                      f"herdr-spec-engine.", "", *e2e_lines(result), "",
+                      f"The spec branch `{ctx.spec_branch}` is local; nothing was pushed."])
 
 
 def _enter_follow_ups(ctx: Context, run: Run) -> None:
@@ -713,6 +785,7 @@ HANDLERS: dict[Stage, Handler] = {
     Stage.PROVISION_TAB: Handler(_enter_provision_tab, _poll_agent_ready),
     Stage.SPEC_REVIEW: Handler(_enter_spec_review, poll_turn, _store_result),
     Stage.E2E: Handler(_enter_e2e, poll_turn, _store_result),
+    Stage.E2E_REPORT: Handler(_enter_e2e_report, _poll_e2e_report),
     Stage.FOLLOW_UPS: Handler(_enter_follow_ups, _poll_synced),
 }
 

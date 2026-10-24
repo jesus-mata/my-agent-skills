@@ -1,6 +1,7 @@
 """Follow-ups: review findings that deserve their own issue instead of a fix in this spec.
 
-Ticket, fix and spec reviews report them in their result's ``follow_ups`` list. Once E2E is
+Ticket, fix and spec reviews (and E2E, for collateral it may not fix) report them in their
+result's ``follow_ups`` list. Once E2E is
 over the engine collects them (``collect``), merges duplicates found by several reviews, marks
 those already open on GitHub, and proposes the rest to the supervisor in one ``follow-ups``
 escalation. Nothing is created on GitHub until the user confirms (``create``).
@@ -22,7 +23,7 @@ CREATED = "created"
 DISCARDED = "discarded"
 STATES = (PROPOSED, ALREADY_OPEN, CREATED, DISCARDED)
 
-REVIEW_KINDS = (RunKind.TICKET, RunKind.FIX, RunKind.SPEC_REVIEW)
+REVIEW_KINDS = (RunKind.TICKET, RunKind.FIX, RunKind.SPEC_REVIEW, RunKind.E2E)
 # Issues needing a decision go to a human; the rest need triage before any spec takes them.
 LABELS_BY_CATEGORY = {"needs-decision": ["ready-for-human"]}
 CATEGORY_TEXT = {

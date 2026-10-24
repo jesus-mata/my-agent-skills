@@ -123,7 +123,19 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
 
   A finding without a `why_separate` is not a follow-up; low findings never are. Agents never
   open issues: the engine proposes them (see Spec phases).
-- **e2e** — `{"passed": [str], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason": str}]}`
+- **e2e** — `{"verdict": "PASS"|"FAIL"|"PARTIAL"|"BLOCKED", "blocked_by": str, "acs": [{"ticket": int,
+  "ac": str, "criterion": str, "derived": bool, "verdict": "PASS"|"FAIL"|"NOT VERIFIABLE",
+  "evidence": str}], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason":
+  str}], "collateral": [{"title": str, "severity": "blocker"|"high"|"medium"|"low",
+  "caused_by_spec": bool, "action": "fixed"|"follow-up"|"reported", "detail": str}],
+  "follow_ups": [FollowUp] (optional), "notes": [str] (optional)}`.
+  One `acs` entry per acceptance criterion of an integrated ticket (`derived` when the ticket had
+  none and the agent derived them from its goal). The validator checks the verdict adds up
+  (`results.e2e_verdict`): any `FAIL` AC → `FAIL`, else any `NOT VERIFIABLE` → `PARTIAL`, else
+  `PASS`, and a non-BLOCKED verdict has at least one AC; `BLOCKED` (preflight failed: no
+  `E2E.md`, production target, dirty tree) needs a non-blank `blocked_by`. Collateral is breakage
+  no AC covers; it never changes a verdict. Reports written before this schema (`passed: [str]`)
+  are still rendered.
 
 `results.SCHEMAS: dict[str, Validator]` keyed by the names above; `results.example(name) -> str`
 gives a JSON example for prompts.
@@ -184,7 +196,7 @@ A **Run** is one entity the scheduler advances. Kinds and their stage sequence:
 | `human` | `s<N>-human-<n>` | AWAIT_HUMAN |
 | `fix` | `s<N>-fix-<k>` | PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
 | `spec_review` | `s<N>-review` | PROVISION_TAB → SPEC_REVIEW |
-| `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E |
+| `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E → E2E_REPORT |
 | `follow_ups` | `s<N>-follow-ups` | FOLLOW_UPS (no agent) |
 
 Run ids double as herdr agent names, branch names and tab labels (e.g. spec 7: `s7-ticket-12`,
@@ -267,7 +279,8 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | AWAIT_HUMAN | raise `hitl-ticket` | resolved `done` → status `done` |
 | PROVISION_TAB | `Herdr.create_tab(cwd=repo_root, label=id)`, `start_agent`; awaits `agent_ready` | OK once registered → next |
 | SPEC_REVIEW | prompt `spec_review` | OK → `spec_phases.on_spec_review(result)` |
-| E2E | prompt `e2e` | OK → status `done`, then the follow-ups phase |
+| E2E | prompt `e2e` (`tickets`: closed before the run, merged or done by a human; `not_integrated`: left open, skipped) | OK → E2E_REPORT (store the result) |
+| E2E_REPORT | `GitHub.comment(spec, …)`: verdict, the AC table, fixes, pending, collateral, notes (`stages.e2e_lines`, shared with `report.md`); `awaiting.done` records the posted comment, so a retry never posts twice | OK → status `done`, then the follow-ups phase |
 | FOLLOW_UPS | once: `GitHub.open_issues()`, `follow_ups.collect` into `run.review["follow_ups"]`; none proposed → sync, else raise `follow-ups` | OK once a resolution decided them (or none were proposed) → status `done` |
 
 Generic outcomes, any agent-turn stage:
@@ -452,7 +465,8 @@ follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
   dismissed review findings),
   tickets already closed before the run, spec review fixed / hard findings still pending (their
   fix run not `done`) / not fixed (medium/low, with reasons), fix runs (merge commit, finding,
-  pending and dismissed review findings), e2e passed / fixed / pending, follow-ups created /
+  pending and dismissed review findings), e2e verdict, AC table, fixed / pending / collateral
+  (`stages.e2e_lines`; an e2e run that has a result but did not post it says so), follow-ups created /
   already open / discarded (with issue numbers), open or handed-off escalations, and
   "Spec branch `<b>` is local; nothing was pushed." A spec review or e2e that did not finish is
   reported as such.
@@ -494,7 +508,7 @@ branches or deploy; end your turn by writing the result JSON to `$result_path` (
 | `spec_review` | `spec_branch`, `base` |
 | `fix_implement` | `branch`, `spec_branch`, `finding` (formatted title/file/line/failure scenario) |
 | `fix_review` | `spec_branch`, `finding` |
-| `e2e` | `spec_branch` |
+| `e2e` | `spec_branch`, `tickets`, `not_integrated` (pre-formatted bullet lists, `- #n title`, or `none`) |
 
 Implement, review, fix_implement and fix_review send the agent to the spec issue for its
 spec-wide rules (paths that must not change, off-limits dependencies); review and fix_review
@@ -512,8 +526,15 @@ merge in progress (never `git merge --abort`) so the human finishes it in the wo
 no design/API change), lists the rest it can fix within the spec as `hard`, never fixes a finding
 that would break an explicit spec scope rule (medium or higher → `out-of-scope` follow-up, low →
 `not_fixed` with the reason), **never creates worktrees or agents**; review, fix_review and
-spec_review list follow-ups by the categories above and never open issues themselves; e2e runs
-`/e2e`, fixes issues test-first with built-in subagents, max 2 fix rounds.
+spec_review list follow-ups by the categories above and never open issues themselves; e2e is sent
+as `/e2e` (see above) and carries work-ticket's E2E contract: preflight (clean spec branch,
+`E2E.md` present — never bootstrapped unattended —, a target proven not production, criteria read
+per ticket or derived from its goal, never from the diff), one scenario per criterion with
+mandatory evidence, ephemeral tests, triage on FAIL (test/env → fix the test; decision, shared
+logic or too large → `follow_ups`, AC stays FAIL; else fix, also when the cause predates the
+spec), collateral rules, at most 3 attempts per AC and 8 fixes, a final run of every scenario from
+a cold stack, and teardown of what it started. Its `follow_ups` join the reviews' (E2E is one of
+`follow_ups.REVIEW_KINDS`).
 
 ## Ports (`ports.py`)
 

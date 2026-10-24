@@ -120,10 +120,37 @@ class ResultsTest(unittest.TestCase):
                            "spec_review.hard[0].failure_scenario", "missing")
 
     def test_e2e(self):
-        self.assertInvalid("e2e", bad("e2e", passed=[1]), "e2e.passed[0]")
         self.assertInvalid("e2e", bad("e2e", fixed=[{"title": "t"}]), "e2e.fixed[0].commit")
         self.assertInvalid("e2e", bad("e2e", pending=[{"title": "t", "reason": None}]),
                            "e2e.pending[0].reason", "null")
+        self.assertInvalid("e2e", bad("e2e", verdict="OK"), "e2e.verdict", "'PARTIAL'")
+        self.assertInvalid("e2e", bad("e2e", collateral=KeyError), "e2e.collateral", "missing")
+        ac = GOOD["e2e"]["acs"][0]
+        self.assertInvalid("e2e", bad("e2e", acs=[{**ac, "ticket": "12"}]),
+                           "e2e.acs[0].ticket", "integer")
+        self.assertInvalid("e2e", bad("e2e", acs=[{**ac, "derived": "no"}]),
+                           "e2e.acs[0].derived", "true or false")
+        self.assertInvalid("e2e", bad("e2e", acs=[{**ac, "verdict": "SKIPPED"}]),
+                           "e2e.acs[0].verdict")
+        collateral = GOOD["e2e"]["collateral"][0]
+        self.assertInvalid("e2e", bad("e2e", collateral=[{**collateral, "action": "ignored"}]),
+                           "e2e.collateral[0].action")
+        self.assertInvalid("e2e", bad("e2e", notes=[1]), "e2e.notes[0]")
+
+    def test_e2e_verdict_must_add_up(self):
+        ok, failed, nv = ({"ticket": 1, "ac": "AC1", "criterion": "c", "derived": False,
+                           "verdict": v, "evidence": "e"} for v in ("PASS", "FAIL", "NOT VERIFIABLE"))
+        for acs, verdict in (([ok], "PASS"), ([ok, nv], "PARTIAL"), ([nv, failed], "FAIL")):
+            self.assertIsNone(results.validate_e2e(bad("e2e", acs=acs, verdict=verdict))[1])
+            for other in ("PASS", "FAIL", "PARTIAL"):
+                if other != verdict:
+                    self.assertInvalid("e2e", bad("e2e", acs=acs, verdict=other),
+                                       f"add up to {verdict!r}")
+        self.assertInvalid("e2e", bad("e2e", acs=[], verdict="PASS"), "e2e.acs", "BLOCKED")
+        self.assertInvalid("e2e", bad("e2e", acs=[], verdict="BLOCKED", blocked_by=" "),
+                           "e2e.blocked_by")
+        self.assertIsNone(results.validate_e2e(
+            bad("e2e", acs=[], verdict="BLOCKED", blocked_by="no E2E.md"))[1])
 
 
 class ReadResultTest(unittest.TestCase):

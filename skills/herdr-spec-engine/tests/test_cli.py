@@ -18,7 +18,10 @@ from tests.engine_harness import IMPLEMENTED, REVIEW_CLEAN, SPEC, Harness, ticke
 from tests.fakes import FakeClock
 
 SPEC_REVIEW_CLEAN = {"fixed": [], "hard": [], "not_fixed": []}
-E2E_OK = {"passed": ["flow works"], "fixed": [], "pending": []}
+E2E_OK = {"verdict": "PASS", "blocked_by": "", "collateral": [],
+          "acs": [{"ticket": 1, "ac": "AC1", "criterion": "flow works", "derived": False,
+                   "verdict": "PASS", "evidence": "out/flow.png"}],
+          "fixed": [], "pending": []}
 ENGINE = "/skills/herdr-spec-engine/engine"
 
 

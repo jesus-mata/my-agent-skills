@@ -19,7 +19,7 @@ DOCUMENTED = {
     "spec_review": (("spec_branch", "base"), "spec_review"),
     "fix_implement": (("branch", "spec_branch", "finding"), "implement"),
     "fix_review": (("spec_branch", "finding"), "review"),
-    "e2e": (("spec_branch",), "e2e"),
+    "e2e": (("spec_branch", "tickets", "not_integrated"), "e2e"),
 }
 
 RESULT_PATH = "/repo/wt/s7-ticket-12/.herdr-spec/s7-ticket-12.implement.json"
@@ -141,7 +141,8 @@ class ContentTest(unittest.TestCase):
                             "/mattpocock-skills:tdd", "Never create worktrees",
                             "scope rule", "`out-of-scope`", "Never open issues yourself"],
             "fix_implement": ["/mattpocock-skills:tdd", "outward-denied", "denied_actions"],
-            "e2e": ["/e2e", "2 fix rounds", "Never create worktrees"],
+            "e2e": ["/e2e", "E2E.md", "not production", "Never create worktrees",
+                    "/mattpocock-skills:tdd", "cold stack", "NOT VERIFIABLE", "TEARDOWN"],
         }
         for name, needles in expected.items():
             text = self.render(name)
