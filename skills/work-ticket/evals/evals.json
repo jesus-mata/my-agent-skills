@@ -6,7 +6,7 @@
       "name": "happy-path",
       "prompt": "Trabaja el ticket #<id>",
       "setup": "Repo de prueba en GitHub con E2E.md en la raíz y un issue pequeño con criterios de aceptación explícitos (p.ej. añadir un endpoint GET /health que devuelve 200 y {\"status\":\"ok\"}). Checkout limpio. Sesión dentro de herdr.",
-      "expected_output": "El agente ejecuta start-ticket.sh con el id y termina su turno sin sondear. Llega un único reporte [herdr] con una línea 'TICKET DONE', y sólo después de que hayan terminado la review y la E2E. Hay un PR abierto con un comentario de review, uno de E2E y uno de resumen. La respuesta al usuario sigue la plantilla de SKILL.md con un veredicto por AC y evidencias."
+      "expected_output": "El agente ejecuta start-ticket.sh con el id en background (run_in_background) y termina su turno sin sondear. El script sale una sola vez, con una salida que empieza por 'herdr: agent' y contiene una línea 'TICKET DONE', y sólo después de que hayan terminado la review y la E2E. Nadie escribe en el pane del agente padre. El padre comprueba que el PR existe y tiene commits antes de comentarlo. Hay un PR abierto con un comentario de review, uno de E2E y uno de resumen. La respuesta al usuario sigue la plantilla de SKILL.md con un veredicto por AC y evidencias."
     },
     {
       "id": 2,

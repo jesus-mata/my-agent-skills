@@ -12,16 +12,8 @@
 #   ./spawn-ticket.sh 42 "..." ~/repo feat/issue-42
 #
 # Vuelve en cuanto confirma que el prompt entró (~7s); no espera al turno.
-# La vigilancia queda en background: cuando el agente del worktree termina, herdr
-# avisa con una notificación. Con TICKET_REPORT=1 además le manda el resultado
-# como prompt al pane desde el que se lanzó el script, para que ese agente lo vea.
-#
-#   TICKET_REPORT=1      activa el reporte al pane padre (desactivado por defecto)
-#   TICKET_REPORT_TO     pane/agente al que reportar (por defecto, el de origen)
-#   TICKET_REPORT_LINES  líneas del pane a incluir en el reporte (40)
-#   TICKET_WATCH_MS      tope de la vigilancia en ms (3600000 = 1h)
-#   TICKET_DONE_RE       regex (ERE) de la línea que marca el final real; hasta
-#                        verla, un turno terminado no cuenta (ver watch_and_report_)
+# Imprime el nombre del agente en stdout (las pistas van a stderr), así que se
+# encadena con wait-agent.sh:  NAME=$(./spawn-ticket.sh 42 "...")
 #
 set -euo pipefail
 
@@ -32,14 +24,7 @@ BRANCH="${4:-$TAB_LABEL}"
 
 jq_() { python3 -c "import sys,json;print(json.load(sys.stdin)$1)"; }
 
-# Filtro del reporte y watcher, compartidos con split-pane.sh.
 . "$(dirname "${BASH_SOURCE[0]}")/herdr-report.sh"
-
-# --- 0. pane desde el que se lanzó, para devolverle el resultado ------------
-# $HERDR_PANE_ID es el pane donde corre el script; `pane current` devuelve el
-# pane con el foco, que no siempre es el mismo (p.ej. un agente en background).
-SRC_PANE="${TICKET_REPORT_TO:-${HERDR_PANE_ID:-}}"
-[ -n "$SRC_PANE" ] || SRC_PANE=$(herdr pane current | jq_ '["result"]["pane"]["pane_id"]')
 
 # --- 1. nombre de agente único (herdr falla con agent_name_taken) -----------
 NAME="$TAB_LABEL"
@@ -82,9 +67,10 @@ herdr pane rename "$PANE" "$NAME" >/dev/null 2>&1 \
 # --- 3. claude en yolo mode, esperando a que la TUI esté lista --------------
 # El pane recién creado tarda un instante en llegar a su prompt de shell
 # (agent_pane_busy si arrancas demasiado pronto), así que reintenta.
+# El modelo va fijado: un ticket no debe correr con el que toque por defecto.
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   if herdr agent start "$NAME" --kind claude --pane "$PANE" --timeout 60000 \
-      -- --dangerously-skip-permissions >/dev/null 2>&1; then
+      -- --dangerously-skip-permissions --model opus >/dev/null 2>&1; then
     STARTED=1
     break
   fi
@@ -107,29 +93,13 @@ if ! herdr agent prompt "$NAME" "$SLASH_PROMPT" \
   herdr pane send-keys "$PANE" Enter >/dev/null 2>&1 || true
 fi
 
-# --- 5. vigilancia: la hace herdr, no un bucle de sondeo --------------------
-# `agent wait` se suscribe a los eventos del servidor. Al terminar, además de la
-# notificación, le manda el resultado como prompt al pane desde el que se lanzó
-# el script, para que ese agente lo vea sin sondear nada. Los detalles finos
-# (recorte del turno, rescate del Enter) viven en herdr-report.sh.
-WATCH_MS="${TICKET_WATCH_MS:-3600000}"
-REPORT_LINES="${TICKET_REPORT_LINES:-40}"
-REPORT="${TICKET_REPORT:-0}"   # desactivado por defecto: TICKET_REPORT=1 lo activa
-( watch_and_report_ "$NAME" "$PANE" "$SRC_PANE" "$PROMPT" \
-    "$WATCH_MS" "$REPORT_LINES" "Worktree: $WT_PATH (rama '$BRANCH')" "$REPORT" "$SLASH_PROMPT_FILE" \
-    "${TICKET_DONE_RE:-}" ) >/dev/null 2>&1 &
-disown
-
-echo "workspace='$TAB_LABEL' agente='$NAME' pane=$PANE (etiquetado '$NAME')"
-echo "  worktree:    $WT_PATH (rama '$BRANCH', workspace $WT_WS)"
-case "$REPORT" in
-  1|true|yes|on|si|sí)
-    echo "  vigilando:   al terminar, el resultado se le manda a $SRC_PANE (máx $((WATCH_MS / 60000)) min)" ;;
-  *)
-    echo "  vigilando:   notificación al terminar (TICKET_REPORT=1 para que además reporte a $SRC_PANE)" ;;
-esac
-echo "  ver salida:  herdr pane read $PANE --source recent-unwrapped --lines 60"
-echo "  esperar:     herdr agent wait $NAME    # sin --until: idle|done|blocked"
-echo "  seguir:      herdr agent prompt $NAME 'siguiente instrucción'"
-echo "  ir al tab:   herdr agent focus $NAME"
-echo "  limpiar:     herdr worktree remove --workspace $WT_WS && git -C $CWD branch -d $BRANCH"
+echo "$NAME"
+{
+  echo "  workspace='$TAB_LABEL' agente='$NAME' pane=$PANE (etiquetado '$NAME')"
+  echo "  worktree:    $WT_PATH (rama '$BRANCH', workspace $WT_WS)"
+  echo "  esperar:     $HERDR_REPORT_DIR/wait-agent.sh $NAME    # en background"
+  echo "  ver salida:  herdr pane read $PANE --source recent-unwrapped --lines 60"
+  echo "  seguir:      herdr agent prompt $NAME 'siguiente instrucción'"
+  echo "  ir al tab:   herdr agent focus $NAME"
+  echo "  limpiar:     herdr worktree remove --workspace $WT_WS && git -C $CWD branch -d $BRANCH"
+} >&2

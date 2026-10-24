@@ -18,7 +18,8 @@ message if one fails:
 
 ## Steps
 
-1. From the repo checkout, run:
+1. From the repo checkout, run with the Bash tool's `run_in_background`
+   flag:
 
    ```bash
    ~/.claude/skills/work-ticket/start-ticket.sh <TICKET_ID>
@@ -26,19 +27,29 @@ message if one fails:
 
    `<TICKET_ID>` is the issue number: `42`, `#42` or the issue URL. Do not
    modify the command or call `spawn-ticket.sh` directly. The script
-   switches to the default branch, pulls, checks the ticket exists, and
-   spawns the ticket agent on branch `ticket-<TICKET_ID>`. It returns in
-   ~10 s. If it exits non-zero, report its message to the user and stop.
+   switches to the default branch, pulls, checks the ticket exists, spawns
+   the ticket agent on branch `ticket-<TICKET_ID>`, then waits for it.
 
 2. End your turn. The ticket agent runs implement → code review → E2E (see
    IMPLEMENT_PROMPT.md) and stops at the first phase that does not pass.
-   Its result arrives as a new message starting with `[herdr]`, possibly
-   hours later. Do not poll its pane.
+   You are woken when the script exits, possibly hours later. Do not poll
+   its pane.
 
-3. When it arrives, find the block starting `TICKET <verdict>`. If the
-   message reports state `timeout…` or has no such block, the agent did not
-   finish: read more with the `herdr pane read` command the message gives,
-   and report what you find. It is not done.
+3. Read the script's output:
+   - No line starting `herdr: agent` → it failed before launching. Report
+     its `start-ticket:` message to the user and stop.
+   - `-> blocked` → the ticket agent is waiting for input. Read its pane.
+     A routine question the ticket answers → reply with the `herdr agent
+     prompt` command the output prints, run the printed `wait-agent.sh`
+     command in the background and end your turn again. Otherwise relay
+     the question to the user.
+   - `-> timeout…`, or no block starting `TICKET <verdict>` → the agent did
+     not finish: read more with the `herdr pane read` command the output
+     gives, and report what you find. It is not done.
+   - A `TICKET <verdict>` block → if it names a PR/MR, check it before
+     trusting it: the PR/MR exists and has commits (`gh pr view <url> --json state,commits`
+     or `glab mr view <url>`). If not, the ticket is not done, whatever the
+     block says.
 
 4. Post one comment on the PR/MR with the TICKET block (`gh pr comment` or
    `glab mr note`, by the origin remote). Review and E2E already posted

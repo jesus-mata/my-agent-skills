@@ -12,14 +12,7 @@
 # stderr), así que se puede encadenar:  PANE=$(./split-pane.sh review right)
 #
 # No espera a que claude termine su turno: sólo confirma que el prompt entró.
-# Si hubo prompt, deja un watcher en background que avisa con una notificación
-# cuando el agente spliteado acaba. Con SPLIT_REPORT=1 además le manda el
-# resultado como prompt al pane que lanzó el split, para que su agente lo vea.
-#
-#   SPLIT_REPORT=1       activa el reporte al pane padre (desactivado por defecto)
-#   SPLIT_REPORT_TO      pane/agente al que reportar (por defecto, el de origen)
-#   SPLIT_REPORT_LINES   líneas del pane a incluir en el reporte (40)
-#   SPLIT_WATCH_MS       tope de la vigilancia en ms (3600000 = 1h)
+# Para recoger el resultado, wait-agent.sh <pane_id> en background.
 #
 set -euo pipefail
 
@@ -38,7 +31,6 @@ esac
 
 jq_() { python3 -c "import sys,json;print(json.load(sys.stdin)$1)"; }
 
-# Filtro del reporte y watcher, compartidos con spawn-ticket.sh.
 . "$(dirname "${BASH_SOURCE[0]}")/herdr-report.sh"
 
 # --- 1. pane de origen ------------------------------------------------------
@@ -67,7 +59,7 @@ herdr pane rename "$NEW_PANE" "$NAME" >/dev/null 2>&1 \
 # (agent_pane_busy si arrancas demasiado pronto), así que reintenta.
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   if herdr agent start "$NAME" --kind claude --pane "$NEW_PANE" --timeout 60000 \
-      -- --dangerously-skip-permissions >/dev/null 2>&1; then
+      -- --dangerously-skip-permissions --model opus >/dev/null 2>&1; then
     STARTED=1
     break
   fi
@@ -88,33 +80,13 @@ if [ -n "$PROMPT" ]; then
     # agent_prompt_stalled: el texto quedó escrito pero el Enter no entró.
     herdr pane send-keys "$NEW_PANE" Enter >/dev/null 2>&1 || true
   fi
-
-  # --- 6. vigilancia: herdr espera y le devuelve el resultado al pane padre --
-  # `agent wait` se suscribe a los eventos del servidor; no es un bucle de
-  # sondeo. Los detalles finos viven en herdr-report.sh.
-  WATCH_MS="${SPLIT_WATCH_MS:-3600000}"
-  REPORT_LINES="${SPLIT_REPORT_LINES:-40}"
-  REPORT_TO="${SPLIT_REPORT_TO:-$SRC_PANE}"
-  REPORT="${SPLIT_REPORT:-0}"   # desactivado por defecto: SPLIT_REPORT=1 lo activa
-  ( watch_and_report_ "$NAME" "$NEW_PANE" "$REPORT_TO" "$PROMPT" \
-      "$WATCH_MS" "$REPORT_LINES" "" "$REPORT" "$SLASH_PROMPT_FILE" ) >/dev/null 2>&1 &
-  disown
 fi
 
 echo "$NEW_PANE"
 {
   echo "  pane '$NAME' ($DIRECTION de $SRC_PANE), agente claude"
-  if [ -n "$PROMPT" ]; then
-    echo "  prompt:      $PROMPT"
-    case "$REPORT" in
-      1|true|yes|on|si|sí)
-        echo "  vigilando:   al terminar, el resultado se le manda a $REPORT_TO" ;;
-      *)
-        echo "  vigilando:   notificación al terminar (SPLIT_REPORT=1 para que además reporte a $REPORT_TO)" ;;
-    esac
-  fi
+  [ -z "$PROMPT" ] || echo "  esperar:     $HERDR_REPORT_DIR/wait-agent.sh $NAME    # en background"
   echo "  ver salida:  herdr pane read $NEW_PANE --source recent-unwrapped --lines 60"
-  echo "  esperar:     herdr agent wait $NAME    # sin --until: idle|done|blocked"
   echo "  seguir:      herdr agent prompt $NAME 'siguiente instrucción'"
   echo "  ir al pane:  herdr agent focus $NAME"
   echo "  cerrar:      herdr pane close $NEW_PANE"

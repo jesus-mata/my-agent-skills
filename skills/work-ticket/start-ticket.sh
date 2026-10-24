@@ -9,11 +9,16 @@
 #   ./start-ticket.sh '#42'
 #   ./start-ticket.sh https://github.com/org/repo/issues/42 ~/repo
 #
-# Vuelve en ~10 s. El resultado llega como prompt al pane que lo lanzó cuando el
-# agente del ticket imprime su línea `TICKET <veredicto>` — no antes: ese agente
-# termina turnos intermedios mientras esperan su review y su E2E.
+# Se lanza con el `run_in_background` del Bash tool: comprueba y lanza en
+# ~10 s, y luego espera (wait-agent.sh) hasta que el agente del ticket imprime
+# su línea `TICKET <veredicto>` — no antes: ese agente termina turnos
+# intermedios mientras esperan su review y su E2E. Al salir, Claude Code
+# despierta a quien lo lanzó y el reporte está en la salida.
 #
-#   TICKET_WATCH_MS   tope de la vigilancia en ms (18000000 = 5 h, ver abajo)
+# Si falla antes de lanzar, sale con un mensaje "start-ticket: ..." y sin
+# la línea "herdr: agent ..." que imprime wait-agent.sh.
+#
+#   TICKET_WATCH_MS   tope de la espera en ms (18000000 = 5 h, ver abajo)
 #
 set -euo pipefail
 
@@ -82,9 +87,9 @@ PROMPT=$(render_prompt_ "$SKILL_DIR/IMPLEMENT_PROMPT.md" \
   TICKET_ID="$TICKET_ID" SKILL_DIR="$SKILL_DIR")
 
 # 5 h = implementar (~1 h) + review (tope 1 h) + E2E (tope 2 h) + margen. Es sólo
-# un tope: el reporte llega en cuanto aparece la línea TICKET.
-export TICKET_WATCH_MS="${TICKET_WATCH_MS:-18000000}"
-export TICKET_REPORT=1
+# un tope: la espera acaba en cuanto aparece la línea TICKET.
+WATCH_MS="${TICKET_WATCH_MS:-18000000}"
 # Debe casar con la primera línea de FINAL OUTPUT en IMPLEMENT_PROMPT.md.
-export TICKET_DONE_RE='TICKET (DONE|FAIL|PARTIAL|BLOCKED) '
-exec "$SKILL_DIR/spawn-ticket.sh" "$TICKET_ID" "$PROMPT" "$CWD"
+DONE_RE='TICKET (DONE|FAIL|PARTIAL|BLOCKED) '
+NAME=$("$SKILL_DIR/spawn-ticket.sh" "$TICKET_ID" "$PROMPT" "$CWD")
+exec "$SKILL_DIR/wait-agent.sh" "$NAME" --timeout-ms "$WATCH_MS" --until-line "$DONE_RE"
