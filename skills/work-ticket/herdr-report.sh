@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# herdr-report.sh — utilidades compartidas por spawn-ticket.sh y split-pane.sh.
+# herdr-report.sh — utilidades compartidas por los scripts de la skill.
 # No se ejecuta directamente: se hace `source` desde ellos.
 #
 # Vive aparte porque el filtro de abajo costó tres correcciones (espacios duros,
 # caja de entrada tecleada, recorte del banner) y tener dos copias garantiza que
 # se separen.
+
+HERDR_REPORT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # clean_report_  (stdin -> stdout)
 # Deja sólo el último turno del agente: desde el prompt realmente enviado hasta
@@ -24,7 +26,7 @@ def chrome(line):
         return True
     if all(c in BOX + " " for c in s):
         return True
-    return s.startswith("Model:") or s.startswith("⏵⏵")
+    return s.startswith(("Model:", "⏵⏵", "✔ Update installed"))
 
 # La TUI separa con espacios duros (U+00A0), así que "❯ texto" no casa con un
 # espacio normal. Normalizamos antes de mirar nada.
@@ -71,8 +73,8 @@ sys.stdout.write("\n".join(lines))
 # command: el /e2e no se cargaba. Lo partimos: el comando va solo, en una línea
 # corta que la TUI sí reconoce, y el resto del prompt a un fichero que el agente
 # lee. Cualquier otro prompt se devuelve tal cual.
-# Deja el resultado en variables y no en stdout: llamada con $(...) la ruta del
-# fichero se quedaría en el subshell y el watcher no podría borrarlo.
+# Deja el resultado en variables y no en stdout, para que quien lo llama tenga
+# la ruta sin perderla en el subshell de un $(...).
 #   SLASH_PROMPT       prompt a mandar
 #   SLASH_PROMPT_FILE  fichero creado, o vacío si no hizo falta partir
 #   SLASH_PROMPT_MAX   longitud máxima de una línea sin partir (300)
@@ -95,6 +97,9 @@ slash_prompt_() {
   body="${prompt#"$cmd"}"
   dir="${TMPDIR:-/tmp}"; dir="${dir%/}/herdr-prompts"
   mkdir -p "$dir"
+  # Nadie borra estos ficheros al acabar (el lanzador vuelve antes de que el
+  # agente los lea), así que se purgan aquí los de más de un día.
+  find "$dir" -type f -mmin +1440 -delete 2>/dev/null || true
   SLASH_PROMPT_FILE=$(mktemp "${dir}/${cmd#/}.XXXXXX")
   printf '%s\n' "$body" > "$SLASH_PROMPT_FILE"
   SLASH_PROMPT="$cmd Your full instructions for this command are in $SLASH_PROMPT_FILE — read that whole file first and follow it."
@@ -121,60 +126,50 @@ sys.stdout.write(text)
 PY
 }
 
-# watch_and_report_ <agente> <pane> <pane-destino> <prompt> <watch-ms> <lineas> [nota] [reportar] [fichero-prompt] [fin-re]
+# read_turn_ <pane> <lineas>  (-> stdout)
+# Último turno del agente, limpio. Leemos de sobra y recortamos: pedir justo
+# <lineas> se comía la respuesta cuando el banner de bienvenida ocupaba media
+# foto, y `drop_prompt_echo_` quita el eco de un prompt largo.
+read_turn_() {
+  herdr pane read "$1" --source recent-unwrapped --lines $(($2 * 4)) 2>/dev/null \
+    | clean_report_ | drop_prompt_echo_
+}
+
+# wait_agent_ <agente|pane> <watch-ms> <lineas> [fin-re]  (-> stdout, código)
 #
-# [fichero-prompt] es el que creó slash_prompt_: se borra al salir, acabe como
-# acabe (turno terminado, bloqueado o timeout); el agente lo lee al empezar el
-# turno. Va en un trap EXIT, así que la función tiene que correr en su propio
-# subshell — que es como se lanza siempre.
+# Espera en primer plano a que el agente termine (o se bloquee, o se agote
+# <watch-ms>), avisa con una notificación e imprime su último turno. Quien lo
+# llama lo lanza en background (Bash `run_in_background`) y Claude Code le
+# despierta al salir: el resultado se recoge, no se le teclea a nadie. Antes un
+# watcher le escribía el reporte en la caja de entrada al pane padre, y eso
+# fallaba de mil maneras (padre a mitad de turno, Enter que no entraba, reporte
+# al pane equivocado).
 #
 # [fin-re] es una regex (ERE) que marca el final real del trabajo. Sin ella, el
 # primer turno terminado es el resultado. Con ella, un turno que acaba sin esa
 # línea no cuenta: el agente está esperando a otro (p.ej. el agente del ticket
 # acaba su turno mientras corre su review), así que esperamos a que lo despierten
-# y volvemos a mirar. Sin esto el padre recibía "terminó" con la fase 2 a medias.
+# y volvemos a mirar.
 #
-# Bloquea hasta que el agente termina (o se bloquea, o se agota <watch-ms>) y
-# avisa con una notificación. Si <reportar> es 1/true/yes/on, además le manda el
-# resultado como prompt al pane destino — también al agotarse el tiempo, para
-# que el destino no se quede esperando un reporte que nunca llega.
-# Pensada para lanzarse en background:
-#   ( watch_and_report_ ... ) >/dev/null 2>&1 & disown
-watch_and_report_() {
-  local name="$1" pane="$2" report_to="$3" prompt="$4"
-  local watch_ms="$5" report_lines="$6" note="${7:-}" do_report="${8:-0}"
-  local prompt_file="${9:-}" done_re="${10:-}"
-  local wait_out status result full prompt_short deadline left
+# Códigos: 0 terminó · 3 bloqueado esperando input · 1 timeout o agente perdido.
+wait_agent_() {
+  local target="$1" watch_ms="$2" report_lines="$3" done_re="${4:-}"
+  local info name pane wait_out status full deadline left rc
 
-  # La ruta se expande ya: el trap salta con la función terminada, cuando el
-  # `local` ya no existe y `set -u` lo daría por unbound.
-  [ -z "$prompt_file" ] || trap "rm -f $(printf '%q' "$prompt_file")" EXIT
-
-  # Nada de ${var,,}: macOS trae bash 3.2 y ahí es "bad substitution", que mata
-  # el watcher en silencio (y `bash -n` no lo ve, porque es error de ejecución).
-  case "$(printf '%s' "$do_report" | tr '[:upper:]' '[:lower:]')" in
-    1|true|yes|on|si|sí) do_report=1 ;;
-    *)                   do_report=0 ;;
-  esac
-
-  # El prompt puede ser un fichero entero — p.ej. spawn-ticket.sh X "$(cat plan.md)" —
-  # y repetirlo completo inunda al agente que recibe el reporte. Lo recortamos:
-  # el resumen sólo necesita recordar qué se pidió, no volver a pedirlo.
-  prompt_short=$(printf '%s' "$prompt" | REPORT_PROMPT_CHARS="${REPORT_PROMPT_CHARS:-400}" python3 -c '
-import os, sys
-limit = int(os.environ["REPORT_PROMPT_CHARS"])
-text = sys.stdin.read().strip()
-if len(text) > limit:
-    head = text[:limit].rsplit(" ", 1)[0]
-    text = head + " […+%d caracteres]" % (len(text) - len(head))
-# En una sola línea: un prompt multilínea rompía la lectura del resumen.
-sys.stdout.write(" ".join(text.split()))
-') || prompt_short="$prompt"   # si el recorte falla, mejor el prompt entero que nada
+  info=$(herdr agent get "$target" 2>/dev/null | python3 -c '
+import sys, json
+a = json.load(sys.stdin)["result"]["agent"]
+print(a.get("name") or "", a["pane_id"])' 2>/dev/null) || {
+    echo "herdr: no encuentro el agente '$target'"
+    return 1
+  }
+  name="${info% *}"; pane="${info##* }"
+  [ -n "$name" ] || name="$target"
 
   # Primero esperamos a ver el turno arrancar. Sin esto el wait de abajo casa el
-  # `idle` de ANTES del prompt y reporta con el agente aún pensando. Si el turno
+  # `idle` de ANTES del prompt y devuelve con el agente aún pensando. Si el turno
   # fue instantáneo no llegaremos a verlo: seguimos igual.
-  herdr agent wait "$name" --until working --timeout 30000 >/dev/null 2>&1 || true
+  herdr agent wait "$target" --until working --timeout 30000 >/dev/null 2>&1 || true
 
   deadline=$(( $(date +%s) + watch_ms / 1000 ))
   status="timeout"
@@ -184,22 +179,15 @@ sys.stdout.write(" ".join(text.split()))
 
     # Sin --until: el conjunto por defecto es idle|done|blocked. Importante no
     # estrecharlo — al terminar un turno claude aterriza en `done`, no en `idle`,
-    # así que un `--until idle` deja el watcher colgado para siempre.
-    wait_out=$(herdr agent wait "$name" --timeout "$left" 2>&1) || break
+    # así que un `--until idle` se queda colgado para siempre.
+    wait_out=$(herdr agent wait "$target" --timeout "$left" 2>&1) || break
 
     # El estado cambia un instante antes de que la TUI pinte la respuesta.
     sleep 2
     status=$(printf '%s' "$wait_out" \
       | python3 -c 'import sys,json;print(json.load(sys.stdin)["result"]["agent"]["agent_status"])' \
       2>/dev/null) || status="?"
-
-    # Leemos de sobra y recortamos al último turno: pedir justo $report_lines se
-    # comía la respuesta cuando el banner de bienvenida ocupaba media foto.
-    # `drop_prompt_echo_` quita el eco del prompt, que con un fichero como prompt
-    # se comía el reporte entero; la cabecera ya lleva la versión recortada.
-    full=$(herdr pane read "$pane" --source recent-unwrapped \
-             --lines $((report_lines * 4)) 2>/dev/null \
-           | clean_report_ | drop_prompt_echo_)
+    full=$(read_turn_ "$pane" "$report_lines")
 
     # Sin marca de fin, o bloqueado esperando input: este turno es el resultado.
     [ -n "$done_re" ] && [ "$status" != blocked ] || break
@@ -209,62 +197,39 @@ sys.stdout.write(" ".join(text.split()))
     status="timeout"
     left=$(( (deadline - $(date +%s)) * 1000 ))
     [ "$left" -gt 0 ] || break
-    herdr agent wait "$name" --until working --timeout "$left" >/dev/null 2>&1 || break
+    herdr agent wait "$target" --until working --timeout "$left" >/dev/null 2>&1 || break
   done
 
   if [ "$status" = timeout ]; then
-    # Al agotarse el tiempo puede que no hayamos leído nada todavía.
-    full=$(herdr pane read "$pane" --source recent-unwrapped \
-             --lines $((report_lines * 4)) 2>/dev/null \
-           | clean_report_ | drop_prompt_echo_)
+    full=$(read_turn_ "$pane" "$report_lines")
     # `agent wait` también falla si el agente desaparece (pane cerrado): no lo
     # llamemos timeout si el tope aún no se había agotado.
     if [ "$(date +%s)" -lt "$deadline" ]; then
       status="timeout: el wait falló antes del tope; ¿se cerró el pane o el agente?"
     else
-      status="timeout: sin línea final tras $((watch_ms / 60000)) min"
+      status="timeout: sin terminar tras $((watch_ms / 60000)) min"
     fi
   fi
-  result=$(printf '%s\n' "$full" | tail -n "$report_lines")
 
   case "$status" in
-    timeout*) herdr notification show "$name sin terminar" \
-                --body "sigue sin acabar tras $((watch_ms / 60000)) min" --sound request ;;
-    blocked) herdr notification show "$name bloqueado" \
-               --body "espera input en $pane" --sound request ;;
-    *)       if [ "$do_report" = 1 ]; then
-               herdr notification show "$name terminó" \
-                 --body "resultado enviado a $report_to" --sound done
-             else
-               herdr notification show "$name terminó" \
-                 --body "$pane · turno completado" --sound done
-             fi ;;
-  esac
+    timeout*) rc=1
+              herdr notification show "$name sin terminar" --body "$status" --sound request ;;
+    blocked)  rc=3
+              herdr notification show "$name bloqueado" --body "espera input en $pane" --sound request ;;
+    *)        rc=0
+              herdr notification show "$name terminó" --body "$pane · turno completado" --sound done ;;
+  esac >/dev/null 2>&1
 
-  # El reporte al pane padre va desactivado por defecto: despierta a ese agente y
-  # le consume contexto, y muchas veces basta con la notificación.
-  [ "$do_report" = 1 ] || return 0
-
-  # Si el destino está a mitad de turno, `--wait` casaría ESE turno y daríamos el
-  # envío por bueno sin haberlo mandado: el reporte se queda en la caja de
-  # entrada y se pierde. Esperamos a que se libere antes de escribirle.
-  herdr agent wait "$report_to" --timeout 300000 >/dev/null 2>&1 || true
-
-  # Un reporte multilínea entra en la TUI como "[Pasted text #N]" y el Enter no
-  # siempre pasa, así que confirmamos el envío y rescatamos con un Enter suelto.
-  if ! herdr agent prompt "$report_to" \
-"[herdr] el agente '$name' (pane $pane) terminó en estado '$status'.${note:+
-$note}
-Prompt que se le dio: $prompt_short
-
-Últimas $report_lines líneas de su pane:
-$result
-
-Para leer más: herdr pane read $pane --source recent-unwrapped --lines 200" \
-      --wait --until working --until idle --until done --timeout 20000 \
-      >/dev/null 2>&1; then
-    herdr pane send-keys "$report_to" Enter >/dev/null 2>&1 \
-      || herdr notification show "$name: no pude avisar a $report_to" \
-           --body "¿ese pane tiene un agente?" --sound request
-  fi
+  # La primera línea es fija para que quien lo lee sepa qué pasó sin adivinar.
+  echo "herdr: agent '$name' (pane $pane) -> $status"
+  echo
+  printf '%s\n' "$full" | tail -n "$report_lines"
+  echo
+  echo "Leer más:        herdr pane read $pane --source recent-unwrapped --lines 200"
+  echo "Responderle:     herdr agent prompt $name '<texto>'"
+  printf 'Seguir esperando: %s/wait-agent.sh %s --timeout-ms %s' \
+    "$HERDR_REPORT_DIR" "$name" "$watch_ms"
+  [ -z "$done_re" ] || printf ' --until-line %q' "$done_re"
+  echo "   # en background"
+  return "$rc"
 }

@@ -2,9 +2,11 @@
 # run-phase.sh <review|e2e> <ticket-id> <pr-num> [pane-id]
 #
 # Lanza una fase del ticket en un split, con su prompt y las TRIAGE RULES ya
-# rellenados, y con el reporte de vuelta activado. Lo usa el agente del ticket
-# (ver IMPLEMENT_PROMPT.md). Imprime el pane_id nuevo en stdout, como
-# split-pane.sh, y vuelve en ~7 s; el resultado le llega a quien lo lanzó.
+# rellenados, y espera a que termine (wait-agent.sh). Lo usa el agente del
+# ticket (ver IMPLEMENT_PROMPT.md), con el `run_in_background` del Bash tool:
+# al salir, Claude Code le despierta y el reporte de la fase está en la salida.
+#
+#   PHASE_WATCH_MS   tope de la espera (review 1 h, e2e 2 h)
 #
 #   ./run-phase.sh review 42 117
 #   ./run-phase.sh e2e 42 117 w3:p2      # split del pane de la review
@@ -36,7 +38,7 @@ $BODY
 $RULES"
     DIRECTION=right
     # Review + fixes + build + tests completos caben en 1 h.
-    : "${SPLIT_WATCH_MS:=3600000}"
+    : "${PHASE_WATCH_MS:=3600000}"
     ;;
   e2e)
     BODY=$(render_prompt_ "$SKILL_DIR/E2E_PROMPT.md" TICKET_ID="$TICKET_ID" PR_NUM="$PR_NUM")
@@ -49,16 +51,10 @@ $BODY
 $RULES"
     DIRECTION=down
     # El stack se levanta en frío al menos dos veces (inicio y pasada final).
-    : "${SPLIT_WATCH_MS:=7200000}"
+    : "${PHASE_WATCH_MS:=7200000}"
     ;;
   *) echo "fase inválida: '$PHASE'" >&2; usage ;;
 esac
 
-export SPLIT_WATCH_MS
-export SPLIT_REPORT=1
-# [pane-id] sólo dice de qué pane sale el split; el reporte va a quien lanzó la
-# fase. Sin esto split-pane.sh reporta al pane del split, y el reporte de la E2E
-# (que sale del pane de la review) acababa en la review, no en el agente del
-# ticket, que se quedaba esperando hasta agotar su tope.
-export SPLIT_REPORT_TO="${SPLIT_REPORT_TO:-${HERDR_PANE_ID:?run-phase.sh: falta HERDR_PANE_ID}}"
-exec "$SKILL_DIR/split-pane.sh" "$PHASE" "$DIRECTION" "$PROMPT" ${SRC_PANE:+"$SRC_PANE"}
+PANE=$("$SKILL_DIR/split-pane.sh" "$PHASE" "$DIRECTION" "$PROMPT" ${SRC_PANE:+"$SRC_PANE"})
+exec "$SKILL_DIR/wait-agent.sh" "$PANE" --timeout-ms "$PHASE_WATCH_MS"
