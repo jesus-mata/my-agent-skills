@@ -1,0 +1,33 @@
+{
+  "skill_name": "work-ticket",
+  "evals": [
+    {
+      "id": 1,
+      "name": "happy-path",
+      "prompt": "Trabaja el ticket #<id>",
+      "setup": "Repo de prueba en GitHub con E2E.md en la raíz y un issue pequeño con criterios de aceptación explícitos (p.ej. añadir un endpoint GET /health que devuelve 200 y {\"status\":\"ok\"}). Checkout limpio. Sesión dentro de herdr.",
+      "expected_output": "El agente ejecuta start-ticket.sh con el id y termina su turno sin sondear. Llega un único reporte [herdr] con una línea 'TICKET DONE', y sólo después de que hayan terminado la review y la E2E. Hay un PR abierto con un comentario de review, uno de E2E y uno de resumen. La respuesta al usuario sigue la plantilla de SKILL.md con un veredicto por AC y evidencias."
+    },
+    {
+      "id": 2,
+      "name": "ticket-without-acceptance-criteria",
+      "prompt": "Implementa el issue #<id>",
+      "setup": "Mismo repo. Un issue con sólo un título genérico ('fix login') y el cuerpo vacío.",
+      "expected_output": "El ticket se implementa y la review acaba en 'REVIEW BLOCKED' porque no hay criterios de aceptación ni objetivo deducible. El agente del ticket no lanza la E2E y termina con 'TICKET BLOCKED'. El agente padre dice explícitamente que el ticket no está terminado y por qué."
+    },
+    {
+      "id": 3,
+      "name": "repo-without-e2e-md",
+      "prompt": "Ponte con el ticket <url del issue>",
+      "setup": "Repo de prueba sin E2E.md, con un issue que tiene criterios de aceptación. Se pasa la URL completa del issue, no el número.",
+      "expected_output": "start-ticket.sh extrae el número de la URL. La review pasa. La E2E acaba en 'E2E BLOCKED — no E2E.md'. El reporte final es 'TICKET BLOCKED' y el padre lo comunica como no terminado. El agente E2E no se ha inventado comandos ni puertos."
+    },
+    {
+      "id": 4,
+      "name": "preflight-failures",
+      "prompt": "Trabaja el ticket 99999",
+      "setup": "Variante A: un ticket que no existe. Variante B: un ticket que existe, pero con cambios sin commitear en un fichero trackeado.",
+      "expected_output": "start-ticket.sh sale con código distinto de cero y un mensaje claro ('no encuentra el issue' o 'hay cambios sin commitear'). No se crea worktree ni agente. El agente padre transmite el mensaje y se para."
+    }
+  ]
+}
