@@ -50,6 +50,20 @@ def _int_or_null(d: dict, key: str, where: str) -> int | None:
     return v
 
 
+def _int(d: dict, key: str, where: str) -> int:
+    v = _field(d, key, where)
+    if isinstance(v, bool) or not isinstance(v, int):
+        raise _Invalid(f"{where}.{key}: expected an integer, got {_kind(v)}")
+    return v
+
+
+def _bool(d: dict, key: str, where: str) -> bool:
+    v = _field(d, key, where)
+    if not isinstance(v, bool):
+        raise _Invalid(f"{where}.{key}: expected true or false, got {_kind(v)}")
+    return v
+
+
 def _list(d: dict, key: str, where: str) -> list:
     v = _field(d, key, where)
     if not isinstance(v, list):
@@ -177,7 +191,32 @@ def _spec_review(d: dict, w: str) -> None:
     _opt_obj_list(d, "follow_ups", w, _follow_up)
 
 
+E2E_VERDICTS = ("PASS", "FAIL", "PARTIAL", "BLOCKED")
+AC_VERDICTS = ("PASS", "FAIL", "NOT VERIFIABLE")
+SEVERITIES = ("blocker", "high", "medium", "low")
+COLLATERAL_ACTIONS = ("fixed", "follow-up", "reported")
+
+
+def e2e_verdict(acs: list[dict]) -> str:
+    """The overall verdict the AC verdicts add up to: PASS only if every AC passed, FAIL if any
+    failed, else PARTIAL (some could not be verified)."""
+    verdicts = {a["verdict"] for a in acs}
+    if "FAIL" in verdicts:
+        return "FAIL"
+    if "NOT VERIFIABLE" in verdicts:
+        return "PARTIAL"
+    return "PASS"
+
+
 def _e2e(d: dict, w: str) -> None:
+    def ac(e: dict, p: str) -> None:
+        _int(e, "ticket", p)
+        _str(e, "ac", p)
+        _str(e, "criterion", p)
+        _bool(e, "derived", p)
+        _enum(e, "verdict", p, AC_VERDICTS)
+        _str(e, "evidence", p)
+
     def fixed(e: dict, p: str) -> None:
         _str(e, "title", p)
         _str(e, "commit", p)
@@ -186,9 +225,51 @@ def _e2e(d: dict, w: str) -> None:
         _str(e, "title", p)
         _str(e, "reason", p)
 
-    _str_list(d, "passed", w)
+    def collateral(e: dict, p: str) -> None:
+        _str(e, "title", p)
+        _enum(e, "severity", p, SEVERITIES)
+        _bool(e, "caused_by_spec", p)
+        _enum(e, "action", p, COLLATERAL_ACTIONS)
+        _str(e, "detail", p)
+
+    verdict = _enum(d, "verdict", w, E2E_VERDICTS)
+    blocked_by = _str(d, "blocked_by", w)
+    acs = _obj_list(d, "acs", w, ac)
     _obj_list(d, "fixed", w, fixed)
     _obj_list(d, "pending", w, pending)
+    _obj_list(d, "collateral", w, collateral)
+    _opt_obj_list(d, "follow_ups", w, _follow_up)
+    if "notes" in d:
+        _str_list(d, "notes", w)
+    if verdict == "BLOCKED":
+        if not blocked_by.strip():
+            raise _Invalid(f"{w}.blocked_by: a BLOCKED verdict must say what blocked it")
+        return
+    if not acs:
+        raise _Invalid(f"{w}.acs: a {verdict} verdict needs one entry per acceptance criterion "
+                       "tested (use BLOCKED with blocked_by when none could be tested)")
+    expected = e2e_verdict(acs)
+    if verdict != expected:
+        raise _Invalid(f"{w}.verdict: the AC verdicts add up to {expected!r}, not {verdict!r} "
+                       "(PASS only if every AC is PASS; any FAIL is FAIL; otherwise PARTIAL)")
+
+
+def _dedup(d: dict, w: str) -> None:
+    def match(e: dict, p: str) -> None:
+        _str(e, "id", p)
+        verdict = _enum(e, "verdict", p, ("COVERED", "NEW"))
+        issue = _int_or_null(e, "issue", p)
+        _str(e, "reason", p)
+        if verdict == "COVERED" and issue is None:
+            raise _Invalid(f"{p}.issue: a COVERED follow-up names the open issue covering it")
+
+    _obj_list(d, "matches", w, match)
+    groups = _list(d, "duplicates", w)
+    for i, group in enumerate(groups):
+        path = f"{w}.duplicates[{i}]"
+        if not isinstance(group, list) or len(group) < 2 or \
+                not all(isinstance(x, str) for x in group):
+            raise _Invalid(f"{path}: expected a list of two or more follow-up ids")
 
 
 validate_implement = _validator("implement", _implement)
@@ -197,6 +278,7 @@ validate_gate_fix = _validator("gate_fix", _gate_fix)
 validate_resolve = _validator("resolve", _resolve)
 validate_spec_review = _validator("spec_review", _spec_review)
 validate_e2e = _validator("e2e", _e2e)
+validate_dedup = _validator("dedup", _dedup)
 
 SCHEMAS: dict[str, Validator] = {
     "implement": validate_implement,
@@ -205,6 +287,7 @@ SCHEMAS: dict[str, Validator] = {
     "resolve": validate_resolve,
     "spec_review": validate_spec_review,
     "e2e": validate_e2e,
+    "dedup": validate_dedup,
 }
 
 _EXAMPLES: dict[str, dict] = {
@@ -246,10 +329,36 @@ _EXAMPLES: dict[str, dict] = {
             "acceptance": ["Exported dates follow the chosen locale"]}],
     },
     "e2e": {
-        "passed": ["User can export a report"],
-        "fixed": [{"title": "Export button disabled on load", "commit": "abc1234"}],
-        "pending": [{"title": "CSV encoding of emoji", "reason": "Needs product decision"}],
+        "verdict": "PARTIAL",
+        "blocked_by": "",
+        "acs": [
+            {"ticket": 12, "ac": "AC1", "criterion": "A user can export the report as CSV",
+             "derived": False, "verdict": "PASS",
+             "evidence": "e2e/screenshots/export-ac1.png"},
+            {"ticket": 13, "ac": "AC1", "criterion": "The export email reaches the user",
+             "derived": True, "verdict": "NOT VERIFIABLE",
+             "evidence": "needs the mail provider's sandbox, which E2E.md does not declare"},
+        ],
+        "fixed": [{"title": "AC1 #12: export button disabled on load", "commit": "abc1234"}],
+        "pending": [{"title": "#13 AC1 export email", "reason": "no mail sandbox"}],
+        "collateral": [{"title": "Console warning on the reports page", "severity": "low",
+                        "caused_by_spec": True, "action": "reported",
+                        "detail": "React key warning in ReportList"}],
+        "follow_ups": [],
+        "notes": ["Used the admin test user: E2E.md lists no plain user"],
     },
+}
+
+
+_EXAMPLES["dedup"] = {
+    "matches": [
+        {"id": "f1", "verdict": "COVERED", "issue": 31,
+         "reason": "#31 'Sessions never expire' is the same bug in src/auth/session.py"},
+        {"id": "f2", "verdict": "NEW", "issue": None,
+         "reason": "searched 'locale', 'export date format', src/export.py: nothing open"},
+        {"id": "f3", "verdict": "NEW", "issue": None, "reason": "may overlap #40 (date utils)"},
+    ],
+    "duplicates": [["f2", "f4"]],
 }
 
 

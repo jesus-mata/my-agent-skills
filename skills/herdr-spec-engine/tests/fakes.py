@@ -16,6 +16,7 @@ from spec_engine.ports import (
 
 # Absolute path of a result file inside a prompt: .../.herdr-spec/<run_id>.<stage>.json
 RESULT_PATH_RE = re.compile(r"(/[^\s`'\"<>()]*/\.herdr-spec/[^\s`'\"<>()/]+\.json)")
+INSTRUCTIONS_PATH_RE = re.compile(r"(/[^\s`'\"<>()]*/\.herdr-spec/[^\s`'\"<>()/]+\.prompt\.md)")
 
 PromptHandler = Callable[["FakeHerdr", str, str], None]
 
@@ -55,9 +56,16 @@ class FakeClock:
 
 
 def find_result_path(text: str) -> str | None:
-    """The first ``/abs/.../.herdr-spec/<name>.json`` path in a prompt, or None."""
+    """The first ``/abs/.../.herdr-spec/<name>.json`` path in a prompt, or None. A slash-command
+    prompt names its instructions file instead: the path is looked up in that file."""
     m = RESULT_PATH_RE.search(text)
-    return m.group(1) if m else None
+    if m:
+        return m.group(1)
+    m = INSTRUCTIONS_PATH_RE.search(text)
+    if m and os.path.exists(m.group(1)):
+        with open(m.group(1), encoding="utf-8") as f:
+            return find_result_path(f.read())
+    return None
 
 
 class FakeHerdr(_Recorder):

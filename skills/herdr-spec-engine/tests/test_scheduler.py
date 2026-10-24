@@ -6,12 +6,15 @@ from spec_engine.model import (
     EngineStatus, EscalationKind, EscalationStatus, Phase, RunStatus, Settings, Stage,
 )
 from tests.engine_harness import (
-    BRANCH, IMPLEMENTED, REVIEW_CLEAN, Harness, ticket,
+    BRANCH, DEDUP_NONE, IMPLEMENTED, REVIEW_CLEAN, Harness, ticket,
 )
 from tests.fakes import make_issue, ref
 
 SPEC_REVIEW_CLEAN = {"fixed": [], "hard": [], "not_fixed": []}
-E2E_OK = {"passed": ["flow works"], "fixed": [], "pending": []}
+E2E_OK = {"verdict": "PASS", "blocked_by": "", "collateral": [],
+          "acs": [{"ticket": 1, "ac": "AC1", "criterion": "flow works", "derived": False,
+                   "verdict": "PASS", "evidence": "out/flow.png"}],
+          "fixed": [], "pending": []}
 HARD = {"severity": "blocker", "title": "Race on save", "file": "src/save.py", "line": 3,
         "failure_scenario": "two saves lose one"}
 
@@ -371,6 +374,65 @@ class SchedulerTest(unittest.TestCase):
         self.assertEqual(h.run("s7-follow-ups").status, RunStatus.DONE)
         self.assertEqual(h.github.calls_to("create_issue"), [])
 
+    def test_e2e_tests_integrated_tickets_and_posts_its_verdict_on_the_spec_issue(self):
+        h = self.harness([ticket(1, klass="done"), ticket(2), ticket(3, klass="unrefined"),
+                          ticket(4, blockers=[3])]).start()
+        h.script_ticket("s7-ticket-2")
+        h.tick()
+        h.resolve(h.only_escalation().id, "skip-ticket")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=80)
+
+        e2e = [v for n, v in h.rendered if n == "e2e"][0]
+        self.assertEqual(e2e["tickets"], "- #1 Ticket 1\n- #2 Ticket 2")
+        self.assertEqual(e2e["not_integrated"], "- #3 Ticket 3 (skipped)\n- #4 Ticket 4 (skipped)")
+        self.assertEqual(h.run("s7-e2e").stage, Stage.E2E_REPORT)
+        [comment] = h.github.comments[7]
+        self.assertIn("E2E of spec #7 on `spec-7`", comment)
+        self.assertIn("Verdict: **PASS**", comment)
+        self.assertIn("| #1 | AC1 | flow works | PASS | out/flow.png |", comment)
+        self.assertIn("nothing was pushed", comment)
+        with open(h.store.paths.report) as f:
+            report = f.read()
+        self.assertIn("| #1 | AC1 | flow works | PASS | out/flow.png |", report)
+
+    @staticmethod
+    def e2e_prompted(h):
+        """Once the E2E agent was prompted: the next comment is the spec issue's."""
+        return lambda: bool(h.herdr.prompts.get("s7-e2e"))
+
+    def test_e2e_comment_failure_is_retried_and_posted_once(self):
+        h = self.harness([ticket(1)]).start()
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(self.e2e_prompted(h), max_ticks=80)
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.run_until(lambda: bool(h.open_escalations()), max_ticks=40)
+        esc = h.only_escalation()
+        self.assertEqual((esc.kind, esc.stage), (EscalationKind.BUDGET_EXHAUSTED, Stage.E2E_REPORT))
+        h.resolve(esc.id, "retry")
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=40)
+        self.assertEqual(len(h.github.comments[7]), 1)
+
+    def test_e2e_skipped_after_its_result_still_reports_it(self):
+        h = self.harness([ticket(1)]).start()
+        h.script_ticket("s7-ticket-1")
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.run_until(self.e2e_prompted(h), max_ticks=80)
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.github.fail_next("comment", RuntimeError("gh down"))
+        h.run_until(lambda: bool(h.open_escalations()), max_ticks=40)
+        h.resolve(h.only_escalation().id, "skip-ticket")
+        h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=40)
+        with open(h.store.paths.report) as f:
+            report = f.read()
+        self.assertIn("not posted on the spec issue: skipped", report)
+        self.assertIn("Verdict: **PASS**", report)
+
     # follow-ups -----------------------------------------------------------------------------
 
     def follow_ups_harness(self) -> Harness:
@@ -381,6 +443,7 @@ class SchedulerTest(unittest.TestCase):
         h.script_ticket("s7-ticket-1", review={**REVIEW_CLEAN, "follow_ups": [LEAK]})
         h.turn("s7-review", {**SPEC_REVIEW_CLEAN, "follow_ups": [LEAK, DEBT, LOCALE]})
         h.turn("s7-e2e", E2E_OK)
+        h.turn("s7-follow-ups", DEDUP_NONE)
         h.run_until(lambda: h.open_escalations(), max_ticks=80)
         return h
 
@@ -466,11 +529,104 @@ class SchedulerTest(unittest.TestCase):
         self.assertEqual([c["title"] for c in h.github.created],
                          ["Session never expires", "Export ignores locale"])
 
+    # follow-up dedup ------------------------------------------------------------------------
+
+    def dedup_harness(self, dedup=None, settings=None, before=None) -> Harness:
+        """Like ``follow_ups_harness``; #60 is open and #61 closed. ``dedup`` is the dedup
+        agent's result (None: it never answers); ``before(h)`` runs once E2E was prompted."""
+        h = self.harness([ticket(1)], settings=settings or Settings()).start()
+        h.github.add(make_issue(50, title="Old cache debt"))
+        h.github.add(make_issue(60, title="Sessions live forever"))
+        h.github.add(make_issue(61, title="Locale bug", state="CLOSED"))
+        h.script_ticket("s7-ticket-1", review={**REVIEW_CLEAN, "follow_ups": [LEAK]})
+        h.turn("s7-review", {**SPEC_REVIEW_CLEAN, "follow_ups": [LEAK, DEBT, LOCALE]})
+        h.turn("s7-e2e", E2E_OK)
+        if dedup is not None:
+            h.turn("s7-follow-ups", dedup)
+        if before:
+            h.run_until(lambda: bool(h.herdr.prompts.get("s7-e2e")), max_ticks=80)
+            before(h)
+        h.run_until(lambda: h.open_escalations(), max_ticks=120)
+        return h
+
+    def test_dedup_agent_marks_covered_follow_ups_already_open(self):
+        h = self.dedup_harness({"matches": [
+            {"id": "f1", "verdict": "COVERED", "issue": 60, "reason": "same expiry bug"},
+            {"id": "f3", "verdict": "NEW", "issue": None, "reason": "nothing open"}],
+            "duplicates": []})
+        prompt = [v for n, v in h.rendered if n == "dedup"][0]
+        self.assertIn("f1 [high] pre-existing: Session never expires", prompt["candidates"])
+        self.assertIn("f3 [medium] needs-decision: Export ignores locale", prompt["candidates"])
+        self.assertNotIn("f2", prompt["candidates"])  # already open by title: not asked
+        tab = [c for c in h.herdr.calls_to("create_tab") if c["label"] == "s7-follow-ups"]
+        self.assertEqual(len(tab), 1)
+        self.assertIn(h.run("s7-follow-ups").stage, (Stage.FOLLOW_UPS,))
+        self.assertEqual(len(h.herdr.closed_panes), 1)  # the dedup tab is closed after use
+        esc = h.only_escalation()
+        self.assertEqual(esc.summary, "1 follow-up issue(s) proposed by the reviews; create them?")
+        self.assertIn("already open as #60 (same expiry bug): not created again", esc.details)
+        h.resolve(esc.id, "create-all")
+        report = self.complete(h)
+        self.assertEqual([c["title"] for c in h.github.created], ["Export ignores locale"])
+        self.assertIn("#60", report)
+
+    def test_dedup_duplicates_merge_and_a_closed_issue_is_not_trusted(self):
+        h = self.dedup_harness({"matches": [
+            {"id": "f3", "verdict": "COVERED", "issue": 61, "reason": "locale bug"}],
+            "duplicates": [["f1", "f3"]]})
+        esc = h.only_escalation()
+        self.assertEqual(esc.summary, "1 follow-up issue(s) proposed by the reviews; create them?")
+        self.assertIn("merged duplicates: f3 Export ignores locale", esc.details)
+        self.assertIn("dedup: f3 covered by #61 ignored (not an open issue)",
+                      h.run("s7-follow-ups").notes)
+        h.resolve(esc.id, "create-all")
+        self.complete(h)
+        [created] = h.github.created
+        self.assertEqual(created["title"], "Session never expires")
+        self.assertIn("**Also reported as:** f3 Export ignores locale", created["body"])
+
+    def test_dedup_agent_that_never_answers_is_dropped(self):
+        h = self.dedup_harness(None, settings=Settings(dedup_timeout=60))
+        run = h.run("s7-follow-ups")
+        self.assertTrue(any("follow-up dedup dropped (no result after 60s)" in n
+                            for n in run.notes), run.notes)
+        self.assertIn("s7-follow-ups", h.herdr.interrupted)
+        esc = h.only_escalation()  # proposed on the title match alone; no other escalation
+        self.assertEqual(esc.kind, EscalationKind.FOLLOW_UPS)
+        self.assertIn("2 follow-up issue(s)", esc.summary)
+        h.resolve(esc.id, "discard")
+        self.assertIn("follow-up dedup dropped (no result after 60s)", self.complete(h))
+
+    def test_dedup_tab_failure_is_dropped_not_escalated(self):
+        from spec_engine.ports import HerdrError
+
+        def fail_tab(h):
+            h.herdr.fail_next("create_tab", HerdrError("internal", "no tab for you"))
+
+        h = self.dedup_harness(DEDUP_NONE, before=fail_tab)
+        esc = h.only_escalation()
+        self.assertEqual(esc.kind, EscalationKind.FOLLOW_UPS)
+        self.assertTrue(any("no tab for you" in n for n in h.run("s7-follow-ups").notes))
+
+    def test_dedup_invalid_result_is_retried_once_then_dropped(self):
+        h = self.harness([ticket(1)]).start()
+        h.script_ticket("s7-ticket-1", review={**REVIEW_CLEAN, "follow_ups": [LEAK]})
+        h.turn("s7-review", SPEC_REVIEW_CLEAN)
+        h.turn("s7-e2e", E2E_OK)
+        h.turn("s7-follow-ups", "not json")
+        h.turn("s7-follow-ups", {"matches": [{"id": "f1", "verdict": "COVERED"}]})
+        h.run_until(lambda: h.open_escalations(), max_ticks=120)
+        self.assertEqual(h.templates().count("result_retry"), 1)
+        self.assertEqual(h.only_escalation().kind, EscalationKind.FOLLOW_UPS)
+        self.assertTrue(any(n.startswith("follow-up dedup dropped (result_invalid")
+                            for n in h.run("s7-follow-ups").notes))
+
     def test_listing_open_issues_failing_is_retried(self):
         h = self.harness([ticket(1)]).start()
         h.script_ticket("s7-ticket-1", review={**REVIEW_CLEAN, "follow_ups": [LEAK]})
         h.turn("s7-review", SPEC_REVIEW_CLEAN)
         h.turn("s7-e2e", E2E_OK)
+        h.turn("s7-follow-ups", DEDUP_NONE)
         h.github.fail_next("open_issues", RuntimeError("HTTP 502"))
         h.run_until(lambda: h.open_escalations(), max_ticks=80)
         self.assertEqual(h.only_escalation().kind, EscalationKind.FOLLOW_UPS)

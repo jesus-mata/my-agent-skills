@@ -30,12 +30,14 @@ TEMPLATE_VARS = {
     "spec_review": {"spec_branch", "base"},
     "fix_implement": {"branch", "spec_branch", "finding"},
     "fix_review": {"spec_branch", "finding"},
-    "e2e": {"spec_branch"},
+    "e2e": {"spec_branch", "tickets", "not_integrated"},
+    "dedup": {"candidates"},
 }
 
 IMPLEMENTED = {"status": "implemented", "summary": "done", "denied_actions": []}
 REVIEW_CLEAN = {"fixed": [], "pending": [], "scope_creep": []}
 GATE_FIXED = {"summary": "fixed the gate"}
+DEDUP_NONE = {"matches": [], "duplicates": []}
 
 
 def ticket(number: int, blockers=(), klass: str = "agent", external=(), title: str = ""):

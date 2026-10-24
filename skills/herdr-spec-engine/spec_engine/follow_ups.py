@@ -1,9 +1,13 @@
 """Follow-ups: review findings that deserve their own issue instead of a fix in this spec.
 
-Ticket, fix and spec reviews report them in their result's ``follow_ups`` list. Once E2E is
+Ticket, fix and spec reviews (and E2E, for collateral it may not fix) report them in their
+result's ``follow_ups`` list. Once E2E is
 over the engine collects them (``collect``), merges duplicates found by several reviews, marks
 those already open on GitHub, and proposes the rest to the supervisor in one ``follow-ups``
-escalation. Nothing is created on GitHub until the user confirms (``create``).
+escalation. Before that, a read-only dedup agent searches the open issues for each proposed one
+(``candidates`` is its input, ``apply_dedup`` applies its verdicts): the title match alone misses
+an issue filed under other words. Nothing is created on GitHub until the user confirms
+(``create``).
 
 Each collected entry is the finding plus ``id`` (``f<k>``), ``found_by`` (run ids), ``state``
 (one of ``STATES``) and ``issue`` (``{"number", "url"}`` once created or found open, else None).
@@ -11,7 +15,7 @@ Each collected entry is the finding plus ``id`` (``f<k>``), ``found_by`` (run id
 from __future__ import annotations
 
 import re
-from typing import Iterable
+from typing import Callable, Iterable
 
 from .model import Plan, Run, RunKind
 from .ports import GitHub, OpenIssue
@@ -22,7 +26,7 @@ CREATED = "created"
 DISCARDED = "discarded"
 STATES = (PROPOSED, ALREADY_OPEN, CREATED, DISCARDED)
 
-REVIEW_KINDS = (RunKind.TICKET, RunKind.FIX, RunKind.SPEC_REVIEW)
+REVIEW_KINDS = (RunKind.TICKET, RunKind.FIX, RunKind.SPEC_REVIEW, RunKind.E2E)
 # Issues needing a decision go to a human; the rest need triage before any spec takes them.
 LABELS_BY_CATEGORY = {"needs-decision": ["ready-for-human"]}
 CATEGORY_TEXT = {
@@ -67,6 +71,51 @@ def proposed(entries: list[dict]) -> list[dict]:
     return [e for e in entries if e["state"] == PROPOSED]
 
 
+def candidates(entries: list[dict]) -> str:
+    """The proposed follow-ups as the dedup prompt lists them."""
+    out = []
+    for e in proposed(entries):
+        out.append(f"- {line(e)}")
+        out.append(f"  problem: {e.get('problem', '')}")
+        out.append(f"  why separate: {e.get('why_separate', '')}")
+    return "\n".join(out) or "none"
+
+
+def apply_dedup(entries: list[dict], result: dict,
+                open_issue: Callable[[int], OpenIssue | None]) -> list[str]:
+    """Apply a ``dedup`` result to ``entries`` in place; returns what was ignored, as notes.
+
+    ``COVERED`` makes a proposed follow-up ``already_open`` once ``open_issue(n)`` confirms the
+    issue is open (None: not open or unreadable → it stays proposed). Each ``duplicates`` group
+    keeps its first proposed follow-up, which takes over the others' ``found_by`` and titles
+    (``also``); the others leave the list. Unknown ids are ignored."""
+    by_id = {e["id"]: e for e in entries}
+    notes = []
+    for match in result.get("matches", []):
+        entry = by_id.get(match.get("id"))
+        if entry is None or entry["state"] != PROPOSED or match.get("verdict") != "COVERED":
+            continue
+        issue = open_issue(match["issue"])
+        if issue is None:
+            notes.append(f"dedup: {entry['id']} covered by #{match['issue']} ignored "
+                         "(not an open issue)")
+            continue
+        entry["state"] = ALREADY_OPEN
+        entry["issue"] = {"number": issue.number, "url": issue.url}
+        entry["covered_because"] = match.get("reason", "")
+    for group in result.get("duplicates", []):
+        ids = [i for i in dict.fromkeys(group) if i in by_id and by_id[i]["state"] == PROPOSED]
+        if len(ids) < 2:
+            continue
+        keep = by_id[ids[0]]
+        for other_id in ids[1:]:
+            other = by_id.pop(other_id)
+            entries.remove(other)
+            keep["found_by"] += [r for r in other["found_by"] if r not in keep["found_by"]]
+            keep.setdefault("also", []).append(f"{other_id} {other.get('title', '')}")
+    return notes
+
+
 def where(entry: dict) -> str:
     loc = entry.get("file", "")
     if entry.get("line") is not None:
@@ -87,8 +136,11 @@ def details(entries: list[dict]) -> str:
     for e in entries:
         out.append(line(e) + f" — found by {', '.join(e['found_by'])}")
         if e["state"] == ALREADY_OPEN:
-            out.append(f"    already open as #{e['issue']['number']}: not created again")
+            why = f" ({e['covered_because']})" if e.get("covered_because") else ""
+            out.append(f"    already open as #{e['issue']['number']}{why}: not created again")
             continue
+        if e.get("also"):
+            out.append(f"    merged duplicates: {', '.join(e['also'])}")
         out.append(f"    problem: {e.get('problem', '')}")
         out.append(f"    why separate: {e.get('why_separate', '')}")
     ids = " ".join(e["id"] for e in proposed(entries))
@@ -121,6 +173,8 @@ def issue_body(entry: dict, plan: Plan) -> str:
              f"**Severity:** {entry.get('severity', '')}"]
     if loc:
         lines.append(f"**Where:** `{loc}`")
+    if entry.get("also"):
+        lines.append(f"**Also reported as:** {'; '.join(entry['also'])}")
     lines += ["", "## Problem", "", entry.get("problem", ""),
               "", "## Why a separate issue", "", entry.get("why_separate", ""),
               "", "## Evidence", "", entry.get("evidence", "")]

@@ -19,7 +19,8 @@ DOCUMENTED = {
     "spec_review": (("spec_branch", "base"), "spec_review"),
     "fix_implement": (("branch", "spec_branch", "finding"), "implement"),
     "fix_review": (("spec_branch", "finding"), "review"),
-    "e2e": (("spec_branch",), "e2e"),
+    "e2e": (("spec_branch", "tickets", "not_integrated"), "e2e"),
+    "dedup": (("candidates",), "dedup"),
 }
 
 RESULT_PATH = "/repo/wt/s7-ticket-12/.herdr-spec/s7-ticket-12.implement.json"
@@ -141,7 +142,8 @@ class ContentTest(unittest.TestCase):
                             "/mattpocock-skills:tdd", "Never create worktrees",
                             "scope rule", "`out-of-scope`", "Never open issues yourself"],
             "fix_implement": ["/mattpocock-skills:tdd", "outward-denied", "denied_actions"],
-            "e2e": ["/e2e", "2 fix rounds", "Never create worktrees"],
+            "e2e": ["/e2e", "E2E.md", "not production", "Never create worktrees",
+                    "/mattpocock-skills:tdd", "cold stack", "NOT VERIFIABLE", "TEARDOWN"],
         }
         for name, needles in expected.items():
             text = self.render(name)
@@ -152,3 +154,27 @@ class ContentTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class SplitCommandTest(unittest.TestCase):
+    def test_leading_command_is_split_from_the_rest(self):
+        self.assertEqual(prompts.split_command("/e2e You are a sub Claude.\n\n1. Read it."),
+                         ("/e2e", "You are a sub Claude.\n\n1. Read it."))
+        self.assertEqual(prompts.split_command("/mattpocock-skills:tdd\nfix it"),
+                         ("/mattpocock-skills:tdd", "fix it"))
+
+    def test_text_without_a_leading_command_is_not_split(self):
+        for text in ("Run `/e2e` now", " /e2e indented", "/ not a command", "path /e2e"):
+            self.assertIsNone(prompts.split_command(text), text)
+
+    def test_command_line_is_one_line(self):
+        line = prompts.command_line("/e2e", "/repo/.herdr-spec/s7-e2e.e2e.prompt.md")
+        self.assertNotIn("\n", line)
+        self.assertTrue(line.startswith("/e2e Your full instructions"))
+        self.assertIn("/repo/.herdr-spec/s7-e2e.e2e.prompt.md", line)
+
+    def test_only_the_e2e_template_starts_with_a_command(self):
+        starts = {name: prompts.split_command(open(prompts.template_path(name)).read())
+                  for name in prompts.TEMPLATE_NAMES}
+        self.assertEqual({n for n, s in starts.items() if s}, {"e2e"})
+        self.assertEqual(starts["e2e"][0], "/e2e")

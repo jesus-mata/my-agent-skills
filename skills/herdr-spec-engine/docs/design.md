@@ -123,7 +123,22 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
 
   A finding without a `why_separate` is not a follow-up; low findings never are. Agents never
   open issues: the engine proposes them (see Spec phases).
-- **e2e** — `{"passed": [str], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason": str}]}`
+- **dedup** — `{"matches": [{"id": str, "verdict": "COVERED"|"NEW", "issue": int|null, "reason":
+  str}], "duplicates": [[str, str, ...]]}`; `COVERED` needs `issue`. The agent searches the open
+  issues by symptom, file or symbol and component (read-only); uncertain overlap is `NEW`.
+- **e2e** — `{"verdict": "PASS"|"FAIL"|"PARTIAL"|"BLOCKED", "blocked_by": str, "acs": [{"ticket": int,
+  "ac": str, "criterion": str, "derived": bool, "verdict": "PASS"|"FAIL"|"NOT VERIFIABLE",
+  "evidence": str}], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason":
+  str}], "collateral": [{"title": str, "severity": "blocker"|"high"|"medium"|"low",
+  "caused_by_spec": bool, "action": "fixed"|"follow-up"|"reported", "detail": str}],
+  "follow_ups": [FollowUp] (optional), "notes": [str] (optional)}`.
+  One `acs` entry per acceptance criterion of an integrated ticket (`derived` when the ticket had
+  none and the agent derived them from its goal). The validator checks the verdict adds up
+  (`results.e2e_verdict`): any `FAIL` AC → `FAIL`, else any `NOT VERIFIABLE` → `PARTIAL`, else
+  `PASS`, and a non-BLOCKED verdict has at least one AC; `BLOCKED` (preflight failed: no
+  `E2E.md`, production target, dirty tree) needs a non-blank `blocked_by`. Collateral is breakage
+  no AC covers; it never changes a verdict. Reports written before this schema (`passed: [str]`)
+  are still rendered.
 
 `results.SCHEMAS: dict[str, Validator]` keyed by the names above; `results.example(name) -> str`
 gives a JSON example for prompts.
@@ -162,7 +177,12 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
    tickets.
    A gate command running `unittest discover` or `pytest` adds a note that their exit 5 (no
    tests found) counts as a pass (see Merge queue, gate).
-6. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
+6. Warnings (`plan_warnings`, printed as `WARNING:` lines; they never make a plan unrunnable):
+   `agent` tickets whose body states no acceptance criteria (`has_acceptance_criteria`: a
+   heading starting "Acceptance" or "AC"/"ACs", a label line `Acceptance criteria:` / `**AC:**` /
+   `**ACs**`, or a Markdown task list) — review and E2E then derive criteria from the goal —, and
+   no `E2E.md` at the repository root, which ends the E2E phase BLOCKED.
+7. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
    there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
    supervisor can show it); exit 2 without writing on input errors (unreadable/malformed `--from`
@@ -172,7 +192,7 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
 else `main`, else `master` when the repo has no `main` (the engine creates the spec branch from it
 and the spec review diffs against it);
 `PlanTicket` = `{number, title, klass: agent|human|unrefined|done, blockers: [int],
-external_blockers: [str], labels: [str]}`.
+external_blockers: [str], labels: [str], has_acceptance: bool (default true)}`.
 
 ## Runs, stages, outcomes
 
@@ -184,8 +204,8 @@ A **Run** is one entity the scheduler advances. Kinds and their stage sequence:
 | `human` | `s<N>-human-<n>` | AWAIT_HUMAN |
 | `fix` | `s<N>-fix-<k>` | PROVISION → IMPLEMENT → VERIFY → REVIEW → INTEGRATE → CLOSE |
 | `spec_review` | `s<N>-review` | PROVISION_TAB → SPEC_REVIEW |
-| `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E |
-| `follow_ups` | `s<N>-follow-ups` | FOLLOW_UPS (no agent) |
+| `e2e` | `s<N>-e2e` | PROVISION_TAB → E2E → E2E_REPORT |
+| `follow_ups` | `s<N>-follow-ups` | COLLECT → DEDUP → FOLLOW_UPS (an agent only in DEDUP) |
 
 Run ids double as herdr agent names, branch names and tab labels (e.g. spec 7: `s7-ticket-12`,
 `s7-fix-1`, tabs `s7-review` / `s7-e2e`). herdr agent names are global to the herdr server, so the
@@ -225,7 +245,8 @@ or `{"type": "escalation"}`.
   `run_id_for(kind, spec=, ticket=, k=)` and `resolver_agent_name(run_id)` build names.
 - `Settings` = `max_agents=3, model="opus", stage_timeout=7200, retry_budget=1,
   gate_retry_budget=2, gate_timeout=1800, poll_seconds=10, settle_seconds=15,
-  unknown_grace=120, agent_ready_timeout=120, retry_backoff=5, retry_backoff_max=60` (seconds);
+  unknown_grace=120, agent_ready_timeout=120, retry_backoff=5, retry_backoff_max=60,
+  dedup_timeout=900` (seconds);
   `Settings.agent_args` gives the agent args.
 - Every dataclass has `to_dict()` / `from_dict()` round-tripping through JSON.
 
@@ -267,8 +288,11 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | AWAIT_HUMAN | raise `hitl-ticket` | resolved `done` → status `done` |
 | PROVISION_TAB | `Herdr.create_tab(cwd=repo_root, label=id)`, `start_agent`; awaits `agent_ready` | OK once registered → next |
 | SPEC_REVIEW | prompt `spec_review` | OK → `spec_phases.on_spec_review(result)` |
-| E2E | prompt `e2e` | OK → status `done`, then the follow-ups phase |
-| FOLLOW_UPS | once: `GitHub.open_issues()`, `follow_ups.collect` into `run.review["follow_ups"]`; none proposed → sync, else raise `follow-ups` | OK once a resolution decided them (or none were proposed) → status `done` |
+| E2E | prompt `e2e` (`tickets`: closed before the run, merged or done by a human; `not_integrated`: left open, skipped) | OK → E2E_REPORT (store the result) |
+| E2E_REPORT | `GitHub.comment(spec, …)`: verdict, the AC table, fixes, pending, collateral, notes (`stages.e2e_lines`, shared with `report.md`); `awaiting.done` records the posted comment, so a retry never posts twice | OK → status `done`, then the follow-ups phase |
+| COLLECT | once: `GitHub.open_issues()`, `follow_ups.collect` into `run.review["follow_ups"]` (sync) | OK → DEDUP; none proposed → straight to FOLLOW_UPS (no agent, no tab) |
+| DEDUP | opens tab `s<N>-follow-ups` in the repo root, starts its agent, prompts `dedup` (the proposed follow-ups) | OK → `follow_ups.apply_dedup`: `COVERED #n` → `already_open` once `GitHub.issue(n)` is confirmed OPEN (else ignored, with a note); each `duplicates` group keeps its first proposed follow-up (the others' `found_by` merged in, their titles in `also`) and drops the rest; then the tab is closed → FOLLOW_UPS. Never escalates: a failure (tab or start error, an invalid result after its one retry, blocked, unknown, lost twice, or no result after `dedup_timeout`, 15 min) drops the dedup with a run note — "matched by title only" — closes the tab and goes on to FOLLOW_UPS. A not-ready agent is waited for as usual |
+| FOLLOW_UPS | none proposed → sync, else raise `follow-ups` (a state saved before COLLECT existed collects here) | OK once a resolution decided them (or none were proposed) → status `done` |
 
 Generic outcomes, any agent-turn stage:
 - `RESULT_INVALID` → if `attempts[stage] < retry_budget`: prompt `result_retry` (path, error,
@@ -429,7 +453,8 @@ external blocker escalates only if it is still open (a `blocked_by` not among th
 tickets); a ticket closed on GitHub before it starts → `done`; one relabeled `ready-for-human`
 is replaced by a `human-<n>` run. Phase transitions: a skipped/left-open spec review → phase
 `fixes` with no fix runs; a non-`done` e2e → phase `follow_ups` all the same; a terminal
-follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
+follow-ups run → phase `complete`. The follow-ups run takes no agent slot (nothing else runs
+then; its dedup agent is the only one).
 
 ## Spec phases (`spec_phases.py`)
 
@@ -438,12 +463,15 @@ follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
   `fixes`. Fix runs go through the same scheduler and merge queue.
 - When all fix runs are terminal (or there were none): create the `e2e` run, phase `e2e`.
 - E2E terminal → create the `follow_ups` run, phase `follow_ups`. It collects the `follow_ups`
-  of every ticket, fix and spec review result, merges duplicates (same file and title, compared
-  lowercase with punctuation collapsed; `found_by` lists every run that reported it), and marks
-  those whose title matches an open GitHub issue `already_open`. The rest are `proposed`, with
-  ids `f1, f2, …`, in one `follow-ups` escalation; nothing is created without a resolution.
-  Created issues get a body with the spec, category, severity, location, problem, why separate,
-  evidence and acceptance criteria as a checklist. `needs-decision` ones are labeled
+  of every ticket, fix, spec review and E2E result, merges duplicates (same file and title,
+  compared lowercase with punctuation collapsed; `found_by` lists every run that reported it), and
+  marks those whose title matches an open GitHub issue `already_open`. A read-only dedup agent
+  then searches the open issues for the rest (DEDUP: a title match misses an issue filed under
+  other words) and may mark more `already_open` or merge duplicates; it never blocks the run. The
+  rest are `proposed`, with ids `f1, f2, …`, in one `follow-ups` escalation; nothing is created
+  without a resolution. Created issues get a body with the spec, category, severity, location,
+  merged duplicates (`Also reported as`), problem, why separate, evidence and acceptance criteria
+  as a checklist. `needs-decision` ones are labeled
   `ready-for-human`; the rest get no label (they need triage before a spec takes them). They
   are not sub-issues of the spec, so they never join its plan. Entry states: `proposed`,
   `already_open`, `created`, `discarded`.
@@ -452,7 +480,8 @@ follow-ups run → phase `complete`. The follow-ups run takes no agent slot.
   dismissed review findings),
   tickets already closed before the run, spec review fixed / hard findings still pending (their
   fix run not `done`) / not fixed (medium/low, with reasons), fix runs (merge commit, finding,
-  pending and dismissed review findings), e2e passed / fixed / pending, follow-ups created /
+  pending and dismissed review findings), e2e verdict, AC table, fixed / pending / collateral
+  (`stages.e2e_lines`; an e2e run that has a result but did not post it says so), follow-ups created /
   already open / discarded (with issue numbers), open or handed-off escalations, and
   "Spec branch `<b>` is local; nothing was pushed." A spec review or e2e that did not finish is
   reported as such.
@@ -470,6 +499,14 @@ writes it). A hard finding reaches the fix-run prompts through `stages.format_fi
 Every variable is text (or an int) by the time it reaches `render`: lists and findings are
 formatted by the stage. `tests/test_real_templates.py` drives whole scenarios through the real
 templates to keep both sides in step.
+A rendered prompt that starts with a slash command (only `e2e`, which starts with `/e2e`) is
+sent as that command alone on one line, `"/e2e Your full instructions for this command are in
+<file> — read that whole file first and follow it."`, with the rest of the prompt written to
+`<run_id>.<name>.prompt.md` beside the result file (`stages.as_sent`; kept, so a re-sent prompt
+still finds it). A multi-line prompt enters Claude's TUI as pasted text, which is never run as a
+command, and `/e2e` sets `disable-model-invocation`: asked for in the text, the Skill tool refuses
+it ("Do not replicate this skill's workflow by other means"). `preflight.COMMAND_SKILLS` lists
+these skills; any other skill a prompt asks for must allow model invocation.
 Every template states: you are a sub Claude instance started by herdr-spec-engine for spec #$spec;
 work only in your cwd; commit on your branch; never push, merge, rebase onto other branches, switch
 branches or deploy; end your turn by writing the result JSON to `$result_path` (example:
@@ -486,7 +523,8 @@ branches or deploy; end your turn by writing the result JSON to `$result_path` (
 | `spec_review` | `spec_branch`, `base` |
 | `fix_implement` | `branch`, `spec_branch`, `finding` (formatted title/file/line/failure scenario) |
 | `fix_review` | `spec_branch`, `finding` |
-| `e2e` | `spec_branch` |
+| `e2e` | `spec_branch`, `tickets`, `not_integrated` (pre-formatted bullet lists, `- #n title`, or `none`) |
+| `dedup` | `candidates` (`follow_ups.candidates`: each proposed follow-up's line, problem and why separate) |
 
 Implement, review, fix_implement and fix_review send the agent to the spec issue for its
 spec-wide rules (paths that must not change, off-limits dependencies); review and fix_review
@@ -504,8 +542,15 @@ merge in progress (never `git merge --abort`) so the human finishes it in the wo
 no design/API change), lists the rest it can fix within the spec as `hard`, never fixes a finding
 that would break an explicit spec scope rule (medium or higher → `out-of-scope` follow-up, low →
 `not_fixed` with the reason), **never creates worktrees or agents**; review, fix_review and
-spec_review list follow-ups by the categories above and never open issues themselves; e2e runs
-`/e2e`, fixes issues test-first with built-in subagents, max 2 fix rounds.
+spec_review list follow-ups by the categories above and never open issues themselves; e2e is sent
+as `/e2e` (see above) and carries work-ticket's E2E contract: preflight (clean spec branch,
+`E2E.md` present — never bootstrapped unattended —, a target proven not production, criteria read
+per ticket or derived from its goal, never from the diff), one scenario per criterion with
+mandatory evidence, ephemeral tests, triage on FAIL (test/env → fix the test; decision, shared
+logic or too large → `follow_ups`, AC stays FAIL; else fix, also when the cause predates the
+spec), collateral rules, at most 3 attempts per AC and 8 fixes, a final run of every scenario from
+a cold stack, and teardown of what it started. Its `follow_ups` join the reviews' (E2E is one of
+`follow_ups.REVIEW_KINDS`).
 
 ## Ports (`ports.py`)
 
@@ -568,7 +613,7 @@ class Clock(Protocol):
     def sleep(self, seconds: float) -> None: ...
 ```
 
-Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protocol 22):
+Adapter notes (verified against `herdr api schema --json`, herdr 0.9.5 / protocol 22):
 - **herdr_socket**: socket path = `HERDR_SOCKET_PATH`, else `~/.config/herdr/sessions/$HERDR_SESSION/herdr.sock`
   if `HERDR_SESSION` is set, else `~/.config/herdr/herdr.sock`. One connection per request: send
   `{"id","method","params"}\n`, read one line; `error {code, message}` → raise
@@ -580,7 +625,13 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
   {workspace_id[, force: true]}`; `tab.create {cwd, label, focus: false}` → `result.root_pane.pane_id`;
   `pane.split {target_pane_id, direction: "right", cwd, focus: false}` → `result.pane.pane_id`;
   `pane.close {pane_id}`; `agent.start {name, kind: "claude", pane_id, args, timeout_ms: 60000}`
-  (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text}`; `agent.get {target}` →
+  (timeout_ms must be in (3000, 300000]); `agent.prompt {target, text, wait: {until: ["working",
+  "blocked"], timeout_ms: 20000}}` confirms the turn started — on `agent_prompt_stalled` (text
+  typed, Enter lost) it sends `agent.send_keys ["Enter"]` and `agent.wait {until: ["working",
+  "blocked"], timeout_ms: 10000}`; still nothing raises `HerdrError("agent_prompt_stalled")`, a
+  port failure like any other. It never clears the input box: Esc interrupts a turn that started
+  late, and on an empty box opens Claude's rewind menu. `agent_blocked` (prompting a blocked agent)
+  is rejected by herdr before any input is sent, and raised as is; `agent.get {target}` →
   `result.agent.agent_status` (`agent_pane`: `result.agent.pane_id`) (error code `agent_not_found` → `missing`; any status outside the
   enum → `unknown`); `agent.read {target, source: "recent", lines, format: "text", strip_ansi:
   true}` → `result.read.text`; `agent.send_keys {target, keys: ["ctrl+c"]}`. `agent.prompt`,
@@ -610,6 +661,7 @@ Adapter notes (verified against `herdr api schema --json`, herdr 0.9.1 / protoco
 - **system**: `SubprocessShell.run` = `shell=True` in its own process group, stdout+stderr merged;
   on timeout the whole group is killed and it returns code 124 with the partial output plus a
   `command timed out` note. `SystemClock` = `time.time` / `time.sleep`.
+  `herdr_integration_status()` = output of `herdr integration status` (None if it cannot run).
 - **factory**: `adapters.real_ports(cwd, socket_path=None) -> Ports(herdr, git, github, shell,
   clock)`; `gh` runs in `cwd`.
 
@@ -628,10 +680,14 @@ engine abort <N>
 
 - The launcher exits 2 on Python older than 3.11, before importing anything.
 - `plan` and `run` start with `preflight.check(repo_root)`: `git`, `gh`, `herdr` and `claude` on
-  PATH, `gh auth status`, and the herdr socket (`default_socket_path`) are errors (one line each,
-  exit 2, nothing else runs); a skill of `preflight.REQUIRED_SKILLS` not found as a personal
-  (`$CLAUDE_CONFIG_DIR` or `~/.claude`), project (`<repo>/.claude/skills`) or enabled plugin skill
-  is a warning, since the lookup cannot see every place a skill can live. `/code-review` is
+  PATH, `gh auth status`, the herdr socket (`default_socket_path`), and the `claude:` line of
+  `herdr integration status` reading `outdated …` or `not installed …` are errors (one line each,
+  exit 2, nothing else runs) — that integration is the hook reporting an agent's real status,
+  which every stage waits on; an unreadable status is a warning. A skill of
+  `preflight.REQUIRED_SKILLS` not found as a personal (`$CLAUDE_CONFIG_DIR` or `~/.claude`),
+  project (`<repo>/.claude/skills`) or enabled plugin skill is a warning, since the lookup cannot
+  see every place a skill can live; so is a found skill outside `COMMAND_SKILLS` whose SKILL.md
+  sets `disable-model-invocation: true` (the agents ask for it in text, and it will not load). `/code-review` is
   built in. `tests/test_preflight.py` keeps `REQUIRED_SKILLS` equal to the skills the prompts
   invoke.
 - Durations accept `90`, `90s`, `30m`, `2h` (`cli.parse_duration`, also `--poll`).

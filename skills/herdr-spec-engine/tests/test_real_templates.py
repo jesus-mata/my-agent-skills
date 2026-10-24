@@ -14,8 +14,15 @@ from tests.engine_harness import BRANCH, GATE_FIXED, IMPLEMENTED, REVIEW_CLEAN, 
 
 HARD = {"severity": "blocker", "title": "Race on save", "file": "src/save.py", "line": 3,
         "failure_scenario": "two saves at once lose the first write"}
-E2E_OK = {"passed": ["export flow works"], "fixed": [{"title": "button label", "commit": "e2e1"}],
-          "pending": [{"title": "emoji in CSV", "reason": "needs a product decision"}]}
+E2E_OK = {"verdict": "PARTIAL", "blocked_by": "",
+          "acs": [{"ticket": 1, "ac": "AC1", "criterion": "export flow works", "derived": False,
+                   "verdict": "PASS", "evidence": "out/export.png"},
+                  {"ticket": 1, "ac": "AC2", "criterion": "emails the | export", "derived": True,
+                   "verdict": "NOT VERIFIABLE", "evidence": "no mail sandbox"}],
+          "fixed": [{"title": "button label", "commit": "e2e1"}],
+          "pending": [{"title": "emoji in CSV", "reason": "needs a product decision"}],
+          "collateral": [{"title": "slow list", "severity": "low", "caused_by_spec": False,
+                          "action": "reported", "detail": "2 s to render"}]}
 CONFLICT = MergeResult(ok=False, conflict=True, commit=None, output="CONFLICT (content)")
 REPR = re.compile(r"\{'|\['|<[a-zA-Z_.]+ object at")
 
@@ -90,6 +97,24 @@ class RealTemplateScenarioTest(unittest.TestCase):
             self.assertIn("Race on save (blocker)\nFile: src/save.py:3\n"
                           "Failure scenario: two saves at once lose the first write", text)
         self.assertIn("branch `s7-fix-1`", h.text_of("fix_implement"))
+        [comment] = h.github.comments[7]
+        self.assertIn("| #1 | AC1 | export flow works | PASS | out/export.png |", comment)
+        self.assertIn("emails the \\| export", comment)  # a | in a cell cannot split the row
+        self.assertIn("Verdict: **PARTIAL**", comment)
+        # /e2e has disable-model-invocation: it must arrive as a command on one short line,
+        # with the rest of the prompt in a file beside the result file.
+        sent = h.herdr.prompts["s7-e2e"][0]
+        instructions = os.path.join(h.root, ".herdr-spec", "s7-e2e.e2e.prompt.md")
+        self.assertEqual(sent, f"/e2e Your full instructions for this command are in "
+                               f"{instructions} — read that whole file first and follow it.")
+        with open(instructions) as f:
+            body = f.read()
+        self.assertEqual(body, h.text_of("e2e")[len("/e2e "):])
+        self.assertIn(os.path.join(h.root, ".herdr-spec", "s7-e2e.e2e.json"), body)
+        for name in ("implement", "review", "spec_review"):
+            self.assertFalse(h.herdr.prompts[{"implement": "s7-ticket-1", "review": "s7-ticket-1",
+                                              "spec_review": "s7-review"}[name]][0]
+                             .startswith("/"), name)
 
         self.assertEqual(h.state.phase, Phase.COMPLETE)
         self.assertEqual(h.status("s7-fix-1"), RunStatus.DONE)
@@ -100,6 +125,9 @@ class RealTemplateScenarioTest(unittest.TestCase):
                          "[low] log wording", "s7-fix-1 Race on save — merged as",
                          "export flow works", "button label (e2e1)",
                          "emoji in CSV: needs a product decision",
+                         "Verdict: **PARTIAL**",
+                         "| #1 | AC2 (derived) | emails the \\| export | NOT VERIFIABLE | no mail sandbox |",
+                         "[low] slow list — reported (pre-existing): 2 s to render",
                          "Spec branch `spec-7` is local; nothing was pushed."):
             self.assertIn(expected, report)
 
@@ -128,7 +156,8 @@ class RealTemplateScenarioTest(unittest.TestCase):
         h.turn("s7-resolve-ticket-3", {"verdict": "RESOLVED", "summary": "kept both"},
                also=lambda: h.git.set_unmerged(wt3, []))
         h.turn("s7-review", {"fixed": [], "hard": [], "not_fixed": []})
-        h.turn("s7-e2e", {"passed": [], "fixed": [], "pending": []})
+        h.turn("s7-e2e", {"verdict": "BLOCKED", "blocked_by": "no E2E.md", "acs": [],
+                          "fixed": [], "pending": [], "collateral": []})
         h.run_until(lambda: h.state.status is EngineStatus.COMPLETE, max_ticks=120)
 
         for name in ("implement", "result_retry", "verify_failed", "review", "gate_failed",

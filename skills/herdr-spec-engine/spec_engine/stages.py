@@ -17,13 +17,13 @@ from . import follow_ups, prompts, results
 from .model import (
     Escalation, EscalationKind, Outcome, Plan, Run, RunKind, RunState, RunStatus, Settings, Stage,
 )
-from .ports import Clock, Git, GitHub, Herdr, HerdrError, Shell
+from .ports import Clock, Git, GitHub, Herdr, HerdrError, OpenIssue, Shell
 from .store import Store
 from .transitions import ACTIONS, next_stage
 
 RESULT_DIR = ".herdr-spec"
 BLOCKED_SCREEN_LINES = 60
-TAB_KINDS = frozenset({RunKind.SPEC_REVIEW, RunKind.E2E})
+TAB_KINDS = frozenset({RunKind.SPEC_REVIEW, RunKind.E2E, RunKind.FOLLOW_UPS})
 # herdr errors meaning "the agent is not ready yet": the pane's shell is still booting
 # (agent.start) or the agent is not registered as active yet (agent.prompt). Waited for, never
 # charged to the retry budget, until ``Settings.agent_ready_timeout``.
@@ -172,6 +172,26 @@ def result_path(run: Run, name: str) -> str:
     return os.path.join(run.worktree or "", RESULT_DIR, f"{run.id}.{name}.json")
 
 
+def instructions_path(path: str) -> str:
+    """``<run_id>.<name>.prompt.md`` next to the result file ``path``."""
+    return path[:-len(".json")] + ".prompt.md" if path.endswith(".json") else path + ".prompt.md"
+
+
+def as_sent(path: str, text: str) -> str:
+    """The prompt as typed into the agent: a rendered prompt starting with a slash command goes
+    as that command on one short line, the rest written to the instructions file beside the
+    result file (kept, so a re-sent prompt still finds it)."""
+    split = prompts.split_command(text)
+    if split is None:
+        return text
+    command, rest = split
+    file = instructions_path(path)
+    os.makedirs(os.path.dirname(file), exist_ok=True)
+    with open(file, "w", encoding="utf-8") as f:
+        f.write(rest)
+    return prompts.command_line(command, file)
+
+
 def _remove(path: str) -> None:
     try:
         os.remove(path)
@@ -224,7 +244,7 @@ def send_turn(
         ensure_agent(ctx, run)
         agent = run.agent
     path = result_path(run, name)
-    text = ctx.render(template, **common_vars(ctx, path, schema), **vars)
+    text = as_sent(path, ctx.render(template, **common_vars(ctx, path, schema), **vars))
     _remove(path)
     ctx.herdr.prompt_agent(agent, text)
     now = ctx.now()
@@ -407,7 +427,7 @@ def reenter(ctx: Context, run: Run) -> None:
         run.awaiting = {"type": "queue"}
         if run.id not in ctx.state.queue:
             ctx.state.queue.append(run.id)
-    elif run.stage is Stage.CLOSE and aw.get("type") == "close":
+    elif (run.stage, aw.get("type")) in ((Stage.CLOSE, "close"), (Stage.E2E_REPORT, "e2e_report")):
         pass  # keep the finished steps: a retry never comments or closes twice
     else:
         run.awaiting = None
@@ -656,15 +676,183 @@ def _enter_spec_review(ctx: Context, run: Run) -> None:
               spec_branch=ctx.spec_branch, base=ctx.plan.base)
 
 
+def _e2e_tickets(ctx: Context) -> tuple[str, str]:
+    """Bullet lists of the tickets whose criteria E2E tests (closed before the run, merged or
+    done by a human) and of those it must not (left open, skipped)."""
+    integrated, not_integrated = [], []
+    runs = {r.ticket: r for r in ctx.state.runs.values()
+            if r.kind in (RunKind.TICKET, RunKind.HUMAN)}
+    for t in sorted(ctx.plan.tickets, key=lambda t: t.number):
+        run = runs.get(t.number)
+        line = f"- #{t.number} {t.title}"
+        if run is None or run.status is RunStatus.DONE:
+            (integrated if run is not None or t.klass.value == "done" else not_integrated
+             ).append(line)
+        else:
+            not_integrated.append(f"{line} ({run.status.value})")
+    return "\n".join(integrated) or "none", "\n".join(not_integrated) or "none"
+
+
 def _enter_e2e(ctx: Context, run: Run) -> None:
-    send_turn(ctx, run, template="e2e", schema="e2e", name="e2e", spec_branch=ctx.spec_branch)
+    tickets, not_integrated = _e2e_tickets(ctx)
+    send_turn(ctx, run, template="e2e", schema="e2e", name="e2e", spec_branch=ctx.spec_branch,
+              tickets=tickets, not_integrated=not_integrated)
 
 
-def _enter_follow_ups(ctx: Context, run: Run) -> None:
-    """Collect the reviews' follow-ups once, then propose the new ones to the supervisor."""
+def _enter_e2e_report(ctx: Context, run: Run) -> None:
+    run.awaiting = {"type": "e2e_report", "done": []}
+
+
+def _poll_e2e_report(ctx: Context, run: Run) -> Outcome | None:
+    """Post the E2E verdict and AC table on the spec issue, once (a retry never re-posts)."""
+    done = run.awaiting.setdefault("done", [])
+    if "comment" not in done:
+        ctx.github.comment(ctx.plan.spec, e2e_comment(ctx, run.review or {}))
+        done.append("comment")
+    return Outcome.OK
+
+
+def _cell(text: Any) -> str:
+    return " ".join(str(text).split()).replace("|", "\\|")
+
+
+def e2e_lines(result: dict) -> list[str]:
+    """The E2E result as Markdown: verdict, the AC table, fixes, pending, collateral, notes.
+    Shared by the spec issue comment and report.md. Results from before per-AC verdicts
+    (``passed``) are listed as they were."""
+    lines = [f"Verdict: **{result.get('verdict', 'unknown')}**"]
+    if result.get("blocked_by"):
+        lines.append(f"Blocked by: {result['blocked_by']}")
+    acs = result.get("acs") or []
+    if acs:
+        lines += ["", "| Ticket | AC | Criterion | Verdict | Evidence |",
+                  "| --- | --- | --- | --- | --- |"]
+        lines += [f"| #{a['ticket']} | {_cell(a['ac'])}{' (derived)' if a.get('derived') else ''}"
+                  f" | {_cell(a['criterion'])} | {a['verdict']} | {_cell(a['evidence'])} |"
+                  for a in acs]
+    if result.get("passed"):
+        lines += ["", f"Passed ({len(result['passed'])}):"] + [f"- {p}" for p in result["passed"]]
+    sections = (
+        ("Fixed", [f"{f['title']} ({f['commit']})" for f in result.get("fixed", [])]),
+        ("Pending", [f"{p['title']}: {p['reason']}" for p in result.get("pending", [])]),
+        ("Collateral", [f"[{c['severity']}] {c['title']} — {c['action']}"
+                        f"{'' if c.get('caused_by_spec') else ' (pre-existing)'}: {c['detail']}"
+                        for c in result.get("collateral", [])]),
+        ("Notes", list(result.get("notes", []))),
+    )
+    for title, items in sections:
+        if items or title in ("Fixed", "Pending"):
+            lines += ["", f"{title} ({len(items)}):"] + ([f"- {i}" for i in items] or ["- none"])
+    return lines
+
+
+def e2e_comment(ctx: Context, result: dict) -> str:
+    return "\n".join([f"E2E of spec #{ctx.plan.spec} on `{ctx.spec_branch}` by "
+                      f"herdr-spec-engine.", "", *e2e_lines(result), "",
+                      f"The spec branch `{ctx.spec_branch}` is local; nothing was pushed."])
+
+
+def _collect(ctx: Context, run: Run) -> None:
     if run.review is None:
         entries = follow_ups.collect(ctx.state.runs.values(), ctx.github.open_issues())
         run.review = {"follow_ups": entries}
+
+
+def _enter_collect(ctx: Context, run: Run) -> None:
+    """Collect the reviews' follow-ups once (merged, matched by title against open issues)."""
+    _collect(ctx, run)
+    run.awaiting = dict(SYNC)
+
+
+def _complete_collect(ctx: Context, run: Run, value: dict) -> None:
+    """Nothing left to propose: no dedup agent, straight to FOLLOW_UPS."""
+    goto_next(ctx, run)
+    if not follow_ups.proposed(run.review["follow_ups"]):
+        event(ctx, run, "stage", frm=run.stage.value, to=Stage.FOLLOW_UPS.value,
+              reason="nothing to dedup")
+        run.stage = Stage.FOLLOW_UPS
+
+
+def _enter_dedup(ctx: Context, run: Run) -> None:
+    """Open the dedup agent's tab and prompt it. Any failure but a not-ready wait drops the
+    dedup (``_dedup_fallback``): it only refines the title match, so it never blocks the run."""
+    try:
+        if run.pane_id is None:
+            run.pane_id = ctx.herdr.create_tab(ctx.repo_root, run.id)
+            run.worktree = ctx.repo_root
+            persist(ctx)
+        if run.agent is None:
+            start_run_agent(ctx, run)
+            persist(ctx)
+        send_turn(ctx, run, template="dedup", schema="dedup", name="dedup",
+                  candidates=follow_ups.candidates(run.review["follow_ups"]))
+    except PROGRAMMING_ERRORS:
+        raise
+    except Exception as exc:  # noqa: BLE001
+        since = (run.ready_wait or {}).get("since", ctx.now())
+        if is_not_ready(exc) and ctx.now() - since < ctx.settings.agent_ready_timeout:
+            raise  # port_failure waits for the agent, uncharged
+        _dedup_fallback(ctx, run, f"{type(exc).__name__}: {exc}")
+
+
+def _poll_dedup(ctx: Context, run: Run) -> Outcome | None:
+    if run.awaiting.get("type") == "sync":
+        return Outcome.OK
+    outcome = poll_turn(ctx, run)
+    if outcome is None:
+        if ctx.now() - run.stage_started_at > ctx.settings.dedup_timeout:
+            _dedup_fallback(ctx, run, f"no result after {ctx.settings.dedup_timeout:g}s")
+            return Outcome.OK
+        return None
+    if outcome is Outcome.OK:
+        return outcome
+    if outcome is Outcome.RESULT_INVALID and can_retry(ctx, run):
+        return outcome  # the generic retry prompt
+    if outcome is Outcome.AGENT_LOST and can_retry(ctx, run):
+        return outcome  # the generic re-provision and resend
+    _dedup_fallback(ctx, run, f"{outcome.value}: {run.awaiting.get('error', '')}".rstrip(": "))
+    return Outcome.OK
+
+
+def _dedup_fallback(ctx: Context, run: Run, reason: str) -> None:
+    run.notes.append(f"follow-up dedup dropped ({reason}); matched by title only")
+    event(ctx, run, "dedup_dropped", reason=reason)
+    _close_dedup_tab(ctx, run)
+    run.awaiting = {"type": "sync", "value": {}}
+
+
+def _close_dedup_tab(ctx: Context, run: Run) -> None:
+    if run.agent:
+        best_effort(ctx, run, "interrupt", lambda: ctx.herdr.interrupt_agent(run.agent))
+    if run.pane_id:
+        best_effort(ctx, run, "close dedup tab", lambda: ctx.herdr.close_pane(run.pane_id))
+    run.agent = run.pane_id = None
+
+
+def _complete_dedup(ctx: Context, run: Run, value: dict) -> None:
+    """Apply the dedup verdicts; an issue that cannot be confirmed open is not trusted."""
+
+    def open_issue(number: int) -> OpenIssue | None:
+        try:
+            issue = ctx.github.issue(number)
+        except PROGRAMMING_ERRORS:
+            raise
+        except Exception:  # noqa: BLE001 - unconfirmed: the follow-up stays proposed
+            return None
+        if issue.state != "OPEN":
+            return None
+        return OpenIssue(number=issue.number, title=issue.title, url=issue.url)
+
+    if value:
+        run.notes += follow_ups.apply_dedup(run.review["follow_ups"], value, open_issue)
+        _close_dedup_tab(ctx, run)
+    goto_next(ctx, run)
+
+
+def _enter_follow_ups(ctx: Context, run: Run) -> None:
+    """Propose the new follow-ups to the supervisor (collected by COLLECT; a state saved
+    before that stage existed collects here)."""
+    _collect(ctx, run)
     entries = run.review["follow_ups"]
     new = follow_ups.proposed(entries)
     if not new:
@@ -693,6 +881,9 @@ HANDLERS: dict[Stage, Handler] = {
     Stage.PROVISION_TAB: Handler(_enter_provision_tab, _poll_agent_ready),
     Stage.SPEC_REVIEW: Handler(_enter_spec_review, poll_turn, _store_result),
     Stage.E2E: Handler(_enter_e2e, poll_turn, _store_result),
+    Stage.E2E_REPORT: Handler(_enter_e2e_report, _poll_e2e_report),
+    Stage.COLLECT: Handler(_enter_collect, _poll_sync, _complete_collect),
+    Stage.DEDUP: Handler(_enter_dedup, _poll_dedup, _complete_dedup),
     Stage.FOLLOW_UPS: Handler(_enter_follow_ups, _poll_synced),
 }
 

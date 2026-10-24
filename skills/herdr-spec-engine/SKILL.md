@@ -15,7 +15,7 @@ You are the **supervisor** of a spec run. The engine owns every transition: it c
    - `--branch B` (default `spec-<N>`), `--base B` (default `main`, else `master`).
    - `--gate CMD`, repeatable. Without it the gate comes from a `## Gate` section of the spec body, else is discovered from the repo's build files (design.md "Plan").
    - `--from FILE` for specs without sub-issues. Keep FILE outside the repo: an untracked file in the repo root blocks every merge as `repo-dirty`.
-2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands with their source, and any gate warning (e.g. the `unittest discover` exit-5 one: suggest the printed guard to the user). Get their confirmation.
+2. Show the user the printed graph, the class of each ticket, external blockers, unrefined tickets, the spec branch and the gate commands with their source, and every `WARNING` or gate note (e.g. the `unittest discover` exit-5 one: suggest the printed guard to the user). Tickets without acceptance criteria: the user may add them before the run, since review and E2E otherwise derive them from each ticket's goal. No `E2E.md`: the E2E phase will end BLOCKED unless the user adds one before the run gets there. Get their confirmation.
 3. Exit 1 means unrefined tickets or a cycle. Have the user fix labels (`ready-for-agent` / `ready-for-human`) or blockers, or pass `--gate` (or add a `## Gate` section to the spec body) if the gate is wrong or empty, then re-run `plan` until it exits 0 and the user confirms.
 
 # 2. Start the engine
@@ -35,7 +35,7 @@ Loop until COMPLETE:
    - **3 `ENGINE NOT RUNNING`**: the engine died or was stopped. Unless the user stopped it, re-run step 2.2 in the same pane; `engine run <N>` resumes from saved state. Then go to 1.
    - **1** (watch timeout): go to 1.
 
-Resolve with `<SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`, using only an action the escalation lists (exit 0 = queued; exit 2 = unknown id or action not allowed, and it prints the allowed ones). The engine applies it on its next tick. Read an agent's screen with `herdr agent read <agent> --source recent --lines 120`; engine agents, their branches and tabs are named after their run: `s<N>-ticket-<n>`, `s<N>-fix-<k>`, `s<N>-review`, `s<N>-e2e` (the last run, `s<N>-follow-ups`, has no agent), merge resolvers `s<N>-resolve-<run>` (e.g. `s7-resolve-ticket-12`). `<SKILL_DIR>/engine status <N>` (`--json` for the raw state) shows every run, the merge queue and all unresolved escalations.
+Resolve with `<SKILL_DIR>/engine resolve <N> <id> <action> [--note TEXT]`, using only an action the escalation lists (exit 0 = queued; exit 2 = unknown id or action not allowed, and it prints the allowed ones). The engine applies it on its next tick. Read an agent's screen with `herdr agent read <agent> --source recent --lines 120`; engine agents, their branches and tabs are named after their run: `s<N>-ticket-<n>`, `s<N>-fix-<k>`, `s<N>-review`, `s<N>-e2e`, `s<N>-follow-ups` (a short-lived read-only agent that checks the follow-ups against open issues; it never escalates and its tab closes when done), merge resolvers `s<N>-resolve-<run>` (e.g. `s7-resolve-ticket-12`). `<SKILL_DIR>/engine status <N>` (`--json` for the raw state) shows every run, the merge queue and all unresolved escalations.
 
 Every kind also allows `hand-to-human`: use it whenever you are waiting on the user, so `watch` stops reporting the escalation; resolve it later with another action when the user reports back.
 
@@ -51,13 +51,13 @@ Every kind also allows `hand-to-human`: use it whenever you are waiting on the u
 | `unrefined-ticket` | Ask the user to label the ticket, or whether to skip it. | `hand-to-human`, later `relabeled` / `skip-ticket` |
 | `external-blocker` | Tell the user which outside issue blocks it. Once closed, or if the user says skip: | `hand-to-human`, later `cleared` / `skip-ticket` |
 | `repo-dirty` | Show the user `git status` of the repo root; it must be on the spec branch and clean. Leave their changes for them to commit or stash, then: | `hand-to-human`, later `retry` |
-| `follow-ups` | After E2E: the reviews found work that belongs in separate issues (details list `f1, f2, …` with category, severity, problem and why separate; ones already open on GitHub are marked and never re-created). Show the user the list and ask which to create. Never create them without the user's answer. | `create-all` / `create-selected --note "f1 f3"` / `discard`; `hand-to-human` while waiting |
+| `follow-ups` | After E2E: the reviews found work that belongs in separate issues (details list `f1, f2, …` with category, severity, problem and why separate; ones already open on GitHub — matched by title, or found by the dedup agent, with its reason — are marked and never re-created; merged duplicates are listed under the one kept). Show the user the list and ask which to create. Never create them without the user's answer. | `create-all` / `create-selected --note "f1 f3"` / `discard`; `hand-to-human` while waiting |
 
 `skip-ticket` drops a ticket and everything it blocks; issue it only when the user chooses it. A handed-off escalation disappears from `watch`; track it yourself and resolve it when the user reports back (`engine status <N>` lists it).
 
 # 4. Finish
 
-On `COMPLETE`, relay `report.md` (printed by `watch`) to the user: tickets done, left open and skipped with reasons, pending review findings and dismissed ones (judged false positives by the reviewer; they never keep a ticket open), spec review fixed / still-pending hard / not fixed findings, fix runs, E2E passed / fixed / pending, follow-ups created / already open / discarded (with issue links), and any open or handed-off escalations. The spec branch is local and nothing was pushed; push or open a PR only when the user asks. The spec review and E2E tabs stay open for inspection.
+On `COMPLETE`, relay `report.md` (printed by `watch`) to the user: tickets done, left open and skipped with reasons, pending review findings and dismissed ones (judged false positives by the reviewer; they never keep a ticket open), spec review fixed / still-pending hard / not fixed findings, fix runs, the E2E verdict (PASS, FAIL, PARTIAL or BLOCKED with its reason) with the per-criterion table and its fixed / pending / collateral (the engine already posted it on the spec issue), follow-ups created / already open / discarded (with issue links), and any open or handed-off escalations. The spec branch is local and nothing was pushed; push or open a PR only when the user asks. The spec review and E2E tabs stay open for inspection.
 
 # Stopping
 

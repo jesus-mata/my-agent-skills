@@ -27,6 +27,9 @@ class Stage(str, Enum):
     PROVISION_TAB = "provision_tab"
     SPEC_REVIEW = "spec_review"
     E2E = "e2e"
+    E2E_REPORT = "e2e_report"
+    COLLECT = "collect"
+    DEDUP = "dedup"
     FOLLOW_UPS = "follow_ups"
 
 
@@ -122,8 +125,8 @@ STAGES_BY_KIND: dict[RunKind, tuple[Stage, ...]] = {
         Stage.REVIEW, Stage.INTEGRATE, Stage.CLOSE,
     ),
     RunKind.SPEC_REVIEW: (Stage.PROVISION_TAB, Stage.SPEC_REVIEW),
-    RunKind.E2E: (Stage.PROVISION_TAB, Stage.E2E),
-    RunKind.FOLLOW_UPS: (Stage.FOLLOW_UPS,),
+    RunKind.E2E: (Stage.PROVISION_TAB, Stage.E2E, Stage.E2E_REPORT),
+    RunKind.FOLLOW_UPS: (Stage.COLLECT, Stage.DEDUP, Stage.FOLLOW_UPS),
 }
 
 
@@ -199,6 +202,9 @@ class PlanTicket(_Serialisable):
     blockers: list[int] = field(default_factory=list)
     external_blockers: list[str] = field(default_factory=list)
     labels: list[str] = field(default_factory=list)
+    # Whether the issue body states acceptance criteria (a heading or label naming them, or a
+    # task list). Without them review and E2E derive criteria from the ticket's goal.
+    has_acceptance: bool = True
 
     @classmethod
     def from_dict(cls, d: dict[str, Any]) -> PlanTicket:
@@ -209,6 +215,7 @@ class PlanTicket(_Serialisable):
             blockers=[int(b) for b in d.get("blockers", [])],
             external_blockers=list(d.get("external_blockers", [])),
             labels=list(d.get("labels", [])),
+            has_acceptance=bool(d.get("has_acceptance", True)),
         )
 
 
@@ -253,6 +260,8 @@ class Settings(_Serialisable):
     # Spacing of port-error retries: retry_backoff, doubling per attempt, capped.
     retry_backoff: float = 5
     retry_backoff_max: float = 60
+    # The follow-up dedup agent only searches issues; past this it is dropped, never escalated.
+    dedup_timeout: float = 900
 
     @property
     def agent_args(self) -> list[str]:

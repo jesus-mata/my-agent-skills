@@ -17,6 +17,11 @@ DEFAULT_TIMEOUT = 30.0
 AGENT_START_TIMEOUT_MS = 60_000
 AGENT_STATUSES = frozenset({"idle", "working", "blocked", "done", "unknown"})
 AGENT_NOT_FOUND = "agent_not_found"
+PROMPT_STALLED = "agent_prompt_stalled"
+# A prompt is confirmed once the agent is seen working (or blocked on a dialog it raised).
+PROMPT_STARTED = ("working", "blocked")
+PROMPT_WAIT_MS = 20_000
+STALL_RESCUE_MS = 10_000
 
 
 def default_socket_path(env: dict[str, str] | None = None) -> str:
@@ -151,7 +156,32 @@ class SocketHerdr:
         }, timeout=AGENT_START_TIMEOUT_MS / 1000 + 30)
 
     def prompt_agent(self, name: str, text: str) -> None:
-        self.request("agent.prompt", {"target": name, "text": text})
+        """Submit ``text`` and confirm the turn started.
+
+        herdr answers ``agent_prompt_stalled`` when the text was typed but no turn started (the
+        TUI dropped the Enter of a multi-line paste): press Enter once more and wait for the
+        turn. Still nothing → ``agent_prompt_stalled``. The input box is not cleared: Esc would
+        interrupt a late-starting turn, and on an empty box it opens Claude's rewind menu."""
+        try:
+            self.request("agent.prompt", {
+                "target": name, "text": text,
+                "wait": {"until": list(PROMPT_STARTED), "timeout_ms": PROMPT_WAIT_MS},
+            }, timeout=PROMPT_WAIT_MS / 1000 + 10)
+            return
+        except HerdrError as e:
+            if e.code != PROMPT_STALLED:
+                raise
+        self.request("agent.send_keys", {"target": name, "keys": ["Enter"]})
+        try:
+            self.request("agent.wait", {
+                "target": name, "until": list(PROMPT_STARTED), "timeout_ms": STALL_RESCUE_MS,
+            }, timeout=STALL_RESCUE_MS / 1000 + 10)
+        except HerdrError as e:
+            if e.code in (AGENT_NOT_FOUND, "connection_failed"):
+                raise
+            raise HerdrError(PROMPT_STALLED,
+                             f"{name}: no turn started after the prompt and a second Enter "
+                             f"({e})") from e
 
     def agent_status(self, name: str) -> AgentStatus:
         try:

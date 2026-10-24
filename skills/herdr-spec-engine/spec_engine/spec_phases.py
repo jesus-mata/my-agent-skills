@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from . import follow_ups
 from .model import EscalationStatus, Phase, Run, RunKind, RunStatus, run_id_for
-from .stages import format_finding, pending_spec_findings, ticket_title
+from .stages import e2e_lines, format_finding, pending_spec_findings, ticket_title
 
 if TYPE_CHECKING:
     from .scheduler import Engine
@@ -202,15 +202,11 @@ def _e2e_section(runs: list[Run]) -> list[str]:
     out = ["## E2E", ""]
     if run is None:
         return out + ["- not run", ""]
-    if run.status is not RunStatus.DONE:
+    if run.review is None:
         return out + [f"- did not finish: {run.status.value}{_reason(run)}", ""]
-    result = run.review or {}
-    passed = list(result.get("passed", []))
-    fixed = [f"{f['title']} ({f['commit']})" for f in result.get("fixed", [])]
-    pending = [f"{p['title']}: {p['reason']}" for p in result.get("pending", [])]
-    return out + [f"Passed ({len(passed)}):", *_bullets(passed),
-                  "", f"Fixed ({len(fixed)}):", *_bullets(fixed),
-                  "", f"Pending ({len(pending)}):", *_bullets(pending), ""]
+    if run.status is not RunStatus.DONE:
+        out += [f"- not posted on the spec issue: {run.status.value}{_reason(run)}", ""]
+    return out + e2e_lines(run.review) + [""]
 
 
 def _follow_ups_section(runs: list[Run]) -> list[str]:
@@ -237,6 +233,8 @@ def _follow_ups_section(runs: list[Run]) -> list[str]:
             "", f"Discarded ({len(discarded)}):", *_bullets(discarded)]
     if undecided:
         out += ["", f"Not decided ({len(undecided)}):", *_bullets(undecided)]
+    if run.notes:
+        out += ["", "Notes:", *_bullets(run.notes)]
     return out + [""]
 
 
