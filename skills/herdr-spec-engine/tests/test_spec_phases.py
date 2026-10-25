@@ -93,7 +93,7 @@ class SpecPhasesTest(unittest.TestCase):
             "Fixed in review (1):\n- [high] Off by one (f1)",
             "Hard findings still pending (1):\n- [high] Leaky cache (src/cache.py) — s7-fix-2 "
             "skipped — skipped by supervisor (budget-exhausted)",
-            "Not fixed, medium/low (2):\n- [medium] Naming\n"
+            "Not fixed (2):\n- [medium] Naming\n"
             "- [low] CI skips tests — out of scope: nothing outside src/ changes\n\n## Fix runs",
             "- s7-fix-1 Race on save — merged as c2",
             "  - finding: Race on save (blocker); File: src/save.py:3; "

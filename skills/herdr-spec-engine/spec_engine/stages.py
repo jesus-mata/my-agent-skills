@@ -730,6 +730,10 @@ def e2e_lines(result: dict) -> list[str]:
         lines += [f"| #{a['ticket']} | {_cell(a['ac'])}{' (derived)' if a.get('derived') else ''}"
                   f" | {_cell(a['criterion'])} | {a['verdict']} | {_cell(a['evidence'])} |"
                   for a in acs]
+    cases = [f"#{a['ticket']} {a['ac']} {c['case']}: {c['verdict']} — {c['evidence']}"
+             for a in acs for c in a.get("cases") or []]
+    if cases:
+        lines += ["", f"Cases ({len(cases)}):"] + [f"- {c}" for c in cases]
     if result.get("passed"):
         lines += ["", f"Passed ({len(result['passed'])}):"] + [f"- {p}" for p in result["passed"]]
     sections = (

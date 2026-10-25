@@ -10,7 +10,7 @@ from spec_engine.cli import plan_command
 from spec_engine.model import Plan, PlanTicket, TicketClass
 from spec_engine.plan import (
     build_plan, choose_gate, depths, discover_gate, format_plan, gate_from_spec,
-    has_acceptance_criteria, plan_runnable, plan_warnings, validate_plan,
+    has_acceptance_criteria, plan_runnable, plan_warnings, repo_warnings, validate_plan,
 )
 from spec_engine.store import Store, state_dir_for
 from tests.fakes import FakeGit, FakeGitHub, make_issue, ref
@@ -313,6 +313,36 @@ class DiscoverGateTest(unittest.TestCase):
         self.write("pyproject.toml")
         self.assertEqual(discover_gate(self.root), ["python3 -m pytest"])
 
+    def test_dotnet_solution(self):
+        self.write("App.sln")
+        self.write("pyproject.toml")
+        self.assertEqual(discover_gate(self.root),
+                         ["dotnet build App.sln", "dotnet test App.sln --no-build"])
+
+    def test_dotnet_slnx(self):
+        self.write("App.slnx")
+        self.assertEqual(discover_gate(self.root),
+                         ["dotnet build App.slnx", "dotnet test App.slnx --no-build"])
+
+    def test_several_dotnet_solutions_discover_no_gate(self):
+        self.write("A.sln")
+        self.write("B.sln")
+        self.write("go.mod", "module x\n")
+        self.assertEqual(discover_gate(self.root), [])
+        plan = Plan(spec=7, title="S", branch="spec-7", gate=[])
+        with open(os.path.join(self.root, "E2E.md"), "w"):
+            pass
+        [warning] = plan_warnings(plan, self.root)
+        self.assertIn("several .NET solutions at the repository root (A.sln, B.sln)", warning)
+        self.assertIn('--gate "dotnet build A.sln"', warning)
+        plan.gate = ["make check"]
+        self.assertEqual(plan_warnings(plan, self.root), [])
+
+    def test_makefile_wins_over_dotnet(self):
+        self.write("Makefile", "test:\n\t./t\n")
+        self.write("App.sln")
+        self.assertEqual(discover_gate(self.root), ["make test"])
+
     def test_package_json_wins_over_others(self):
         self.package("test")
         self.write("pyproject.toml")
@@ -364,6 +394,61 @@ class PlanWarningsTest(unittest.TestCase):
         self.assertTrue(PlanTicket.from_dict(legacy).has_acceptance)
 
 
+class RepoWarningsTest(unittest.TestCase):
+    def setUp(self):
+        self.git = FakeGit(branches={"main": 5, "origin/main": 5})
+        self.git.upstreams["main"] = "origin/main"
+        self.plan = Plan(spec=7, title="S", branch="spec-7", gate=["true"])
+
+    def test_clean_and_up_to_date(self):
+        self.assertEqual(repo_warnings(self.git, "/repo", self.plan), [])
+        self.assertEqual(self.git.calls_to("fetch_upstream")[0]["branch"], "main")
+
+    def test_dirty_root_lists_the_changes(self):
+        self.git.set_status("/repo", [" M src/a.py", "?? notes.txt"])
+        [warning] = repo_warnings(self.git, "/repo", self.plan)
+        self.assertIn("uncommitted changes (src/a.py, notes.txt)", warning)
+        self.assertIn("repo-dirty", warning)
+
+    def test_dirty_root_caps_the_list(self):
+        self.git.set_status("/repo", [f"?? f{i}" for i in range(13)])
+        [warning] = repo_warnings(self.git, "/repo", self.plan)
+        self.assertIn("f9 and 3 more", warning)
+        self.assertNotIn("f10", warning)
+
+    def test_behind_upstream_is_fast_forwarded(self):
+        self.git.branches["origin/main"] = 8
+        [warning] = repo_warnings(self.git, "/repo", self.plan)
+        self.assertIn("local main is 3 commits behind origin/main", warning)
+        self.assertIn("fast-forwards it before cutting spec-7", warning)
+
+    def test_behind_and_diverged(self):
+        self.git.ahead[("main", "origin/main")] = 1
+        self.git.ahead[("origin/main", "main")] = 2
+        [warning] = repo_warnings(self.git, "/repo", self.plan)
+        self.assertIn("1 commit behind origin/main", warning)
+        self.assertIn("2 commits of its own", warning)
+        self.assertIn("--ff-only` before cutting spec-7 will fail", warning)
+
+    def test_behind_with_existing_spec_branch(self):
+        self.git.branches.update({"origin/main": 6, "spec-7": 5})
+        [warning] = repo_warnings(self.git, "/repo", self.plan)
+        self.assertIn("spec branch spec-7 already exists", warning)
+
+    def test_no_upstream_or_no_base_is_silent(self):
+        del self.git.upstreams["main"]
+        self.assertEqual(repo_warnings(self.git, "/repo", self.plan), [])
+        self.plan.base = "develop"
+        self.assertEqual(repo_warnings(self.git, "/repo", self.plan), [])
+        self.assertEqual(len(self.git.calls_to("fetch_upstream")), 1)
+
+    def test_failed_fetch_is_a_warning(self):
+        self.git.fetch_error = "git fetch -q origin refs/heads/main failed (128): no network"
+        [warning] = repo_warnings(self.git, "/repo", self.plan)
+        self.assertIn("could not fetch the upstream of main", warning)
+        self.assertIn("no network", warning)
+
+
 class PlanCommandTest(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -387,6 +472,15 @@ class PlanCommandTest(unittest.TestCase):
         self.assertIn("WARNING: tickets without acceptance criteria", out)
         self.assertIn("#1 Issue 1", out)
         self.assertIn("WARNING: no E2E.md", out)
+
+    def test_dirty_root_and_stale_base_warn_without_blocking(self):
+        self.git.set_status(self.root, ["?? spec.json"])
+        self.git.branches["origin/main"] = 3
+        self.git.upstreams["main"] = "origin/main"
+        code, out = self.run_plan(spec_with(make_issue(1, labels=AGENT)), gate=["true"])
+        self.assertEqual(code, 0)
+        self.assertIn("WARNING: the repository root has uncommitted changes (spec.json)", out)
+        self.assertIn("WARNING: local main is 2 commits behind origin/main", out)
 
     def test_runnable_writes_plan_and_exits_0(self):
         with open(os.path.join(self.root, "Cargo.toml"), "w"):

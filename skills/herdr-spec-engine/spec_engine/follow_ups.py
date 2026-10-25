@@ -35,6 +35,7 @@ CATEGORY_TEXT = {
     "needs-decision": "fixing it needs a product, API or design decision",
     "too-large": "too large for a fix inside the spec",
     "tech-debt": "debt that spans beyond this spec",
+    "deferred": "a medium finding the review chose not to fix in this spec",
 }
 _ID_RE = re.compile(r"\bf\d+\b")
 

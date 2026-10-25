@@ -180,7 +180,7 @@ def _spec_review_section(runs: list[Run]) -> list[str]:
                  for f in review.get("not_fixed", [])]
     return out + [f"Fixed in review ({len(fixed)}):", *_bullets(fixed),
                   "", f"Hard findings still pending ({len(pending)}):", *_bullets(pending),
-                  "", f"Not fixed, medium/low ({len(not_fixed)}):", *_bullets(not_fixed), ""]
+                  "", f"Not fixed ({len(not_fixed)}):", *_bullets(not_fixed), ""]
 
 
 def _fix_runs_section(runs: list[Run]) -> list[str]:
