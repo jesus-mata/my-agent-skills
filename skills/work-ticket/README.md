@@ -59,6 +59,22 @@ mensaje en el primer fallo:
    espera con `wait-agent.sh --until-line 'TICKET (DONE|…) '` (tope
    `TICKET_WATCH_MS`, 5 h por defecto).
 
+`REVIEW_LEVEL` fija el nivel de esfuerzo de `/code-review` en la review
+(`low|medium|high|xhigh|max`, sin distinguir mayúsculas; `high` por defecto).
+Va en el prompt del agente del ticket, que lo pasa a `run-phase.sh review`. Sin
+nivel, `/code-review` repetiría el último que tecleaste, y la review cambiaría
+de una vez a otra.
+
+`/code-review` recuerda sus opciones entre llamadas, y eso tiene dos efectos
+que esta skill no puede evitar del todo:
+
+- **`--max-findings` no se fija.** La review usa el último que pasaste a mano,
+  así que un `--max-findings all` tuyo hace las reviews automáticas más largas.
+  Pasar `--max-findings default` lo arreglaría, pero también te borraría tu
+  elección.
+- **La review puede pisar tu nivel recordado.** Tras un ticket, un
+  `/code-review` sin nivel en tu sesión puede salir al nivel de la review.
+
 La espera acaba cuando el agente imprime su línea `TICKET <veredicto>`, no en
 el primer turno que termina (ver `wait_agent_`). Si falla antes de lanzar,
 sale con `start-ticket: …` y sin la línea `herdr: agent …`.
@@ -73,7 +89,17 @@ Rellena `REVIEW_PROMPT.md` o `E2E_PROMPT.md` más `TRIAGE_RULES.md` con el
 ticket y el PR, abre la fase con `split-pane.sh` y la espera con
 `wait-agent.sh`. `[pane-id]` elige de dónde sale el split. La review se abre a
 la derecha (tope 1 h) y la E2E debajo (tope 2 h); `PHASE_WATCH_MS` cambia el
-tope.
+tope. `REVIEW_LEVEL` (por defecto `high`) es el nivel de `/code-review`.
+
+La review entra en dos prompts. El primero son las instrucciones, y el agente
+sólo contesta `READY`. El segundo es `/code-review <nivel> <pr>`, solo en una
+línea, para que la TUI lo ejecute como slash command con sus argumentos.
+`/code-review` corre como fork en background: si las instrucciones fueran en
+sus argumentos, las recibiría el fork y no el agente que hace el triage. Como
+el turno del comando acaba sin veredicto, la espera es hasta la línea
+`REVIEW <veredicto>` (`--until-line`), no hasta el primer fin de turno. Si el
+primer turno no acaba (5 min) o se bloquea, sale con `run-phase: …` y sin la
+línea `herdr: agent …`.
 
 ## wait-agent.sh
 
@@ -166,6 +192,9 @@ Se hace `source`, no se ejecuta. Expone:
 - **`drop_prompt_echo_`** (stdin → stdout): quita el eco del prompt que la TUI
   pinta al principio del turno, cortando desde la primera marca de respuesta
   (`⏺ ✻ ✽ ⎿ ✢`). Si no hay ninguna, devuelve la entrada tal cual.
+- **`review_level_ [nivel]`** (→ stdout, código): normaliza y valida el nivel
+  de `/code-review`; vacío da `high`. Lo usan `start-ticket.sh` y
+  `run-phase.sh`.
 - **`slash_prompt_ <prompt>`**: si el prompt es un `/cmd` largo o multilínea,
   escribe el cuerpo en un fichero y deja en `$SLASH_PROMPT` la línea corta a
   mandar y en `$SLASH_PROMPT_FILE` la ruta (vacía si no hizo falta). Usa

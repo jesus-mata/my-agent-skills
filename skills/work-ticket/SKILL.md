@@ -25,9 +25,17 @@ message if one fails:
    ~/.claude/skills/work-ticket/start-ticket.sh <TICKET_ID>
    ```
 
-   `<TICKET_ID>` is the issue number: `42`, `#42` or the issue URL. Do not
-   modify the command or call `spawn-ticket.sh` directly. The script
-   switches to the default branch, pulls, checks the ticket exists, spawns
+   `<TICKET_ID>` is the issue number: `42`, `#42` or the issue URL. The
+   code review runs `/code-review` at `high` effort. Only if the user
+   asks for another level (`low`, `medium`, `xhigh`, `max`), prefix the
+   command with it:
+
+   ```bash
+   REVIEW_LEVEL=medium ~/.claude/skills/work-ticket/start-ticket.sh 42
+   ```
+
+   Do not otherwise modify the command or call `spawn-ticket.sh`
+   directly. The script switches to the default branch, pulls, checks the ticket exists, spawns
    the ticket agent on branch `ticket-<TICKET_ID>`, then waits for it.
 
 2. End your turn. The ticket agent runs implement → code review → E2E (see

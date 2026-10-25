@@ -3,9 +3,11 @@ first phase that does not pass and go straight to FINAL OUTPUT. Nobody is
 watching this pane: do not ask questions.
 
 Phase launcher — opens the phase in a split pane with its prompt already
-filled in, waits for it, and prints its result:
+filled in, waits for it, and prints its result. Copy these forms exactly,
+including the REVIEW_LEVEL prefix on the review:
 
-  {{SKILL_DIR}}/run-phase.sh <review|e2e> {{TICKET_ID}} <PR_NUM> [pane-id]
+  REVIEW_LEVEL={{REVIEW_LEVEL}} {{SKILL_DIR}}/run-phase.sh review {{TICKET_ID}} <PR_NUM>
+  {{SKILL_DIR}}/run-phase.sh e2e {{TICKET_ID}} <PR_NUM> <review pane id>
 
 Write <PR_NUM> as the literal number: shell variables do not survive
 between your commands. Run it with the Bash tool's `run_in_background`
@@ -28,6 +30,8 @@ and keep waiting. By state:
   in the background, end your turn. Anything else → the phase is BLOCKED;
   quote the question in your summary.
 - `timeout…` → the phase is BLOCKED.
+- No `herdr: agent` line, only a `run-phase:` error → the phase is
+  BLOCKED; quote the error in your summary.
 
 1. IMPLEMENT
    Run the /implement-ticket skill for #{{TICKET_ID}}.
@@ -38,7 +42,7 @@ and keep waiting. By state:
    working tree is clean (`git status --porcelain` empty); otherwise FAIL.
 
 2. REVIEW
-   `{{SKILL_DIR}}/run-phase.sh review {{TICKET_ID}} <PR_NUM>`
+   `REVIEW_LEVEL={{REVIEW_LEVEL}} {{SKILL_DIR}}/run-phase.sh review {{TICKET_ID}} <PR_NUM>`
    Note the pane id in its first output line. The report ends with a line
    `REVIEW <PASS|FAIL|BLOCKED> — ...`; that verdict is the phase result.
 

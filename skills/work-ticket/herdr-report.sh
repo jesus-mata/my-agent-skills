@@ -67,6 +67,19 @@ sys.stdout.write("\n".join(lines))
 '
 }
 
+# review_level_ [nivel]  (-> stdout, código)
+# Nivel de esfuerzo de /code-review en la review: vacío → high; acepta
+# mayúsculas ("High"). Falla con un nivel desconocido. "ultra" queda fuera a
+# propósito: es una review en la nube, de pago, que sólo lanza el usuario.
+review_level_() {
+  local level
+  level=$(printf '%s' "${1:-high}" | tr '[:upper:]' '[:lower:]')
+  case "$level" in
+    low|medium|high|xhigh|max) printf '%s\n' "$level" ;;
+    *) echo "REVIEW_LEVEL '$1' no es low, medium, high, xhigh ni max" >&2; return 1 ;;
+  esac
+}
+
 # slash_prompt_ <prompt>  (-> $SLASH_PROMPT, $SLASH_PROMPT_FILE)
 # Un prompt que empieza por "/cmd" pero es multilínea o largo entra en la TUI
 # como "[Pasted text #N]", y un texto pegado nunca se interpreta como slash
