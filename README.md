@@ -15,7 +15,7 @@ them first, or those references dangle:
 | Skill | Uses |
 | --- | --- |
 | `implement-ticket` | `/tdd` (`/mattpocock-skills:tdd`) |
-| `refine-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`) |
+| `refine-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`), `/domain-modeling` (`/mattpocock-skills:domain-modeling`) |
 | `work-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`) |
 
 In Claude Code:
@@ -61,7 +61,7 @@ behind the one you edit.
 | [`herdr-implement-spec`](skills/herdr-implement-spec/SKILL.md) | Implement every ticket of a spec/PRD by orchestrating parallel Claude instances in herdr worktrees, wave by wave, merging each into a spec branch, then code-review and E2E-test the whole spec. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or slices implemented, not just a single ticket. Use only when the user explicitly asks for it instead of herdr-spec-engine. |
 | [`herdr-spec-engine`](skills/herdr-spec-engine/SKILL.md) | Implements every ticket of a spec, PRD or epic with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec; Claude only supervises its escalations. Use when the user hands over a spec or PRD (or its GitHub issue) and wants all its tickets or sub-issues implemented, not a single ticket. Default choice over herdr-implement-spec. |
 | [`implement-ticket`](skills/implement-ticket/SKILL.md) | Implements the work of a ticket or issue |
-| [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrite an existing ticket in place so it matches the /to-tickets format, falsifying its technical claims against the real code before trusting any of them. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands you a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
+| [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrites an existing ticket in place so it matches the /to-tickets format, after syncing the default branch and falsifying the ticket's technical claims against the latest code, and sharpens its domain language with /domain-modeling. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands over a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
 | [`work-ticket`](skills/work-ticket/SKILL.md) | Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (use implement-ticket). |
 
 <!-- skills:end -->

@@ -1,5 +1,11 @@
 # The ticket format, section by section
 
+Contents: [Template](#the-template) · [What to build](#what-to-build) ·
+[Acceptance criteria](#acceptance-criteria) · [Blocked by](#blocked-by) · [Trailer](#trailer) ·
+[Worked example](#worked-example)
+
+## The template
+
 The template is `/to-tickets`'. It is reproduced here rather than read from the installed plugin,
 because plugin paths carry version numbers and break on upgrade.
 
@@ -37,9 +43,9 @@ what "done" looks like.
 Then the analysis the original ticket carried, as `###` subsections. The two that usually earn their
 place:
 
-- **Why it fails, precisely.** The verified mechanism from phase 3 — including the condition that
-  makes it fire, which is the part unverified tickets get wrong. If a claim was corrected, this is
-  where the corrected version lives.
+- **Why it fails, precisely.** The verified mechanism from the falsification phase — including the
+  condition that makes it fire, which is the part unverified tickets get wrong. If a claim was
+  corrected, this is where the corrected version lives.
 - **What's deliberately out of scope**, with the reason. Without it the implementer either widens
   the ticket or worries they missed something. "Not necessary for the user to stop seeing X" is a
   complete reason.
@@ -55,6 +61,9 @@ Each criterion is a behaviour someone can observe, not an implementation to perf
 
 - Implementation: `[ ] Use FOR UPDATE when re-reading the row`
 - Behaviour: `[ ] The re-read returns the row even when the update changed no values`
+
+Use the glossary's canonical terms in criteria too — a criterion phrased in a term the glossary
+avoids is the one an implementer reads differently.
 
 The difference matters because the second survives a different-but-correct implementation, and
 because it names the exact case that is broken. Criteria phrased as implementation get ticked by
@@ -78,9 +87,9 @@ which makes it unblocked with a note rather than blocked. Ask rather than assume
 
 ## Trailer
 
-Keep the provenance in two or three lines after a rule: where the ticket was found, and — when
-phase 3 changed something — that the mechanism was corrected against the original report and how it
-was checked. Someone who read the old body needs a reason to re-read it.
+Keep the provenance in two or three lines after a rule: where the ticket was found, and — when the
+falsification phase changed something — that the mechanism was corrected against the original
+report and how it was checked. Someone who read the old body needs a reason to re-read it.
 
 ---
 
