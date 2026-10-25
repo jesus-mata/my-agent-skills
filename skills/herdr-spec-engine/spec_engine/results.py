@@ -119,7 +119,8 @@ def _implement(d: dict, w: str) -> None:
     _str_list(d, "denied_actions", w)
 
 
-FOLLOW_UP_CATEGORIES = ("pre-existing", "out-of-scope", "needs-decision", "too-large", "tech-debt")
+FOLLOW_UP_CATEGORIES = ("pre-existing", "out-of-scope", "needs-decision", "too-large", "tech-debt",
+                        "deferred")
 FOLLOW_UP_SEVERITIES = ("blocker", "high", "medium")
 
 
@@ -179,8 +180,8 @@ def _spec_review(d: dict, w: str) -> None:
         _int_or_null(e, "line", p)
         _str(e, "failure_scenario", p)
 
-    def not_fixed(e: dict, p: str) -> None:
-        _enum(e, "severity", p, ("medium", "low"))
+    def not_fixed(e: dict, p: str) -> None:  # a medium one not fixed is a `deferred` follow-up
+        _enum(e, "severity", p, ("low",))
         _str(e, "title", p)
         if "reason" in e:
             _str(e, "reason", p)
@@ -208,14 +209,35 @@ def e2e_verdict(acs: list[dict]) -> str:
     return "PASS"
 
 
+def ac_verdict(cases: list[dict]) -> str:
+    """The AC verdict its cases add up to: FAIL if any case failed, else NOT VERIFIABLE if any
+    could not be verified, else PASS."""
+    verdicts = {c["verdict"] for c in cases}
+    if "FAIL" in verdicts:
+        return "FAIL"
+    if "NOT VERIFIABLE" in verdicts:
+        return "NOT VERIFIABLE"
+    return "PASS"
+
+
 def _e2e(d: dict, w: str) -> None:
+    def case(e: dict, p: str) -> None:
+        _str(e, "case", p)
+        _enum(e, "verdict", p, AC_VERDICTS)
+        _str(e, "evidence", p)
+
     def ac(e: dict, p: str) -> None:
         _int(e, "ticket", p)
         _str(e, "ac", p)
         _str(e, "criterion", p)
         _bool(e, "derived", p)
-        _enum(e, "verdict", p, AC_VERDICTS)
+        verdict = _enum(e, "verdict", p, AC_VERDICTS)
         _str(e, "evidence", p)
+        cases = _opt_obj_list(e, "cases", p, case)
+        if cases and verdict != ac_verdict(cases):
+            raise _Invalid(f"{p}.verdict: its cases add up to {ac_verdict(cases)!r}, not "
+                           f"{verdict!r} (any FAIL case is FAIL; else any NOT VERIFIABLE is NOT "
+                           "VERIFIABLE; else PASS)")
 
     def fixed(e: dict, p: str) -> None:
         _str(e, "title", p)
@@ -329,18 +351,29 @@ _EXAMPLES: dict[str, dict] = {
             "acceptance": ["Exported dates follow the chosen locale"]}],
     },
     "e2e": {
-        "verdict": "PARTIAL",
+        "verdict": "FAIL",
         "blocked_by": "",
         "acs": [
             {"ticket": 12, "ac": "AC1", "criterion": "A user can export the report as CSV",
              "derived": False, "verdict": "PASS",
              "evidence": "e2e/screenshots/export-ac1.png"},
+            {"ticket": 12, "ac": "AC2",
+             "criterion": "An empty report cannot be exported and says why",
+             "derived": False, "verdict": "FAIL",
+             "evidence": "empty report: export stays enabled (e2e/screenshots/export-ac2-empty.png)",
+             "cases": [
+                 {"case": "empty report: export disabled", "verdict": "FAIL",
+                  "evidence": "e2e/screenshots/export-ac2-empty.png"},
+                 {"case": "empty report: reason shown", "verdict": "PASS",
+                  "evidence": "e2e/screenshots/export-ac2-reason.png"}]},
             {"ticket": 13, "ac": "AC1", "criterion": "The export email reaches the user",
              "derived": True, "verdict": "NOT VERIFIABLE",
              "evidence": "needs the mail provider's sandbox, which E2E.md does not declare"},
         ],
         "fixed": [{"title": "AC1 #12: export button disabled on load", "commit": "abc1234"}],
-        "pending": [{"title": "#13 AC1 export email", "reason": "no mail sandbox"}],
+        "pending": [{"title": "#12 AC2 export of an empty report",
+                     "reason": "needs a decision on what an empty export means"},
+                    {"title": "#13 AC1 export email", "reason": "no mail sandbox"}],
         "collateral": [{"title": "Console warning on the reports page", "severity": "low",
                         "caused_by_spec": True, "action": "reported",
                         "detail": "React key warning in ReportList"}],

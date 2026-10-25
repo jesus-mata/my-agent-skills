@@ -4,7 +4,7 @@ You are a sub Claude instance started by herdr-spec-engine for spec #$spec ($spe
 2. Fix policy:
    - Fix every Spec finding that is missing or wrong.
    - Fix every hard Standards violation.
-   - Fix smells only when cheap and inside this ticket.
+   - Fix smells only when cheap and inside this ticket. A medium one you leave unfixed is a `deferred` follow-up (below), never `pending`.
    - Scope creep: report it only, leave the code as it is.
 3. Make each fix test-first with `/mattpocock-skills:tdd` (failing test, then fix), one commit per fix on your branch.
 4. Record each fix in `fixed` with its commit sha, each real finding you did not fix in `pending` with the reason, and scope creep in `scope_creep`.
@@ -16,6 +16,7 @@ Follow-ups: a real finding of severity medium or higher that this ticket must no
 - `needs-decision`: fixing it needs a product, public API or design decision the spec does not make. Evidence: the question to decide.
 - `too-large`: it needs acceptance criteria of its own, a migration, or changes to modules or contracts the spec does not describe. Evidence: what makes it too large.
 - `tech-debt`: duplication or an architecture problem that predates this ticket and spans beyond it. Evidence: where it repeats.
+- `deferred`: a medium Standards finding of this ticket's work that you chose not to fix (not cheap or not inside this ticket). Evidence: where it is and what it costs.
 
 Give each one its real severity, `problem` (the failure scenario, or what the debt costs), `why_separate` and `acceptance` (criteria for its own issue). If you cannot say why it cannot be fixed here, it is not a follow-up: fix it or list it as usual. Never open issues yourself: the engine proposes them to the user, who decides.
 

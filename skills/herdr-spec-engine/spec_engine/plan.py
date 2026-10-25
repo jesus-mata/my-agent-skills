@@ -11,7 +11,7 @@ import re
 from typing import Any
 
 from .model import Plan, PlanTicket, TicketClass
-from .ports import GitHub, Issue, IssueRef
+from .ports import Git, GitHub, Issue, IssueRef
 
 AGENT_LABEL = "ready-for-agent"
 HUMAN_LABEL = "ready-for-human"
@@ -285,6 +285,12 @@ def discover_gate(repo_root: str) -> list[str]:
         if gate:
             return gate
 
+    solutions = dotnet_solutions(repo_root)
+    if len(solutions) == 1:
+        return [f"dotnet build {solutions[0]}", f"dotnet test {solutions[0]} --no-build"]
+    if solutions:
+        return []  # which solution is the gate? plan_warnings asks for --gate
+
     if exists("go.mod"):
         return ["go vet ./...", "go build ./...", "go test ./..."]
     if exists("Cargo.toml"):
@@ -292,6 +298,16 @@ def discover_gate(repo_root: str) -> list[str]:
     if exists("pyproject.toml"):
         return ["python3 -m pytest"]
     return []
+
+
+def dotnet_solutions(repo_root: str) -> list[str]:
+    """The .NET solution files (``*.sln``, ``*.slnx``) at the repository root, sorted."""
+    try:
+        names = os.listdir(repo_root)
+    except OSError:
+        return []
+    return sorted(n for n in names if n.endswith((".sln", ".slnx"))
+                  and os.path.isfile(os.path.join(repo_root, n)))
 
 
 # display ----------------------------------------------------------------------------------------
@@ -344,7 +360,8 @@ def _ticket_line(t: PlanTicket) -> str:
 def plan_warnings(plan: Plan, repo_root: str | None = None) -> list[str]:
     """What will weaken the run without stopping it: agent tickets stating no acceptance
     criteria (review and E2E derive them from the goal, or skip a ticket without one) and, with
-    ``repo_root``, a repository without ``E2E.md`` (the E2E phase then ends BLOCKED)."""
+    ``repo_root``, a repository without ``E2E.md`` (the E2E phase then ends BLOCKED) and an
+    empty gate left so by several .NET solutions."""
     warnings = []
     no_acs = [t for t in plan.tickets if t.klass is TicketClass.AGENT and not t.has_acceptance]
     if no_acs:
@@ -355,7 +372,57 @@ def plan_warnings(plan: Plan, repo_root: str | None = None) -> list[str]:
         warnings.append(f"no {E2E_MD} at the repository root: the E2E phase will end BLOCKED "
                         "(it never guesses how to bring the stack up); add one, e.g. with "
                         "`/e2e`, before the run reaches E2E")
+    solutions = dotnet_solutions(repo_root) if repo_root is not None else []
+    if not plan.gate and len(solutions) > 1:
+        warnings.append(f"several .NET solutions at the repository root ({', '.join(solutions)}):"
+                        " no gate discovered; pass --gate with the one to build and test, e.g. "
+                        f"--gate \"dotnet build {solutions[0]}\" "
+                        f"--gate \"dotnet test {solutions[0]} --no-build\"")
     return warnings
+
+
+DIRTY_LISTED = 10
+
+
+def repo_warnings(git: Git, repo_root: str, plan: Plan) -> list[str]:
+    """What in the repository root will trip the run: uncommitted changes (the engine checks
+    out the spec branch there and every merge escalates ``repo-dirty`` while it is dirty) and a
+    local base behind its upstream (fetched first; a failed fetch is a warning of its own)."""
+    warnings = []
+    entries = git.status_entries(repo_root)
+    if entries:
+        listed = ", ".join(e[3:] for e in entries[:DIRTY_LISTED])
+        more = f" and {len(entries) - DIRTY_LISTED} more" if len(entries) > DIRTY_LISTED else ""
+        warnings.append(f"the repository root has uncommitted changes ({listed}{more}): the "
+                        "engine checks out the spec branch there and every merge escalates "
+                        "repo-dirty until it is clean; commit or stash them before `run`")
+    base = plan.base
+    if not git.branch_exists(repo_root, base):
+        return warnings
+    try:
+        upstream = git.fetch_upstream(repo_root, base)
+    except RuntimeError as e:
+        reason = (str(e).splitlines() or ["unknown error"])[0]
+        return warnings + [f"could not fetch the upstream of {base}, so whether it is behind "
+                           f"is unknown: {reason}"]
+    if upstream is None:
+        return warnings
+    behind = git.commits_ahead(repo_root, base, upstream)
+    if not behind:
+        return warnings
+    ahead = git.commits_ahead(repo_root, upstream, base)
+    what = f"local {base} is {behind} commit{'s' if behind != 1 else ''} behind {upstream}"
+    if git.branch_exists(repo_root, plan.branch):
+        why = (f"the spec branch {plan.branch} already exists, so the engine will not update "
+               f"it; merge {upstream} into it (or delete it) before `run` if it needs those "
+               "commits")
+    elif ahead:
+        why = (f"it also has {ahead} commit{'s' if ahead != 1 else ''} of its own, so the "
+               f"engine's `git pull --ff-only` before cutting {plan.branch} will fail; "
+               f"reconcile {base} with {upstream} first")
+    else:
+        why = f"the engine fast-forwards it before cutting {plan.branch}"
+    return warnings + [f"{what}: {why}"]
 
 
 def format_plan(plan: Plan, problems: list[str], gate_source: str = "",

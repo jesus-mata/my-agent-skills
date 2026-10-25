@@ -19,10 +19,12 @@ PREFLIGHT, in order. Any failure is verdict `"BLOCKED"` with the reason in `bloc
 
 TEST, one scenario per acceptance criterion:
 
+- A scenario is made of cases: the happy path plus each unhappy path the criterion states (validation errors, permissions, empty states). Run every case of every AC, even after one fails: a failing case never stops the other cases of that AC, nor the other ACs. Triage comes after the whole AC has run.
+- An AC with more than one case lists each in `cases` (`case`, `verdict`, `evidence`). The AC verdict adds up from its cases: `"FAIL"` if any case failed, else `"NOT VERIFIABLE"` if any could not be verified, else `"PASS"`; its `evidence` names the failing cases. The engine rejects an AC verdict that does not add up.
 - Pick the surface from `E2E.md`'s How to test table: UI through the real browser, API with hurl or curl, CLI by spawning the real binary and asserting exit code, output and disk side effects.
 - Tests are ephemeral: write, run, report, delete. Never commit them or add them to the versioned suite.
 - Evidence is mandatory: every verdict cites a screenshot path, a trace path, the HTTP response or the command output. A UI criterion without a visual artifact is `"NOT VERIFIABLE"` (say the artifact is missing), never `"PASS"`.
-- Run the unhappy paths a criterion states (validation errors, permissions, empty states). Invent no scope beyond the criteria.
+- Invent no cases beyond what the criteria state.
 
 AC verdicts, exactly one each: `"PASS"` (ran green, evidence cited), `"FAIL"` (ran, and the behaviour contradicts the criterion), `"NOT VERIFIABLE"` (cannot be exercised end to end, e.g. needs a third-party sandbox or hardware; say exactly what is missing). The overall `verdict` is `"PASS"` only if every AC is `"PASS"`, `"FAIL"` if any is `"FAIL"`, otherwise `"PARTIAL"`. The engine rejects a verdict that does not add up.
 
@@ -44,9 +46,9 @@ FIXES:
 
 - Fix it yourself or with a built-in `Agent` subagent (`model: "opus"`), test-first with `/mattpocock-skills:tdd`, one commit per AC or collateral fixed on `$spec_branch`, the message naming it ("#12 AC3: ..."). List each in `fixed` with its commit sha.
 - No refactors, no reformatting.
-- After each fix, re-run that AC's scenario: a fix is not done until it is green.
+- After each fix, re-run every case of that AC: a fix is not done until all are green.
 - At most 3 attempts per AC and 8 fixes in all; beyond that stop fixing and report the rest as `"FAIL"`.
-- After the last fix, re-run every AC scenario from a cold stack, not only the ones you touched. The verdicts you report are from that final run.
+- After the last fix, re-run every case of every AC from a cold stack, not only the ones you touched. The verdicts you report are from that final run.
 
 TEARDOWN, before writing the result (also after a preflight stop): stop every process and container you started, delete the test data you created, restore any config you changed. Leave alone whatever was running before you started. Anything you could not stop goes in `notes`.
 

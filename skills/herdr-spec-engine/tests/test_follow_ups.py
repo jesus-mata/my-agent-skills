@@ -129,6 +129,17 @@ class CreateTest(unittest.TestCase):
         ):
             self.assertIn(expected, body)
 
+    def test_deferred_medium_finding_is_created_without_labels(self):
+        entries = follow_ups.collect([reviewed(RunKind.SPEC_REVIEW, "s7-review", finding(
+            "Slow list", category="deferred", severity="medium"))], [])
+        gh = FakeGitHub()
+        follow_ups.create(gh, PLAN, entries, None)
+        [created] = gh.created
+        self.assertEqual(created["labels"], [])
+        self.assertIn("**Category:** deferred (a medium finding the review chose not to fix in "
+                      "this spec)", created["body"])
+        self.assertIn("**Severity:** medium", created["body"])
+
 
 if __name__ == "__main__":
     unittest.main()

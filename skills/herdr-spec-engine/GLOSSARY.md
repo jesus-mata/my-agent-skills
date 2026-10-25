@@ -59,7 +59,8 @@ _Avoid_: Fix ticket, hotfix
 
 **Follow-up**:
 A review or E2E finding, medium or higher, that the reviewed work must not fix and that deserves its own
-issue: pre-existing, out of scope, needing a decision, too large, or tech debt. The engine
+issue: pre-existing, out of scope, needing a decision, too large, tech debt, or deferred (a
+medium finding its review chose not to fix). The engine
 proposes follow-ups to the user at the end of a run and creates only the issues the user
 confirms.
 _Avoid_: Out-of-scope finding, backlog item, TODO

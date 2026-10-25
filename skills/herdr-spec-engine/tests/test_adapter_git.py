@@ -176,6 +176,26 @@ class CliGitTest(unittest.TestCase):
         self.git.pull_ff_only(clone)
         self.assertEqual(self.git.rev_parse(clone, "HEAD"), self.git.rev_parse(self.repo, "main"))
 
+    def test_fetch_upstream_updates_the_remote_tracking_ref(self):
+        clone = os.path.join(self.tmpdir, "clone")
+        subprocess.run(["git", "clone", "-q", self.repo, clone], check=True, capture_output=True)
+        self.commit("b.txt", "b", "upstream moves on")
+        self.assertEqual(self.git.fetch_upstream(clone, "main"), "origin/main")
+        self.assertEqual(self.git.commits_ahead(clone, "main", "origin/main"), 1)
+        self.assertEqual(self.git.commits_ahead(clone, "origin/main", "main"), 0)
+
+    def test_fetch_upstream_without_upstream(self):
+        self.assertIsNone(self.git.fetch_upstream(self.repo, "main"))
+        self.sh("checkout", "-q", "-b", "feat", "--track", "main")  # tracks a local branch
+        self.assertIsNone(self.git.fetch_upstream(self.repo, "feat"))
+
+    def test_fetch_upstream_failure_raises(self):
+        clone = os.path.join(self.tmpdir, "clone")
+        subprocess.run(["git", "clone", "-q", self.repo, clone], check=True, capture_output=True)
+        self.sh("remote", "set-url", "origin", os.path.join(self.tmpdir, "gone"), cwd=clone)
+        with self.assertRaises(GitError):
+            self.git.fetch_upstream(clone, "main")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -350,6 +350,9 @@ class FakeGit(_Recorder):
         self.clean: dict[str, bool] = {}
         self.entries: dict[str, list[str]] = {}
         self.unmerged: dict[str, list[str]] = {}
+        self.upstreams: dict[str, str] = {}  # branch -> remote-tracking ref (also in branches)
+        self.fetch_error: str | None = None
+        self.ahead: dict[tuple[str, str], int] = {}  # (base, branch) -> count; models divergence
         self._merges: dict[tuple[str, str], deque[MergeResult]] = defaultdict(deque)
 
     # scripting -------------------------------------------------------------------------------
@@ -416,12 +419,23 @@ class FakeGit(_Recorder):
     def pull_ff_only(self, cwd: str) -> None:
         self._call("pull_ff_only", cwd=cwd)
 
+    def fetch_upstream(self, cwd: str, branch: str) -> str | None:
+        """``upstreams[branch]``; raises RuntimeError(``fetch_error``) when that is set."""
+        self._call("fetch_upstream", cwd=cwd, branch=branch)
+        if branch not in self.upstreams:
+            return None
+        if self.fetch_error is not None:
+            raise RuntimeError(self.fetch_error)
+        return self.upstreams[branch]
+
     def rev_parse(self, cwd: str, ref: str) -> str:
         self._call("rev_parse", cwd=cwd, ref=ref)
         return f"{ref}@{self.revs[ref]}"
 
     def commits_ahead(self, cwd: str, base: str, branch: str) -> int:
         self._call("commits_ahead", cwd=cwd, base=base, branch=branch)
+        if (base, branch) in self.ahead:
+            return self.ahead[(base, branch)]
         b = self.branches.get(base, 0)
         return max(0, self.branches.get(branch, b) - b)
 

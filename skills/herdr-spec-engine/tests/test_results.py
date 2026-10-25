@@ -107,7 +107,14 @@ class ResultsTest(unittest.TestCase):
             bad("spec_review", hard=[{**hard, "line": None}]))[1], None)
         self.assertInvalid("spec_review",
                            bad("spec_review", not_fixed=[{"severity": "high", "title": "t"}]),
-                           "spec_review.not_fixed[0].severity", "'medium'")
+                           "spec_review.not_fixed[0].severity", "'low'")
+        # a medium finding left unfixed is a `deferred` follow-up, never `not_fixed`
+        self.assertInvalid("spec_review",
+                           bad("spec_review", not_fixed=[{"severity": "medium", "title": "t"}]),
+                           "spec_review.not_fixed[0].severity", "'low'")
+        deferred = {**GOOD["spec_review"]["follow_ups"][0], "category": "deferred"}
+        self.assertIsNone(results.validate_spec_review(
+            bad("spec_review", follow_ups=[deferred]))[1])
         self.assertInvalid("spec_review",
                            bad("spec_review", fixed=[{"severity": "low", "title": "t",
                                                       "commit": "c"}]),
@@ -152,6 +159,29 @@ class ResultsTest(unittest.TestCase):
                            "e2e.blocked_by")
         self.assertIsNone(results.validate_e2e(
             bad("e2e", acs=[], verdict="BLOCKED", blocked_by="no E2E.md"))[1])
+
+
+    def test_e2e_ac_verdict_must_match_its_cases(self):
+        def case(verdict):
+            return {"case": f"{verdict} case", "verdict": verdict, "evidence": "e"}
+
+        def ac(verdict, *cases):
+            return {"ticket": 1, "ac": "AC1", "criterion": "c", "derived": False,
+                    "verdict": verdict, "evidence": "e", "cases": [case(v) for v in cases]}
+
+        overall = {"PASS": "PASS", "FAIL": "FAIL", "NOT VERIFIABLE": "PARTIAL"}
+        for verdict, cases in (("PASS", ("PASS", "PASS")), ("FAIL", ("FAIL", "PASS")),
+                               ("FAIL", ("PASS", "NOT VERIFIABLE", "FAIL")),
+                               ("NOT VERIFIABLE", ("PASS", "NOT VERIFIABLE"))):
+            self.assertEqual(results.ac_verdict([case(v) for v in cases]), verdict)
+            data = bad("e2e", acs=[ac(verdict, *cases)], verdict=overall[verdict])
+            self.assertIsNone(results.validate_e2e(data)[1])
+        self.assertInvalid("e2e", bad("e2e", acs=[ac("PASS", "PASS", "FAIL")], verdict="PASS"),
+                           "e2e.acs[0].verdict", "cases add up to 'FAIL'")
+        self.assertIsNone(results.validate_e2e(bad("e2e", acs=[ac("PASS")], verdict="PASS"))[1])
+        self.assertInvalid("e2e", bad("e2e", acs=[{**ac("PASS", "PASS"), "cases": [
+            {"case": "c", "verdict": "OK", "evidence": "e"}]}], verdict="PASS"),
+            "e2e.acs[0].cases[0].verdict")
 
 
 class ReadResultTest(unittest.TestCase):

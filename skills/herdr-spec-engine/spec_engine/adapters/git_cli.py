@@ -22,13 +22,16 @@ class GitError(RuntimeError):
 class CliGit:
     """The Git port."""
 
-    def __init__(self, timeout: float = 300.0) -> None:
+    def __init__(self, timeout: float = 300.0, fetch_timeout: float = 60.0) -> None:
         self.timeout = timeout
+        self.fetch_timeout = fetch_timeout
 
-    def _run(self, cwd: str, *args: str, check: bool = True) -> subprocess.CompletedProcess:
+    def _run(self, cwd: str, *args: str, check: bool = True,
+             timeout: float | None = None) -> subprocess.CompletedProcess:
         proc = subprocess.run(
-            ["git", "-C", cwd, *args], capture_output=True, text=True, timeout=self.timeout,
-            env={**os.environ, **GIT_ENV}, stdin=subprocess.DEVNULL,
+            ["git", "-C", cwd, *args], capture_output=True, text=True,
+            timeout=timeout or self.timeout, env={**os.environ, **GIT_ENV},
+            stdin=subprocess.DEVNULL,
         )
         if check and proc.returncode != 0:
             raise GitError(list(args), proc.returncode, proc.stdout + proc.stderr)
@@ -63,6 +66,23 @@ class CliGit:
 
     def pull_ff_only(self, cwd: str) -> None:
         self._run(cwd, "pull", "--ff-only", "-q")
+
+    def fetch_upstream(self, cwd: str, branch: str) -> str | None:
+        """Fetch ``branch``'s upstream branch from its remote (``git fetch <remote> <merge>``
+        updates the remote-tracking ref); returns that ref (``origin/main``), or None when
+        ``branch`` tracks nothing or tracks a local branch."""
+        upstream = self._run(cwd, "rev-parse", "--abbrev-ref", "--symbolic-full-name",
+                             f"{branch}@{{upstream}}", check=False).stdout.strip()
+        remote = self._run(cwd, "config", f"branch.{branch}.remote", check=False).stdout.strip()
+        merge = self._run(cwd, "config", f"branch.{branch}.merge", check=False).stdout.strip()
+        if not upstream or not merge or remote in ("", "."):
+            return None
+        args = ["fetch", "-q", remote, merge]
+        try:
+            self._run(cwd, *args, timeout=self.fetch_timeout)
+        except subprocess.TimeoutExpired as e:
+            raise GitError(args, -1, f"timed out after {e.timeout:g}s") from e
+        return upstream
 
     def rev_parse(self, cwd: str, ref: str) -> str:
         return self._out(cwd, "rev-parse", "--verify", "-q", f"{ref}^{{commit}}")

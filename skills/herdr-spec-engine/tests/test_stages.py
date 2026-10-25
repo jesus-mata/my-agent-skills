@@ -3,7 +3,7 @@ import os
 import unittest
 
 from spec_engine.model import EscalationKind, EscalationStatus, RunStatus, Settings, Stage
-from spec_engine.stages import format_finding, result_path
+from spec_engine.stages import e2e_lines, format_finding, result_path
 from tests.engine_harness import IMPLEMENTED, REVIEW_CLEAN, Harness, ticket
 
 PENDING_SPEC = {"fixed": [], "scope_creep": ["renamed helper"],
@@ -361,6 +361,28 @@ class StagesTest(unittest.TestCase):
                                "failure_scenario": "boom"})
         self.assertIn("a.py:4", text)
         self.assertIn("boom", text)
+
+
+class E2ELinesTest(unittest.TestCase):
+    def test_cases_listed_after_the_ac_table(self):
+        result = {"verdict": "FAIL", "blocked_by": "", "acs": [
+            {"ticket": 12, "ac": "AC2", "criterion": "Empty export says why", "derived": False,
+             "verdict": "FAIL", "evidence": "see cases", "cases": [
+                 {"case": "button disabled", "verdict": "FAIL", "evidence": "a.png"},
+                 {"case": "reason shown", "verdict": "PASS", "evidence": "b.png"}]},
+            {"ticket": 13, "ac": "AC1", "criterion": "c", "derived": False, "verdict": "PASS",
+             "evidence": "c.png"}], "fixed": [], "pending": [], "collateral": []}
+        text = "\n".join(e2e_lines(result))
+        self.assertIn("| #12 | AC2 | Empty export says why | FAIL | see cases |\n"
+                      "| #13 | AC1 | c | PASS | c.png |\n\nCases (2):\n"
+                      "- #12 AC2 button disabled: FAIL — a.png\n"
+                      "- #12 AC2 reason shown: PASS — b.png", text)
+
+    def test_no_cases_section_without_cases(self):
+        result = {"verdict": "PASS", "blocked_by": "", "acs": [
+            {"ticket": 1, "ac": "AC1", "criterion": "c", "derived": False, "verdict": "PASS",
+             "evidence": "e"}], "fixed": [], "pending": [], "collateral": []}
+        self.assertNotIn("Cases", "\n".join(e2e_lines(result)))
 
 
 if __name__ == "__main__":

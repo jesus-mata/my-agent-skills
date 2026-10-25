@@ -105,11 +105,13 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
   keeps the ticket open.
 - **gate_fix** — `{"summary": str}`
 - **resolve** — `{"verdict": "RESOLVED" | "ESCALATE", "summary": str}`
-- **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "medium"|"low", "title": str, "reason": str (optional)}], "follow_ups": [FollowUp] (optional)}`.
+- **spec_review** — `{"fixed": [{"severity": "blocker"|"high", "title": str, "commit": str}], "hard": [{"severity": "blocker"|"high", "title": str, "file": str, "line": int|null, "failure_scenario": str}], "not_fixed": [{"severity": "low", "title": str, "reason": str (optional)}], "follow_ups": [FollowUp] (optional)}`.
   `hard` holds findings the spec introduced and can fix within its rules. A finding whose fix
   would break an explicit scope rule of the spec keeps its real severity: medium or higher is a
-  follow-up (`out-of-scope`), low goes to `not_fixed` with `reason` naming the rule.
-- **FollowUp** (in `review` and `spec_review`) — `{"category": "pre-existing"|"out-of-scope"|"needs-decision"|"too-large"|"tech-debt", "severity": "blocker"|"high"|"medium", "title": str, "file": str, "line": int|null, "problem": str, "why_separate": str, "evidence": str, "acceptance": [str]}`.
+  follow-up (`out-of-scope`), low goes to `not_fixed` with `reason` naming the rule. Any other
+  medium finding the review does not fix is a `deferred` follow-up; `not_fixed` is only for low
+  ones (the validator rejects a medium there).
+- **FollowUp** (in `review` and `spec_review`) — `{"category": "pre-existing"|"out-of-scope"|"needs-decision"|"too-large"|"tech-debt"|"deferred", "severity": "blocker"|"high"|"medium", "title": str, "file": str, "line": int|null, "problem": str, "why_separate": str, "evidence": str, "acceptance": [str]}`.
   A real finding, medium or higher, that the reviewed work must not fix and that deserves its own
   issue. Categories, each with the evidence it requires:
 
@@ -120,6 +122,7 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
   | `needs-decision` | fixing it needs a product, public API or design decision the spec does not make | the question to decide |
   | `too-large` | it needs acceptance criteria of its own, a migration, or modules or contracts the spec does not describe | what makes it too large |
   | `tech-debt` | duplication or architecture that predates the work and spans beyond it | where it repeats |
+  | `deferred` | a medium finding of the reviewed work that its review chose not to fix (spec review: not an easy blocker/high; ticket and fix review: a smell not cheap or not inside the change) | the failure scenario or what it costs, with file and line |
 
   A finding without a `why_separate` is not a follow-up; low findings never are. Agents never
   open issues: the engine proposes them (see Spec phases).
@@ -128,12 +131,16 @@ unknown keys allowed; every list may be empty; an optional list may be missing a
   issues by symptom, file or symbol and component (read-only); uncertain overlap is `NEW`.
 - **e2e** — `{"verdict": "PASS"|"FAIL"|"PARTIAL"|"BLOCKED", "blocked_by": str, "acs": [{"ticket": int,
   "ac": str, "criterion": str, "derived": bool, "verdict": "PASS"|"FAIL"|"NOT VERIFIABLE",
-  "evidence": str}], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason":
+  "evidence": str, "cases": [{"case": str, "verdict": "PASS"|"FAIL"|"NOT VERIFIABLE", "evidence":
+  str}] (optional)}], "fixed": [{"title": str, "commit": str}], "pending": [{"title": str, "reason":
   str}], "collateral": [{"title": str, "severity": "blocker"|"high"|"medium"|"low",
   "caused_by_spec": bool, "action": "fixed"|"follow-up"|"reported", "detail": str}],
   "follow_ups": [FollowUp] (optional), "notes": [str] (optional)}`.
   One `acs` entry per acceptance criterion of an integrated ticket (`derived` when the ticket had
-  none and the agent derived them from its goal). The validator checks the verdict adds up
+  none and the agent derived them from its goal). `cases` are the AC's happy and unhappy paths,
+  each run even after another failed; when present the AC verdict must add up from them
+  (`results.ac_verdict`: any `FAIL` → `FAIL`, else any `NOT VERIFIABLE` → `NOT VERIFIABLE`, else
+  `PASS`), and the report lists them after the AC table. The validator checks the verdict adds up
   (`results.e2e_verdict`): any `FAIL` AC → `FAIL`, else any `NOT VERIFIABLE` → `PARTIAL`, else
   `PASS`, and a non-BLOCKED verdict has at least one AC; `BLOCKED` (preflight failed: no
   `E2E.md`, production target, dirty tree) needs a non-blank `blocked_by`. Collateral is breakage
@@ -169,7 +176,10 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
    (install by lockfile: `pnpm install --frozen-lockfile` / `yarn install --frozen-lockfile` /
    `bun install` / `npm ci` (`npm install` without any lockfile); then scripts present among `lint`, `typecheck`|`type-check`,
    `format:check`, `build`, `test` as `<pm> run <script>`), else `Makefile` targets among
-   `lint test build` (a Makefile with none of them falls through), else `go.mod` → `go vet ./...`, `go build ./...`, `go test ./...`, else
+   `lint test build` (a Makefile with none of them falls through), else exactly one .NET solution
+   (`*.sln` or `*.slnx`) at the root → `dotnet build <sln>`, `dotnet test <sln> --no-build`
+   (several solutions: no gate is discovered, and a warning asks for `--gate` naming one), else
+   `go.mod` → `go vet ./...`, `go build ./...`, `go test ./...`, else
    `Cargo.toml` → `cargo build`, `cargo test`, else `pyproject.toml` → `python3 -m pytest`.
    Empty gate is allowed but printed as a warning, with a hint to declare it in the spec body or
    pass `--gate`. The printed gate names its source (`--gate`, `spec #<N> body` or
@@ -181,7 +191,14 @@ engine plan <N> [--branch spec-<N>] [--base B] [--gate CMD]... [--from FILE]
    `agent` tickets whose body states no acceptance criteria (`has_acceptance_criteria`: a
    heading starting "Acceptance" or "AC"/"ACs", a label line `Acceptance criteria:` / `**AC:**` /
    `**ACs**`, or a Markdown task list) — review and E2E then derive criteria from the goal —, and
-   no `E2E.md` at the repository root, which ends the E2E phase BLOCKED.
+   no `E2E.md` at the repository root, which ends the E2E phase BLOCKED; an empty gate left so by
+   several .NET solutions. `repo_warnings` adds what in the repository root will trip the run:
+   uncommitted changes (`Git.status_entries`; every merge would escalate `repo-dirty`) and a local
+   base behind its upstream (`Git.fetch_upstream` fetches it first; a failed fetch is a warning of
+   its own, a base without upstream says nothing). The behind warning says what follows: the
+   engine fast-forwards the base before cutting the spec branch, unless the spec branch already
+   exists (it is not updated) or the base also has commits of its own (the `pull --ff-only`
+   fails).
 7. Write `plan.json`; print the graph (depth = "wave" for display only), each ticket's class,
    external blockers, unrefined tickets, the spec branch and the gate. Exit 0 if runnable, 1 if
    there are unrefined tickets, a cycle or a dangling blocker (plan still written so the
@@ -479,7 +496,7 @@ then; its dedup agent is the only one).
   from `run.notes`, pending review findings (`[spec]` ones flagged as keeping the issue open) and
   dismissed review findings),
   tickets already closed before the run, spec review fixed / hard findings still pending (their
-  fix run not `done`) / not fixed (medium/low, with reasons), fix runs (merge commit, finding,
+  fix run not `done`) / not fixed (low, with reasons), fix runs (merge commit, finding,
   pending and dismissed review findings), e2e verdict, AC table, fixed / pending / collateral
   (`stages.e2e_lines`; an e2e run that has a result but did not post it says so), follow-ups created /
   already open / discarded (with issue numbers), open or handed-off escalations, and
@@ -545,10 +562,10 @@ that would break an explicit spec scope rule (medium or higher → `out-of-scope
 spec_review list follow-ups by the categories above and never open issues themselves; e2e is sent
 as `/e2e` (see above) and carries work-ticket's E2E contract: preflight (clean spec branch,
 `E2E.md` present — never bootstrapped unattended —, a target proven not production, criteria read
-per ticket or derived from its goal, never from the diff), one scenario per criterion with
-mandatory evidence, ephemeral tests, triage on FAIL (test/env → fix the test; decision, shared
+per ticket or derived from its goal, never from the diff), one scenario per criterion made of
+cases (happy and stated unhappy paths, every case run even after one fails) with mandatory evidence, ephemeral tests, triage on FAIL (test/env → fix the test; decision, shared
 logic or too large → `follow_ups`, AC stays FAIL; else fix, also when the cause predates the
-spec), collateral rules, at most 3 attempts per AC and 8 fixes, a final run of every scenario from
+spec), collateral rules, at most 3 attempts per AC and 8 fixes, a final run of every case from
 a cold stack, and teardown of what it started. Its `follow_ups` join the reviews' (E2E is one of
 `follow_ups.REVIEW_KINDS`).
 
@@ -590,6 +607,7 @@ class Git(Protocol):
     def branch_exists(self, cwd: str, branch: str) -> bool: ...
     def checkout(self, cwd: str, branch: str, create_from: str | None = None) -> None: ...
     def pull_ff_only(self, cwd: str) -> None: ...
+    def fetch_upstream(self, cwd: str, branch: str) -> str | None: ...  # remote-tracking ref
     def rev_parse(self, cwd: str, ref: str) -> str: ...
     def commits_ahead(self, cwd: str, base: str, branch: str) -> int: ...
     def is_clean(self, cwd: str, untracked: bool = True) -> bool: ...  # respects excludes
