@@ -12,8 +12,8 @@ message if one fails:
   (`herdr integration status`).
 - `git`, `python3`, and `gh` (GitHub) or `glab` (GitLab), authenticated.
 - No uncommitted changes to tracked files in the repo checkout.
-- The skills the spawned agents load: `/implement-ticket`, `/code-review`,
-  `/e2e`, `/to-tickets`.
+- The skills the spawned agents load: `/implement-ticket`,
+  `/mattpocock-skills:code-review`, `/e2e`, `/to-tickets`.
 - `E2E.md` at the repo root, or the E2E phase ends BLOCKED.
 
 ## Steps

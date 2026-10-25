@@ -31,7 +31,8 @@ RULES=$(render_prompt_ "$SKILL_DIR/TRIAGE_RULES.md" TICKET_ID="$TICKET_ID" PR_NU
 case "$PHASE" in
   review)
     BODY=$(render_prompt_ "$SKILL_DIR/REVIEW_PROMPT.md" TICKET_ID="$TICKET_ID" PR_NUM="$PR_NUM")
-    PROMPT="Perform an autonomous code review of PR #$PR_NUM. TICKET: #$TICKET_ID.
+    # Empieza por el slash command para que cargue el skill (ver la fase e2e).
+    PROMPT="/mattpocock-skills:code-review Perform an autonomous code review of PR #$PR_NUM. TICKET: #$TICKET_ID.
 
 $BODY
 

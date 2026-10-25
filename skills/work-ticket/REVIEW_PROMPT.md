@@ -1,7 +1,8 @@
 Run start to finish without asking me anything. Where a decision is
 ambiguous, apply the defaults below and note the call you made.
 
-Use /code-review. If the skill isn't available, abort and report that.
+Use /mattpocock-skills:code-review on the PR's changes since its merge-base
+with the default branch. If the skill isn't available, abort and report that.
 Everything below acts on that skill's findings.
 
 ACs: establish the ticket's acceptance criteria first, per TRIAGE RULES.
