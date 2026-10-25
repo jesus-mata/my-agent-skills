@@ -19,6 +19,8 @@
 # la línea "herdr: agent ..." que imprime wait-agent.sh.
 #
 #   TICKET_WATCH_MS   tope de la espera en ms (18000000 = 5 h, ver abajo)
+#   REVIEW_LEVEL      nivel de esfuerzo de /code-review en la review
+#                     (low|medium|high|xhigh|max, high por defecto)
 #
 set -euo pipefail
 
@@ -35,6 +37,9 @@ esac
 CWD="${2:-$PWD}"
 
 . "$SKILL_DIR/herdr-report.sh"
+
+# Sin nivel, /code-review repite el último que tecleó el usuario: lo fijamos.
+REVIEW_LEVEL=$(review_level_ "${REVIEW_LEVEL:-}" 2>&1) || die "$REVIEW_LEVEL"
 
 # --- 1. entorno -------------------------------------------------------------
 [ "${HERDR_ENV:-}" = 1 ] || die "no estás dentro de herdr (HERDR_ENV != 1)"
@@ -84,7 +89,7 @@ echo "ticket #$TICKET_ID: $TITLE" >&2
 
 # --- 4. lanzar el agente del ticket -----------------------------------------
 PROMPT=$(render_prompt_ "$SKILL_DIR/IMPLEMENT_PROMPT.md" \
-  TICKET_ID="$TICKET_ID" SKILL_DIR="$SKILL_DIR")
+  TICKET_ID="$TICKET_ID" SKILL_DIR="$SKILL_DIR" REVIEW_LEVEL="$REVIEW_LEVEL")
 
 # 5 h = implementar (~1 h) + review (tope 1 h) + E2E (tope 2 h) + margen. Es sólo
 # un tope: la espera acaba en cuanto aparece la línea TICKET.

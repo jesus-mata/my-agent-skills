@@ -1,8 +1,12 @@
 Run start to finish without asking me anything. Where a decision is
 ambiguous, apply the defaults below and note the call you made.
 
-Use /code-review. If the skill isn't available, abort and report that.
-Everything below acts on that skill's findings.
+You get two messages. This one holds your instructions: do not start the
+review yet, do not invoke any skill. Reply only `READY` and end your turn.
+The next message is `/code-review {{REVIEW_LEVEL}} {{PR_NUM}}`. It runs the
+review in the background, and you are woken when its findings arrive.
+Everything below acts on those findings. If the command fails or the skill
+isn't available, abort and report BLOCKED.
 
 ACs: establish the ticket's acceptance criteria first, per TRIAGE RULES.
 You are the first phase, so if the ticket has none you derive them and
