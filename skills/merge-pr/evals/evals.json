@@ -1,0 +1,33 @@
+{
+  "skill_name": "merge-pr",
+  "evals": [
+    {
+      "id": 0,
+      "name": "pending-checks-then-clean-merge-from-worktree",
+      "prompt": "/merge-pr 42",
+      "expected_output": "Started from inside the herdr worktree of PR #42's branch, with CI still running. The skill waits for checks with `gh pr checks --watch`, squash-merges with --match-head-commit and without --delete-branch, confirms state MERGED, then runs cleanup-merged-branch.sh. The script reports CLEANUP=deferred because the herdr workspace is its own, and the skill sends its final report straight away, with no tool calls after it.",
+      "files": []
+    },
+    {
+      "id": 1,
+      "name": "trivial-import-conflict",
+      "prompt": "/merge-pr feature/add-export",
+      "expected_output": "The PR conflicts with main only in an import block and a list where both sides added independent entries. The skill merges origin/main into the PR branch (no rebase, no force-push), classifies both hunks as trivial, delegates them to a Sonnet subagent that doesn't commit, checks for leftover markers and confirms that the diff against main matches the original PR. It then commits, pushes, waits for the new checks and squash-merges.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "name": "logic-conflict-escalates",
+      "prompt": "/merge-pr 57",
+      "expected_output": "The PR and main both changed the same validation condition in different ways. The skill classifies it as not trivial, runs `git merge --abort`, does not merge the PR, does not delegate a resolution, and reports both versions of the condition so the user can decide. The PR stays open and nothing is pushed.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "name": "dirty-worktree-kept",
+      "prompt": "/merge-pr",
+      "expected_output": "No argument, so the PR of the current branch is used. After a successful merge, the branch's worktree still has an untracked notes file. cleanup-merged-branch.sh deletes the remote branch and updates main, keeps the worktree and the local branch, and reports CLEANUP=kept reason=worktree-dirty. The skill reports that and does not delete the worktree by hand.",
+      "files": []
+    }
+  ]
+}
