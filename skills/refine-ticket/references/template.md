@@ -6,8 +6,7 @@ Contents: [Template](#the-template) · [What to build](#what-to-build) ·
 
 ## The template
 
-The template is `/to-tickets`'. It is reproduced here rather than read from the installed plugin,
-because plugin paths carry version numbers and break on upgrade.
+The template is `/to-tickets`', copied here because plugin paths carry version numbers.
 
 ```markdown
 ## Parent
@@ -29,10 +28,9 @@ implementation.
 - A reference to each blocking ticket, or "None — can start immediately".
 ```
 
-No file paths and no code snippets: both go stale within weeks, and a ticket that cites a path
-someone renamed reads as if it were written about a different codebase. The one exception is content
-that pins a decision more precisely than prose can — a state machine, a schema, a type shape, or a
-result table from a reproduction. Trim it to the decision-rich part.
+No file paths and no code snippets: both go stale within weeks. The one exception is content that pins
+a decision more precisely than prose can — a state machine, a schema, a type shape, a result table from
+a reproduction — trimmed to the decision-rich part.
 
 ## What to build
 
@@ -50,10 +48,8 @@ place:
   the ticket or worries they missed something. "Not necessary for the user to stop seeing X" is a
   complete reason.
 
-Say the *why* behind non-obvious constraints. "The sweep must not take new locks" is an order; "the
-sweep must not take new locks, because it runs over every tenant on a timer and blocking there stalls
-all of them" is something the implementer can reason with when your instruction meets a case you
-didn't foresee.
+Give the *why* behind non-obvious constraints: "the sweep must not take new locks, because it runs over
+every tenant on a timer" lets the implementer reason about cases you didn't foresee.
 
 ## Acceptance criteria
 
@@ -62,12 +58,8 @@ Each criterion is a behaviour someone can observe, not an implementation to perf
 - Implementation: `[ ] Use FOR UPDATE when re-reading the row`
 - Behaviour: `[ ] The re-read returns the row even when the update changed no values`
 
-Use the glossary's canonical terms in criteria too — a criterion phrased in a term the glossary
-avoids is the one an implementer reads differently.
-
-The difference matters because the second survives a different-but-correct implementation, and
-because it names the exact case that is broken. Criteria phrased as implementation get ticked by
-someone who did the edit without ever reproducing the bug.
+The second survives a different-but-correct implementation and names the exact broken case; the first
+gets ticked by someone who never reproduced the bug. Use the glossary's canonical terms here too.
 
 Aim for criteria that cover, in whatever order fits:
 

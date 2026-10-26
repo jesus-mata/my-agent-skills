@@ -5,31 +5,78 @@
       "id": 0,
       "name": "premisa-falsa-mysql",
       "prompt": "actualicemos el ticket que te paso para resolver dudas o elegir soluciones y que cumpla con el template de /to-tickets. Entrevistame si tienes dudas o algo no es claro, no asumas. Explora el codigo y analiza el ticket.",
-      "expected_output": "El cuerpo reescrito con el template, y la mecanica del ticket CORREGIDA: la relectura plana si ve la fila cuando el UPDATE cambia valores; el 500 solo ocurre cuando el rearme es no-op. La correccion se apoya en una verificacion real (repro contra MySQL, o la documentacion de InnoDB citada con precision), no en razonamiento a secas.",
+      "expected_output": "El cuerpo reescrito con el template, y la mecanica del ticket CORREGIDA: la relectura plana si ve la fila cuando el UPDATE cambia valores; el 500 solo ocurre cuando el rearme es no-op. La correccion se apoya en una verificacion real (repro contra MySQL, o la documentacion de InnoDB citada con precision), no en razonamiento a secas. Puerta de listo: ready-for-agent solo si no queda nada abierto; si no, lista los pendientes.",
       "files": [
         "fixtures/359-original.md"
+      ],
+      "expectations": [
+        "Detecta que la mecanica original es incorrecta: la relectura plana SI ve la fila cuando el rearme cambia valores",
+        "Identifica la condicion que faltaba: el 500 requiere un rearme no-op",
+        "La correccion se apoya en una verificacion ejecutada (repro, contenedor, consulta real)",
+        "Deja constancia de que la mecanica se corrigio respecto al reporte original",
+        "Plantea como decision abierta cual salida se implementa, con una recomendacion",
+        "Puerta de listo: como la decision queda sin respuesta del usuario, NO aplicaria ready-for-agent y el reporte lista esa decision como lo pendiente",
+        "El cuerpo final tiene las secciones del template (Parent solo si hay padre): What to build, Acceptance criteria, Blocked by",
+        "Los criterios de aceptacion son checkboxes de markdown, de comportamiento observable, y hay al menos tres",
+        "El cuerpo no cita rutas de archivo ni incluye codigo fuente, salvo contenido que fija una decision",
+        "El cuerpo esta en espanol con los encabezados de seccion en ingles",
+        "El issue del tracker NO fue modificado (ni cuerpo ni etiquetas): se respeto el dry-run"
       ]
     },
     {
       "id": 1,
       "name": "decision-abierta-producto",
       "prompt": "el #354 esta sin refinar, actualizalo con el formato de /to-tickets y que quede listo para que un agente lo tome",
-      "expected_output": "Cuerpo con las cuatro secciones del template. La decision abierta real (que pasa con fecha_enviado cuando el reenvio pisa Destinatarios) queda identificada y planteada al usuario, no resuelta a escondidas. Las afirmaciones sobre el UPDATE de Rearmar se comprueban contra el codigo actual.",
-      "files": []
+      "expected_output": "Cuerpo con las cuatro secciones del template. La decision abierta real (que pasa con fecha_enviado cuando el reenvio pisa Destinatarios) queda identificada y planteada al usuario, no resuelta a escondidas. Las afirmaciones sobre el UPDATE de Rearmar se comprueban contra el codigo actual. Puerta de listo: ready-for-agent solo si no queda nada abierto; si no, lista los pendientes.",
+      "files": [],
+      "expectations": [
+        "Comprueba contra el codigo actual que Rearmar pisa destinatarios y conserva fecha_enviado",
+        "Plantea la decision abierta sobre fecha_enviado en vez de resolverla en silencio",
+        "Relaciona el cambio con #343 y los Destinatarios congelados del ADR 0023",
+        "Declara explicitamente que queda fuera de alcance, con su razon",
+        "Puerta de listo: aunque el usuario pide 'listo para un agente', NO aplicaria ready-for-agent mientras la decision de fecha_enviado siga abierta, y lo dice",
+        "El cuerpo final tiene las secciones del template (Parent solo si hay padre): What to build, Acceptance criteria, Blocked by",
+        "Los criterios de aceptacion son checkboxes de markdown, de comportamiento observable, y hay al menos tres",
+        "El cuerpo no cita rutas de archivo ni incluye codigo fuente, salvo contenido que fija una decision",
+        "El cuerpo esta en espanol con los encabezados de seccion en ingles",
+        "El issue del tracker NO fue modificado (ni cuerpo ni etiquetas): se respeto el dry-run"
+      ]
     },
     {
       "id": 2,
       "name": "frontend-sin-base-de-datos",
       "prompt": "pasame el issue #350 al template de /to-tickets, revisando antes si lo que dice sigue siendo cierto",
-      "expected_output": "Verificacion hecha leyendo el codigo React (los dos componentes citados) para confirmar si la validacion sigue corriendo en cada tecla y si las lineas citadas siguen ahi; cuerpo reescrito conservando el analisis de impacto, con ACs de comportamiento observable. La skill sincroniza antes la rama por defecto (sync-default-branch.sh) y lee el codigo desde READ_FROM, no desde un checkout viejo.",
-      "files": []
+      "expected_output": "Verificacion hecha leyendo el codigo React (los dos componentes citados) para confirmar si la validacion sigue corriendo en cada tecla y si las lineas citadas siguen ahi; cuerpo reescrito conservando el analisis de impacto, con ACs de comportamiento observable. La skill sincroniza antes la rama por defecto (sync-default-branch.sh) y lee el codigo desde READ_FROM, no desde un checkout viejo. Puerta de listo: ready-for-agent solo si no queda nada abierto; si no, lista los pendientes.",
+      "files": [],
+      "expectations": [
+        "Corre sync-default-branch.sh y lee el codigo desde READ_FROM",
+        "Verifica leyendo los dos componentes React si la validacion sigue corriendo en cada tecla",
+        "Conserva el analisis de impacto del original",
+        "Puerta de listo: el veredicto (aplicar ready-for-agent o no) es coherente con lo que quedo abierto, y si no aplica lista los pendientes concretos",
+        "El cuerpo final tiene las secciones del template (Parent solo si hay padre): What to build, Acceptance criteria, Blocked by",
+        "Los criterios de aceptacion son checkboxes de markdown, de comportamiento observable, y hay al menos tres",
+        "El cuerpo no cita rutas de archivo ni incluye codigo fuente, salvo contenido que fija una decision",
+        "El cuerpo esta en espanol con los encabezados de seccion en ingles",
+        "El issue del tracker NO fue modificado (ni cuerpo ni etiquetas): se respeto el dry-run"
+      ]
     },
     {
       "id": 3,
       "name": "termino-en-conflicto-con-glosario",
       "prompt": "refina el #361, que lo saco el reviewer automatico y habla de 'cuentas' por todos lados",
-      "expected_output": "La skill detecta que 'cuenta' choca con el glosario (que distingue Cliente de Usuario), carga /domain-modeling, plantea el termino canonico con un escenario concreto en la misma ronda que las decisiones reales, actualiza el glosario sin commitear, y el cuerpo reescrito usa el termino canonico en todas las secciones. El reporte lista el cambio de glosario con su ruta.",
-      "files": []
+      "expected_output": "El #361 real trata de la outbox de correo drenada por una instancia desplegada, no de 'cuentas': la skill debe notar que la premisa del usuario no se sostiene en vez de fabricar un conflicto de glosario, verificar el mecanismo contra el codigo y la configuracion, y dar un veredicto de ready-for-agent coherente con lo que quede abierto.",
+      "files": [],
+      "expectations": [
+        "Comprueba si el ticket realmente usa 'cuenta(s)' y, si no, lo dice en vez de inventar un conflicto de glosario",
+        "Lee el glosario y usa sus terminos canonicos en el cuerpo",
+        "Verifica contra el codigo/configuracion el mecanismo por el que la instancia desplegada drena la outbox local",
+        "Puerta de listo: el veredicto (aplicar ready-for-agent o no) es coherente con lo que quedo abierto, y si no aplica lista los pendientes concretos",
+        "El cuerpo final tiene las secciones del template (Parent solo si hay padre): What to build, Acceptance criteria, Blocked by",
+        "Los criterios de aceptacion son checkboxes de markdown, de comportamiento observable, y hay al menos tres",
+        "El cuerpo no cita rutas de archivo ni incluye codigo fuente, salvo contenido que fija una decision",
+        "El cuerpo esta en espanol con los encabezados de seccion en ingles",
+        "El issue del tracker NO fue modificado (ni cuerpo ni etiquetas): se respeto el dry-run"
+      ]
     }
   ]
 }
