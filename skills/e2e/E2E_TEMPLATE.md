@@ -6,7 +6,8 @@ below.
 
 Then **validate the draft by actually running it**: bring the stack up from a cold
 state following your own instructions, hit every health check, log in with the
-credentials you wrote down. Fix whatever was wrong. An `E2E.md` that was never
+credentials you wrote down, and start each service again on a free port with its
+port override. Fix whatever was wrong. An `E2E.md` that was never
 executed is worse than none — it teaches the next agent a stack that does not exist.
 
 Present the validated draft for review before using it.
@@ -21,7 +22,11 @@ language the repo's docs use.
 
 ## Services
 
-| Service | Start | Listens on | Depends on |
+| Service | Start | Listens on | Port override | Depends on |
+
+_Port override_ is the command that starts the service on any free port, such as
+`PORT={port} pnpm dev`, plus every setting that must follow it: a frontend's API
+URL, CORS origins, OAuth callbacks. Write `none` for a service that cannot move.
 
 ## Startup order & health checks
 

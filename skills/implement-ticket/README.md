@@ -46,9 +46,9 @@ of `RESULT: PASS`, `FAIL` or `BLOCKED`. `PASS` means every stage passed or was s
 exists. `/e2e` gets at most 3 re-runs per ticket; after that the run ends `BLOCKED` with no MR.
 
 An E2E run also ends the ticket `BLOCKED`, with no MR, when the environment stops it or the target
-can't be shown to be safe. That includes a service under test that can't be proven current, with
-no other port documented. If your dev server takes the port, stop it or have `E2E.md` document
-another one. A startup failure caused by the ticket's own code is a `FAIL`, which gets fixed.
+can't be shown to be safe. That includes a stale service under test that can't start on another
+port. To unblock it, stop your dev server or add the service's port override to `E2E.md`. A startup
+failure caused by the ticket's own code is a `FAIL`, which gets fixed.
 
 A criterion that can't be exercised end to end is `NOT VERIFIABLE`. It doesn't stop the MR or the
 `PASS`, but it is listed in the MR body and on the report's `Needs human` line, so verify it

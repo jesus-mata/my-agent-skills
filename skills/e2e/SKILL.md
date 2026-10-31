@@ -31,9 +31,13 @@ A caller's rules take precedence over this procedure.
    fastest way to waste a run.
 5. **Prove the code under test is current.** Each service running it has this
    checkout as its working directory, and it reloads on change or started after
-   the last commit. If one you did not start fails that proof, start your own on
-   another port `E2E.md` documents; with none documented, the run is `BLOCKED`.
-   Reuse running dependencies such as databases.
+   the last commit. If one you did not start fails that proof, start your own on a
+   free port with the _Port override_ from the _Services_ table, and point whatever
+   reaches that service at the new port. With the override empty, find it in the
+   repo's scripts and config, and write it into the table once your instance passes
+   its health check and this proof. If the service cannot move, the run is
+   `BLOCKED`: name the service and the override it needs. Reuse running dependencies
+   such as databases.
 6. **Pick the surface** from the _How to test_ table, then read its section in
    [SURFACES.md](SURFACES.md).
 7. **Write one test per criterion**, starting from the project's helper (see
