@@ -561,12 +561,13 @@ that would break an explicit spec scope rule (medium or higher → `out-of-scope
 `not_fixed` with the reason), **never creates worktrees or agents**; review, fix_review and
 spec_review list follow-ups by the categories above and never open issues themselves; e2e is sent
 as `/e2e` (see above) and carries work-ticket's E2E contract: preflight (clean spec branch,
-`E2E.md` present — never bootstrapped unattended —, a target proven not production, criteria read
-per ticket or derived from its goal, never from the diff), one scenario per criterion made of
-cases (happy and stated unhappy paths, every case run even after one fails) with mandatory evidence, ephemeral tests, triage on FAIL (test/env → fix the test; decision, shared
-logic or too large → `follow_ups`, AC stays FAIL; else fix, also when the cause predates the
-spec), collateral rules, at most 3 attempts per AC and 8 fixes, a final run of every case from
-a cold stack, and teardown of what it started. Its `follow_ups` join the reviews' (E2E is one of
+`E2E.md` present — never bootstrapped unattended —, criteria read per ticket or derived from its
+goal, never from the diff), one scenario per criterion made of cases (every case run even after
+one fails), triage on FAIL (the skill's test/env triage first; decision, shared logic or too
+large → `follow_ups`, AC stays FAIL; else fix, also when the cause predates the spec), collateral
+rules, at most 3 attempts per AC and 8 fixes, teardown of what it started, and a commit of what
+the run changed in `E2E.md` and its helper. Target safety, the
+current-code proof, verdicts, red proof, evidence and the final run come from the `/e2e` skill. Its `follow_ups` join the reviews' (E2E is one of
 `follow_ups.REVIEW_KINDS`).
 
 ## Ports (`ports.py`)
