@@ -98,7 +98,7 @@ Schemas (`results.py`, hand-written validators returning `(value, None)` or `(No
 unknown keys allowed; every list may be empty; an optional list may be missing and is read as
 `[]`):
 
-- **implement** — `{"status": "implemented" | "outward-denied", "summary": str, "denied_actions": [str]}`
+- **implement** — `{"status": "implemented" | "outward-denied" | "develop-failed", "summary": str, "denied_actions": [str]}`
 - **review** — `{"fixed": [{"kind": "spec"|"standards", "title": str, "commit": str}], "pending": [{"kind": "spec"|"standards", "title": str, "reason": str}], "dismissed": [{"kind": "spec"|"standards", "title": str, "reason": str}] (optional), "scope_creep": [str], "follow_ups": [FollowUp] (optional)}`.
   `pending` holds real findings left unfixed in this ticket's own work; `dismissed` holds
   findings the agent judged false positives or not applicable. Only a pending `spec` finding
@@ -297,7 +297,7 @@ Agent-turn polling (shared by IMPLEMENT, REVIEW, gate fix, SPEC_REVIEW, E2E, res
 | --- | --- | --- |
 | CLAIM | `GitHub.assign_self(n)` | OK → PROVISION |
 | PROVISION | `Herdr.create_worktree(branch=id, base=spec_branch)` (or `open_worktree` if the branch exists), `Herdr.start_agent(id, pane, agent_args)`; awaits `agent_ready` | OK once `agent_status(id)` ≠ `missing` → IMPLEMENT |
-| IMPLEMENT | prompt `implement` (fix runs: `fix_implement`) | OK+implemented → VERIFY; OK+outward-denied → escalate `outward-action-denied` |
+| IMPLEMENT | prompt `implement` (fix runs: `fix_implement`) | OK+implemented → VERIFY; OK+develop-failed → escalate budget-exhausted; OK+outward-denied → escalate `outward-action-denied` |
 | VERIFY | none (synchronous) | `Git.commits_ahead(spec_branch, id) > 0` and `Git.is_clean(worktree)` → OK → REVIEW; else `VERIFY_FAILED` → prompt `verify_failed`, wait turn (schema `implement`), re-VERIFY |
 | REVIEW | prompt `review` (fix runs: `fix_review`) | OK → INTEGRATE (store `review`) |
 | INTEGRATE | enqueue in merge queue | see Merge queue; `INTEGRATED` → CLOSE |
@@ -521,8 +521,8 @@ sent as that command alone on one line, `"/e2e Your full instructions for this c
 <file> — read that whole file first and follow it."`, with the rest of the prompt written to
 `<run_id>.<name>.prompt.md` beside the result file (`stages.as_sent`; kept, so a re-sent prompt
 still finds it). A multi-line prompt enters Claude's TUI as pasted text, which is never run as a
-command, and `/e2e` sets `disable-model-invocation`: asked for in the text, the Skill tool refuses
-it ("Do not replicate this skill's workflow by other means"). `preflight.COMMAND_SKILLS` lists
+command, and a skill that sets `disable-model-invocation` is refused by the Skill tool when asked
+for in the text ("Do not replicate this skill's workflow by other means"). `preflight.COMMAND_SKILLS` lists
 these skills; any other skill a prompt asks for must allow model invocation.
 Every template states: you are a sub Claude instance started by herdr-spec-engine for spec #$spec;
 work only in your cwd; commit on your branch; never push, merge, rebase onto other branches, switch
@@ -547,7 +547,7 @@ Implement, review, fix_implement and fix_review send the agent to the spec issue
 spec-wide rules (paths that must not change, off-limits dependencies); review and fix_review
 count a break of one as a Spec finding, so a scope violation is caught before the merge, not
 only by the spec review or E2E.
-Content follows the old skill: implement uses `/implement-ticket <n>`; review uses
+Content follows the old skill: implement uses `/develop-ticket <n>`; review uses
 `/mattpocock-skills:code-review <spec_branch>` with the fix policy (fix every missing/wrong spec
 finding and hard standards violation, test-first with `/mattpocock-skills:tdd`, one commit each,
 only report scope creep; false positives go to `dismissed`, never `pending`; work merged into the
@@ -707,7 +707,7 @@ engine abort <N>
   see every place a skill can live; so is a found skill outside `COMMAND_SKILLS` whose SKILL.md
   sets `disable-model-invocation: true` (the agents ask for it in text, and it will not load). `/code-review` is
   built in. `tests/test_preflight.py` keeps `REQUIRED_SKILLS` equal to the skills the prompts
-  invoke.
+  invoke; `TRANSITIVE_SKILLS` are checked the same way but reached through another skill.
 - Durations accept `90`, `90s`, `30m`, `2h` (`cli.parse_duration`, also `--poll`).
 - Each subcommand is handled by `cmd_<name>(args) -> int` (exit code). `run` flags default to
   `None` (dest = the `Settings` field name, `--poll` → `poll_seconds`) so

@@ -130,7 +130,7 @@ class ContentTest(unittest.TestCase):
 
     def test_skill_invocations_carried_over(self):
         expected = {
-            "implement": ["/implement-ticket <ticket-value>", "outward-denied", "denied_actions"],
+            "implement": ["/develop-ticket <ticket-value>", "outward-denied", "denied_actions"],
             "review": ["/mattpocock-skills:code-review <spec_branch-value>",
                        "/mattpocock-skills:tdd", "scope_creep", "`dismissed`",
                        "never in `pending`", "is not a finding", "`follow_ups`"],

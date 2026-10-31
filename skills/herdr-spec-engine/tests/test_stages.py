@@ -312,6 +312,19 @@ class StagesTest(unittest.TestCase):
         self.assertEqual(h.status("s7-ticket-1"), RunStatus.LEFT_OPEN)
         self.assertEqual(len(h.github.comments[1]), 1)
 
+    def test_develop_failed_escalates_with_the_reason(self):
+        h = self.harness()
+        h.turn("s7-ticket-1", {"status": "develop-failed", "summary": "postgres is down",
+                               "denied_actions": []})
+        h.run_until(lambda: h.open_escalations())
+        esc = h.only_escalation()
+        self.assertEqual((esc.kind, esc.stage), (EscalationKind.BUDGET_EXHAUSTED, Stage.IMPLEMENT))
+        self.assertIn("postgres is down", esc.details)
+        h.script_ticket("s7-ticket-1")
+        h.resolve(esc.id, "retry")
+        h.run_until(lambda: h.status("s7-ticket-1") is RunStatus.DONE)
+        self.assertEqual(h.templates()[:3], ["implement", "implement", "review"])
+
     def test_outward_denied_retry_reprompts_implement(self):
         h = self.harness()
         h.turn("s7-ticket-1", {"status": "outward-denied", "summary": "s", "denied_actions": ["x"]})

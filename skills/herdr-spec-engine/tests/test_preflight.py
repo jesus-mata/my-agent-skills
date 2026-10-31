@@ -33,7 +33,7 @@ class PreflightTest(unittest.TestCase):
         self.env = {"CLAUDE_CONFIG_DIR": self.config, "HERDR_SOCKET_PATH": self.socket}
 
     def install_all_skills(self):
-        for name in ("implement-ticket", "e2e"):
+        for name in ("develop-ticket", "run-tests", "e2e"):
             write(os.path.join(self.config, "skills", name, "SKILL.md"))
         plugin = os.path.join(self.config, "plugins", "cache", "mattpocock-skills", "1.0")
         write(os.path.join(plugin, ".claude-plugin", "plugin.json"),
@@ -107,14 +107,14 @@ class PreflightTest(unittest.TestCase):
 
     def test_skill_asked_for_in_text_must_allow_model_invocation(self):
         self.install_all_skills()
-        write(os.path.join(self.config, "skills", "implement-ticket", "SKILL.md"),
-              "---\nname: implement-ticket\ndisable-model-invocation: true\n---\nbody\n")
+        write(os.path.join(self.config, "skills", "develop-ticket", "SKILL.md"),
+              "---\nname: develop-ticket\ndisable-model-invocation: true\n---\nbody\n")
         write(os.path.join(self.config, "skills", "e2e", "SKILL.md"),
               "---\nname: e2e\ndisable-model-invocation: true\n---\nbody\n")
         report = self.check()
         self.assertEqual(report.errors, [])
         self.assertEqual(len(report.warnings), 1)  # e2e is sent as a command: allowed
-        self.assertIn("`/implement-ticket` sets disable-model-invocation", report.warnings[0])
+        self.assertIn("`/develop-ticket` sets disable-model-invocation", report.warnings[0])
 
     def test_command_skills_are_the_templates_leading_commands(self):
         leading = set()
@@ -130,7 +130,9 @@ class PreflightTest(unittest.TestCase):
         self.assertEqual(report.errors, [])
         missing = [re.search(r"`/([^`]+)`", w).group(1) for w in report.warnings]
         self.assertEqual(missing, [s for s in preflight.REQUIRED_SKILLS
+                                   + preflight.TRANSITIVE_SKILLS
                                    if s not in preflight.BUILTIN_SKILLS])
+        self.assertIn("run-tests", missing)
 
     def test_project_skill_found(self):
         write(os.path.join(self.repo, ".claude", "skills", "e2e", "SKILL.md"))

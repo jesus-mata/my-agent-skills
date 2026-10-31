@@ -88,7 +88,7 @@ class RealTemplateScenarioTest(unittest.TestCase):
         implement = h.text_of("implement")
         self.assertIn("ticket #1 (Export endpoint) on branch `s7-ticket-1`", implement)
         self.assertIn("Already integrated into `spec-7`:\n\nnone\n", implement)
-        self.assertIn("/implement-ticket 1", implement)
+        self.assertIn("/develop-ticket 1", implement)
         self.assertIn(f"`{h.run('s7-ticket-1').worktree}/.herdr-spec/s7-ticket-1.implement.json`",
                       implement)
         self.assertIn(f"`{BRANCH}` against `main`", h.text_of("spec_review"))
@@ -101,7 +101,7 @@ class RealTemplateScenarioTest(unittest.TestCase):
         self.assertIn("| #1 | AC1 | export flow works | PASS | out/export.png |", comment)
         self.assertIn("emails the \\| export", comment)  # a | in a cell cannot split the row
         self.assertIn("Verdict: **PARTIAL**", comment)
-        # /e2e has disable-model-invocation: it must arrive as a command on one short line,
+        # /e2e must arrive as a command on one short line,
         # with the rest of the prompt in a file beside the result file.
         sent = h.herdr.prompts["s7-e2e"][0]
         instructions = os.path.join(h.root, ".herdr-spec", "s7-e2e.e2e.prompt.md")

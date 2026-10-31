@@ -24,8 +24,8 @@ TEMPLATE_NAMES: tuple[str, ...] = (
 
 # A rendered prompt that starts with a slash command (``/e2e ...``) must reach Claude as that
 # command, alone on a short line: a multi-line prompt enters the TUI as pasted text, and pasted
-# text is never run as a command. A skill with ``disable-model-invocation`` (e2e) can only be
-# loaded that way; asked for in the text, the Skill tool refuses it.
+# text is never run as a command. A skill with ``disable-model-invocation`` can only be
+# loaded that way; asked for in the text, the Skill tool refuses it. e2e is sent the same way.
 COMMAND_RE = re.compile(r"^(/[a-z][a-z0-9:_-]*)[ \t]*")
 
 

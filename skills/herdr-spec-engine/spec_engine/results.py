@@ -114,7 +114,7 @@ def _validator(name: str, check: Callable[[dict, str], None]) -> Validator:
 
 
 def _implement(d: dict, w: str) -> None:
-    _enum(d, "status", w, ("implemented", "outward-denied"))
+    _enum(d, "status", w, ("implemented", "outward-denied", "develop-failed"))
     _str(d, "summary", w)
     _str_list(d, "denied_actions", w)
 

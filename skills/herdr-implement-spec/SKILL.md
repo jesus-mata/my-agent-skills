@@ -5,7 +5,7 @@ description: "Implement every ticket of a spec/PRD by orchestrating parallel Cla
 
 Implements the spec given, or the spec GitHub issue provided, by orchestrating Claude agents with herdr: implement every ticket wave by wave, then review and E2E-test the spec branch.
 
-Requires: the `herdr` CLI, an authenticated `gh`, Claude Code, and the `/implement-ticket`, `/e2e`, `/code-review`, `/mattpocock-skills:code-review` and `/mattpocock-skills:tdd` skills available to the sub-agents.
+Requires: the `herdr` CLI, an authenticated `gh`, Claude Code, and the `/develop-ticket`, `/run-tests`, `/e2e`, `/code-review`, `/mattpocock-skills:code-review` and `/mattpocock-skills:tdd` skills available to the sub-agents.
 
 - The spec issue is just the spec; the related issues or slices are the work to be implemented.
 - `<N>` is the spec issue number. `<SKILL_DIR>` is this skill's base directory.
@@ -28,7 +28,7 @@ Per wave: steps 1–3 for every ticket (fan out), steps 4–5 once for the wave,
 2. Create its worktree, based on the spec branch:
    - `herdr worktree create --cwd "$PWD" --branch "ticket-<ID>" --base "<SPEC_BRANCH>" --label "ticket-<ID>" --no-focus --json` → PANE_ID is `result.root_pane.pane_id`, WORKSPACE_ID is `result.workspace.workspace_id`. If the branch exists, use `herdr worktree open --branch "ticket-<ID>"`.
    - `herdr agent start ticket-<ID> --kind claude --pane <PANE_ID> --timeout 60000 -- --permission-mode auto --model opus`
-3. `<SKILL_DIR>/prompt-agent.sh ticket-<ID> "use /implement-ticket <ID> ..."`. In one or two sentences add: it is a sub Claude instance, the spec issue, its branch and what the spec branch already contains, the sibling tickets running in parallel, keep changes scoped to its own components/tests, commit on its branch and do not push, merge, switch branches or deploy. If siblings touch the same shared file (index, router, registry, config), tell each exactly where its piece goes.
+3. `<SKILL_DIR>/prompt-agent.sh ticket-<ID> "use /develop-ticket <ID> ..."`. In one or two sentences add: it is a sub Claude instance, the spec issue, its branch and what the spec branch already contains, the sibling tickets running in parallel, keep changes scoped to its own components/tests, commit on its branch and do not push, merge, switch branches or deploy. If siblings touch the same shared file (index, router, registry, config), tell each exactly where its piece goes.
 4. `<SKILL_DIR>/wait-agents.sh ticket-<ID_1> ticket-<ID_2> ...`
    - `done`/`idle`: read its summary in the output, check the branch has commits (`git log --oneline <SPEC_BRANCH>..ticket-<ID>`) and a clean tree.
    - `blocked`: read the pane; answer routine decisions with `prompt-agent.sh`, otherwise hand off to a human. Wait on it again.

@@ -1,6 +1,6 @@
 ---
 name: work-ticket
-description: Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (use implement-ticket).
+description: Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (the user runs /implement-ticket).
 ---
 
 # Work a ticket in a Herdr worktree
@@ -12,8 +12,8 @@ message if one fails:
   (`herdr integration status`).
 - `git`, `python3`, and `gh` (GitHub) or `glab` (GitLab), authenticated.
 - No uncommitted changes to tracked files in the repo checkout.
-- The skills the spawned agents load: `/implement-ticket`, `/code-review`,
-  `/e2e`, `/to-tickets`.
+- The skills the spawned agents load: `/develop-ticket`, `/run-tests`,
+  `/code-review`, `/e2e`, `/to-tickets`.
 - `E2E.md` at the repo root, or the E2E phase ends BLOCKED.
 
 ## Steps

@@ -20,10 +20,13 @@ from .adapters.system import herdr_integration_status
 REQUIRED_TOOLS: tuple[str, ...] = ("git", "gh", "herdr", "claude")
 
 REQUIRED_SKILLS: tuple[str, ...] = (
-    "implement-ticket", "e2e", "code-review", "mattpocock-skills:code-review",
+    "develop-ticket", "e2e", "code-review", "mattpocock-skills:code-review",
     "mattpocock-skills:tdd",
 )
 """Every skill a prompt template invokes (``tests/test_preflight.py`` keeps them in step)."""
+
+TRANSITIVE_SKILLS: tuple[str, ...] = ("run-tests",)
+"""Skills no prompt names, reached through a skill that one does (``develop-ticket``)."""
 
 BUILTIN_SKILLS: frozenset[str] = frozenset({"code-review"})
 
@@ -66,7 +69,7 @@ def check(
     if "herdr" not in missing:
         _check_integration(report, integration_status())
     config_dir = env.get("CLAUDE_CONFIG_DIR") or os.path.join(os.path.expanduser("~"), ".claude")
-    for skill in REQUIRED_SKILLS:
+    for skill in REQUIRED_SKILLS + TRANSITIVE_SKILLS:
         if skill in BUILTIN_SKILLS:
             continue
         path = skill_file(skill, repo_root, config_dir)
