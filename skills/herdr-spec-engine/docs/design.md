@@ -565,7 +565,8 @@ as `/e2e` (see above) and carries work-ticket's E2E contract: preflight (clean s
 goal, never from the diff), one scenario per criterion made of cases (every case run even after
 one fails), triage on FAIL (the skill's test/env triage first; decision, shared logic or too
 large → `follow_ups`, AC stays FAIL; else fix, also when the cause predates the spec), collateral
-rules, at most 3 attempts per AC and 8 fixes, and teardown of what it started. Target safety, the
+rules, at most 3 attempts per AC and 8 fixes, teardown of what it started, and a commit of what
+the run changed in `E2E.md` and its helper. Target safety, the
 current-code proof, verdicts, red proof, evidence and the final run come from the `/e2e` skill. Its `follow_ups` join the reviews' (E2E is one of
 `follow_ups.REVIEW_KINDS`).
 

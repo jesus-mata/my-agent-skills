@@ -45,7 +45,7 @@ FIXES:
 - At most 3 attempts per AC and 8 fixes in all; beyond that stop fixing and report the rest as `"FAIL"`.
 - After the last fix, do the skill's final run, with every case of every AC.
 
-TEARDOWN, before writing the result (also after a preflight stop): stop every process and container you started, delete the test data you created, restore any config you changed. Leave alone whatever was running before you started. Anything you could not stop goes in `notes`.
+TEARDOWN, before writing the result (also after a preflight stop): stop every process and container you started, delete the test data you created, restore any config you changed except `E2E.md` and its helper module. Leave alone whatever was running before you started. Anything you could not stop goes in `notes`. Then stage only what this run changed in `E2E.md` and its helper module, commit it on its own on `$spec_branch`, and name that commit in `notes`.
 
 Follow-ups use the reviews' shape: `category` (`pre-existing`, `out-of-scope`, `needs-decision`, `too-large`, `tech-debt`), real `severity` (blocker, high or medium), `title`, `file`, `line`, `problem`, `why_separate`, `evidence` and `acceptance`. Never open issues yourself: the engine proposes them to the user, who decides.
 

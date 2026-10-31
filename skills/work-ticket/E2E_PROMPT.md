@@ -75,6 +75,10 @@ test data you created, and restore any untracked config you changed.
 Leave untouched whatever was already running before you started. List
 in the report anything you could not stop.
 
+E2E.md — after TEARDOWN, also after an abort: stage only what this run
+changed in E2E.md and its helper module and commit it on its own. Push
+that commit to the PR branch unless the run aborted.
+
 ABORT CONDITIONS — stop, revert nothing, report state, do not push:
 
 - Preflight failed (see above).
@@ -94,7 +98,7 @@ REPORTING via gh|glab — one comment on the PR, one on the ticket:
   marked as such; collateral findings and what you did with each;
   tickets created (with links), each naming the TICKET CRITERION that
   sent it there; candidates deduped into an existing ticket (with
-  links); gotchas written back into E2E.md.
+  links); what was written back into E2E.md.
 - Any default you applied under ambiguity, and any abort condition hit.
 
 FINAL OUTPUT — print exactly this block as your last message, so the
