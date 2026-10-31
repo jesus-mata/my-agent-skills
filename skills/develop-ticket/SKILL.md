@@ -10,7 +10,7 @@ Implement ticket $ARGUMENTS on the current branch. E2E, review, pushing and merg
 
 ## Steps
 
-1. **Read the ticket** with `gh issue view <n> --comments` or `glab issue view <n> --comments`, by the origin remote. Take its acceptance criteria verbatim. If it lists none, derive checkable statements of observable behaviour from its stated goal. With no derivable goal, stop with `RESULT: BLOCKED`: criteria come from the ticket, never from the diff.
+1. **Read the ticket's body and comments**, by the origin remote: run both `gh issue view <n>` and `gh issue view <n> --comments`, because `--comments` alone can omit the body, or `glab issue view <n> --comments`. Take its acceptance criteria verbatim. If it lists none, derive checkable statements of observable behaviour from its stated goal. With no derivable goal, stop with `RESULT: BLOCKED`: criteria come from the ticket, never from the diff.
 2. **Implement** test-first with `/mattpocock-skills:tdd`, following YAGNI and one-liner solutions. Done when every acceptance criterion is met.
 3. **Validate.** Done when a full pass of both checks changes no code.
    - Run the repo's formatter in write mode on the files this ticket changed, then its linter and typecheck. Find their commands in `CLAUDE.md`/`AGENTS.md`, then `package.json`/`Makefile`/`justfile`, then the ecosystem's convention. Fix what they report, and note any tool the repo lacks.

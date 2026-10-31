@@ -5,9 +5,11 @@ These apply to the code review phase and the E2E phase alike.
 ACCEPTANCE CRITERIA — "AC" everywhere below means the ticket's acceptance
 criteria, written or derived. Establish them before anything else:
 
-1. Read the ticket — `gh issue view {{TICKET_ID}} --comments` or `glab
-   issue view {{TICKET_ID}} --comments`, by the origin remote. Take explicit ACs verbatim and
-   number them AC1..ACn.
+1. Read the ticket's body and comments, by the origin remote: run both
+   `gh issue view {{TICKET_ID}}` and `gh issue view {{TICKET_ID}} --comments`,
+   because `--comments` alone can omit the body, or `glab issue view
+   {{TICKET_ID}} --comments`. Take explicit ACs verbatim and number them
+   AC1..ACn.
 2. No explicit ACs, but the ticket states a goal, objective or problem to
    solve → derive the criteria from it. Each must be one checkable
    statement about observable behaviour, not a restatement of the goal.

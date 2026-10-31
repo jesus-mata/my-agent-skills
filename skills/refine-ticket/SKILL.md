@@ -39,9 +39,9 @@ line is `READ_FROM=<ref>`: read all code from that ref (`git show <ref>:<path>`,
 
 ## 2. Read the ticket and everything it hangs off
 
-`gh issue view <N> --comments` — decisions often live only in comments. Follow its edges: parent and
-sibling tickets, the PR it was found in, cited ADRs. Siblings carving up the same area tell you what
-scope is already taken.
+`gh issue view <N>` and `gh issue view <N> --comments`: `--comments` alone can omit the body, and
+decisions often live only in comments. Follow its edges: parent and sibling tickets, the PR it was
+found in, cited ADRs. Siblings carving up the same area tell you what scope is already taken.
 
 Read `GLOSSARY.md` (or `CONTEXT.md`; `GLOSSARY-MAP.md` points to per-context glossaries) and
 `docs/adr/`. Note every ticket term the glossary defines differently, lacks, or lists under _Avoid_.
