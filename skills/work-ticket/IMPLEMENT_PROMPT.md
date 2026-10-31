@@ -34,7 +34,10 @@ and keep waiting. By state:
   BLOCKED; quote the error in your summary.
 
 1. IMPLEMENT
-   Run the /implement-ticket skill for #{{TICKET_ID}}.
+   Run the /develop-ticket skill for #{{TICKET_ID}}. If it ends with anything
+   but `RESULT: PASS`, that result is the phase result: stop here.
+   Push the branch and open a PR/MR against the default branch, with
+   `Closes #{{TICKET_ID}}` in its body.
    Then get PR_NUM by the origin remote: `gh pr view --json number -q
    .number` (GitHub) or `glab mr view -F json | jq .iid` (GitLab).
    Phase result: PASS if a PR/MR exists for this branch, the branch has
@@ -58,7 +61,7 @@ you as still working until it appears. Print it exactly once, as your last
 message, also when you stop early. The first line must match exactly:
 
     TICKET <DONE|FAIL|PARTIAL|BLOCKED> — ticket #{{TICKET_ID}}, PR <url or none>
-    Implement: <PASS|FAIL> — <one line>
+    Implement: <PASS|FAIL|BLOCKED> — <one line>
     Review: <the REVIEW line verbatim, or "not run">
     E2E: <the E2E line verbatim, or "not run">
     ACs: <one line per AC: "ACn — <E2E verdict> — <evidence>", or "not run">

@@ -1,7 +1,6 @@
 ---
 name: e2e
 description: Bring up the local stack and end-to-end test a change — web app, HTTP API, CLI, or desktop app — driven by the project's root E2E.md. Use it when you need to verify that something actually works, not just that it compiles or that the unit tests pass.
-disable-model-invocation: true
 ---
 
 # e2e

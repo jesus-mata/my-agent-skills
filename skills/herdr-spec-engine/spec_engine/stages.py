@@ -545,6 +545,10 @@ def _complete_implement(ctx: Context, run: Run, value: dict) -> None:
                  f"{run.id} needs outward actions it may not take",
                  details=f"{value.get('summary', '')}\n{denied}".strip())
         return
+    if value.get("status") == "develop-failed":
+        escalate(ctx, run, EscalationKind.BUDGET_EXHAUSTED, f"{run.id} could not finish /develop-ticket",
+                 details=value.get("summary", ""))
+        return
     goto_next(ctx, run)
 
 

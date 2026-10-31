@@ -5,7 +5,7 @@ machine — Claude Code, Codex, Cursor, Gemini CLI, opencode, and anything else 
 `skills/` directory.
 
 Skills are **linked, not copied**. One clone is the source of truth: edit a skill here and every
-agent on that machine sees the change immediately. Updating is `git pull`.
+agent on that machine sees the change immediately. Updating is `git pull`, plus `bin/agent-skills update` to link any new skill.
 
 ## Prerequisites
 
@@ -14,9 +14,12 @@ them first, or those references dangle:
 
 | Skill | Uses |
 | --- | --- |
-| `implement-ticket` | `/tdd` (`/mattpocock-skills:tdd`) |
+| `develop-ticket` | `/tdd` (`/mattpocock-skills:tdd`) |
+| `implement-ticket` | `/mattpocock-skills:code-review` |
 | `refine-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`), `/domain-modeling` (`/mattpocock-skills:domain-modeling`) |
 | `work-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`) |
+
+`run-review` also needs Claude Code's built-in `/code-review`, so it reports `BLOCKED` on other agents.
 
 In Claude Code:
 
@@ -61,13 +64,16 @@ behind the one you edit.
 
 | Skill | What it does |
 | --- | --- |
+| [`develop-ticket`](skills/develop-ticket/SKILL.md) | Develops a ticket or issue on the current branch: reads it, codes it test-first, validates and commits. Use when a ticket's code must be written on an assigned branch, by hand or from an orchestrator. For the full pipeline to an MR, use /implement-ticket. |
 | [`e2e`](skills/e2e/SKILL.md) | Bring up the local stack and end-to-end test a change — web app, HTTP API, CLI, or desktop app — driven by the project's root E2E.md. Use it when you need to verify that something actually works, not just that it compiles or that the unit tests pass. |
 | [`herdr-implement-spec`](skills/herdr-implement-spec/SKILL.md) | Implement every ticket of a spec/PRD by orchestrating parallel Claude instances in herdr worktrees, wave by wave, merging each into a spec branch, then code-review and E2E-test the whole spec. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or slices implemented, not just a single ticket. Use only when the user explicitly asks for it instead of herdr-spec-engine. |
 | [`herdr-spec-engine`](skills/herdr-spec-engine/SKILL.md) | Implements every ticket of a spec, PRD or epic with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec; Claude only supervises its escalations. Use when the user hands over a spec or PRD (or its GitHub issue) and wants all its tickets or sub-issues implemented, not a single ticket. Default choice over herdr-implement-spec. |
-| [`implement-ticket`](skills/implement-ticket/SKILL.md) | Implements the work of a ticket or issue |
+| [`implement-ticket`](skills/implement-ticket/SKILL.md) | Takes a ticket from code to MR: develops it, E2E-tests it, runs spec and code review, fixes what they find, then opens an MR against the default branch. |
 | [`merge-pr`](skills/merge-pr/SKILL.md) | Squash-merges a GitHub pull request once its checks pass, resolving only trivial conflicts (with a Sonnet subagent) and escalating anything that touches logic or scope, then deletes the remote branch, updates the main checkout and removes the PR's local branch and worktree — herdr or plain git. Use when the user types /merge-pr with a PR number, URL or branch, or none for the current branch's PR. |
 | [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrites an existing ticket in place so it matches the /to-tickets format, after syncing the default branch and falsifying the ticket's technical claims against the latest code, sharpens its domain language with /domain-modeling, and labels it ready-for-agent once nothing is left open. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands over a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
-| [`work-ticket`](skills/work-ticket/SKILL.md) | Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (use implement-ticket). |
+| [`run-review`](skills/run-review/SKILL.md) | Runs `/code-review high` and classifies every finding as Critical, High, Medium or Low, ending in a PASS/FAIL/BLOCKED verdict. Use when review findings need a severity or a verdict, by hand or from another skill. |
+| [`run-tests`](skills/run-tests/SKILL.md) | Runs the project's existing test suites on the current branch or worktree and reports a verdict per tier. Use to run the tests or check for regressions, by hand or from another skill. Not for writing tests or proving acceptance criteria (use /e2e). |
+| [`work-ticket`](skills/work-ticket/SKILL.md) | Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (the user runs /implement-ticket). |
 
 <!-- skills:end -->
 

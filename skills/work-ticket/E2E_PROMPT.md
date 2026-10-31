@@ -8,9 +8,8 @@ the diff and not by running unit tests.
 
 You were launched with the /e2e command, so its skill is already loaded:
 follow it. These instructions may reach you as a file named in that
-command's arguments. (e2e has disable-model-invocation: true — it can only be
-loaded that way, never through the Skill tool.) If no e2e instructions
-were loaded, abort and report that.
+command's arguments. If no e2e instructions were loaded, abort and report
+that.
 
 PREFLIGHT — all four, in order. Any failure here is an abort:
 
