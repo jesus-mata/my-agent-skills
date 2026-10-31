@@ -12,156 +12,72 @@ in **`E2E.md` at the repo root**. Never hardcode a project fact here.
 Argument: `--keep` promotes the test into the versioned suite. Default is
 ephemeral (write it, run it, report, delete it).
 
+A caller's rules take precedence over this procedure.
+
 ## Procedure
 
-1. **Read `E2E.md`** at the repo root. If it does not exist, go to _Bootstrap_
-   first, then come back.
-2. **Health-check before starting anything.** Probe every service in the
+1. **Read `E2E.md`** at the repo root. If it does not exist, follow
+   [E2E_TEMPLATE.md](E2E_TEMPLATE.md) first, then come back.
+2. **Number the criteria.** Use the caller's acceptance criteria. With none, turn
+   the request into numbered, checkable statements about observable behaviour and
+   state them before testing. Source them from the request or ticket, never the
+   diff.
+3. **Preflight the target.** The base URLs and database hosts in `E2E.md` are
+   local or a declared test environment, and the accounts are its test users. If
+   you cannot show this, the run is `BLOCKED`.
+4. **Health-check before starting anything.** Probe every service in the
    _Services_ table and start **only what is down**. The user very likely has a
    dev server running already; killing it or double-binding its port is the
    fastest way to waste a run.
-3. **Pick the surface** from the _How to test_ table — web, api, cli or desktop.
-   The table says which tool and where the tests live.
-4. **Write the test**, starting from the project's helper (see _Helper
-   discipline_). Ephemeral by default. On the web surface, explore with
-   `playwright-cli` first (see _Surfaces → web_).
-5. **Report with evidence**: cite screenshot / trace / output file paths. A UI
-   change verified without a visual artifact is not verified.
-6. **Teardown**: stop only the services _you_ started, and only if the user asks.
-7. **Feed `E2E.md` back**: any gotcha that cost you a failed run gets written into
-   its _Gotchas_ section before you close. That is how this file gets good.
+5. **Prove the code under test is current.** Each service running it has this
+   checkout as its working directory, and it reloads on change or started after
+   the last commit. If one you did not start fails that proof, start your own on
+   another port `E2E.md` documents; with none documented, the run is `BLOCKED`.
+   Reuse running dependencies such as databases.
+6. **Pick the surface** from the _How to test_ table, then read its section in
+   [SURFACES.md](SURFACES.md).
+7. **Write one test per criterion**, starting from the project's helper (see
+   _Helper discipline_). Cover the happy path plus each unhappy path the criterion
+   states, and nothing beyond them. A criterion that writes data reads the outcome
+   back through a different path from the action: a reload, an API read or a
+   database query.
+8. **Triage each failure.** A bad selector, missing seed, stale service or wrong
+   credentials is your test or the environment: fix it and run again. Anything
+   else is `FAIL`.
+9. **Get a red proof** for every test (see _Red proof_).
+10. **Do the final run:** every criterion once, with each test unedited, on the
+    final code. First restart the services you started that run the code under
+    test, and prove any you reused are still current. Your verdicts come from
+    this run.
+11. **Report** one verdict per criterion, citing screenshot / trace / output file
+    paths.
+12. **Teardown**: stop only the services _you_ started, and only if the user asks.
+13. **Feed `E2E.md` back**: any gotcha that cost you a failed run gets written into
+    its _Gotchas_ section before you close. That is how this file gets good.
 
-## Bootstrap — when `E2E.md` is missing
+## Verdicts
 
-Read `docker-compose*.yml`, `package.json` / `Makefile` / `*.csproj` / `pyproject.toml`,
-`README.md`, `CLAUDE.md`, and any `.env.example` to draft the file from the template
-below.
+One per criterion:
 
-Then **validate the draft by actually running it**: bring the stack up from a cold
-state following your own instructions, hit every health check, log in with the
-credentials you wrote down. Fix whatever was wrong. An `E2E.md` that was never
-executed is worse than none — it teaches the next agent a stack that does not exist.
+- `PASS`: green in the final run, red in its red proof, evidence cited.
+- `FAIL`: it ran and the behaviour contradicts the criterion. This includes a
+  startup failure caused by the change.
+- `NOT VERIFIABLE`: it cannot be exercised end to end, it has no red proof, or it
+  is a UI criterion with no visual artifact. Say exactly what is missing.
 
-Present the validated draft for review before using it.
+`BLOCKED` applies to the whole run: the target or the environment stopped it. Give
+the reason.
 
-## `E2E.md` template
+## Red proof
 
-Single file, no sub-documents. Section headings in English; prose in whatever
-language the repo's docs use.
+A test earns `PASS` only after you have seen it go _red_. Cite what turned red.
 
-```markdown
-# E2E
-
-## Services
-
-| Service | Start | Listens on | Depends on |
-
-## Startup order & health checks
-
-Ordered list. Each entry: the command, and **how to know it is ready** — a URL
-that returns, a log line, a port that accepts. "Started" is not "ready".
-
-## Entry points
-
-The URLs / binaries that count as the front door, and which one to prefer when
-several are equivalent.
-
-## Users & credentials
-
-Test accounts, roles, how to reset them.
-
-## Seed data
-
-What exists after seeding, the command to re-seed, and whether it is idempotent.
-Name the concrete identifiers tests will need.
-
-## How to test
-
-| Surface | Type | Tool | Tests live in | Run one |
-
-For a web surface, also give the `playwright-cli` command, its config file
-(real desktop UA, the same TLS settings as the runner) and the `storageState`
-path to load.
-
-## Gotchas
-
-The things that cost a failed run. Symptom first, then cause, then fix.
-
-## Teardown
-
-How to stop each service, and what is safe to leave running.
-```
-
-## Surfaces
-
-### web — explore with `playwright-cli`, verify with `@playwright/test`
-
-Two tools, one engine, two different jobs. Do not swap them.
-
-**1. Explore — `playwright-cli`.** Look at the real page before writing any
-selector. Recent Playwright ships it as `playwright cli` (check with `playwright cli
---help`; 1.62 has it), so it uses the runner's version and browser. Use the global
-`@playwright/cli` package only when the project has no local Playwright.
-
-- One named session per run (`-s=<name>`), opened with the project's CLI config
-  (`--config=…`, declared in `E2E.md`). Reuse the runner's login with
-  `state-load <storageState>` instead of logging in by hand.
-- `snapshot` (cap it with `--depth`, or snapshot one ref) and `find "<text>"` /
-  `find --regex` show the real tree. `generate-locator <ref>` returns the
-  Playwright locator to paste into the spec. `console` and `requests` show what
-  the page did.
-- **Headless sets a bot user-agent.** Pin a real desktop UA in the CLI config.
-  Bot detection can change what the server renders (full HTML instead of a
-  stream, for example), and then you are exploring a different page.
-- **Nothing you see here is a verdict or evidence.** Exploring finds selectors
-  and confirms that a flow is reachable. `close` the session when you are done.
-
-**2. Verify — `@playwright/test`.** The spec is the only source of a verdict.
-
-- One `test` per acceptance criterion, asserted with `expect`. The spec can be
-  re-run unchanged, including the final cold-stack re-run, and it exits non-zero
-  on failure. A CLI command history can do neither.
-- `globalSetup` does the health check **and** one real login, persisted with
-  `storageState`. Per-test logins are slow and they are what makes a suite crawl.
-- Fixtures: `authedPage` (loads the storage state) and `flows` (the project's
-  helper). Keep a separate, un-authenticated fixture for tests that exercise
-  login itself.
-- Config: `trace: "retain-on-failure"`, `screenshot: "only-on-failure"`. The trace
-  viewer is the reason to use the runner at all. Evidence is the runner's
-  screenshot or trace. Take an explicit `page.screenshot()` for every UI AC,
-  because on a pass the runner keeps nothing.
-
-### api — `hurl`, falling back to `curl`
-
-Prefer `hurl`: declarative `.hurl` files with native asserts and variable capture
-across requests (token → next call), which is what an API e2e actually is.
-
-```hurl
-POST {{base}}/api/auth/token
-{ "user": "{{user}}" }
-HTTP 200
-[Captures]
-token: jsonpath "$.access_token"
-```
-
-If `hurl` is not installed, say so once and fall back to `curl` + `jq` with
-explicit exit-code checks. Do not silently skip the assertions.
-
-### cli — spawn the real binary
-
-Run the actual command with real arguments. Assert on **exit code, stdout/stderr,
-and side effects on disk** — all three, not just the output. Use a temp working
-directory so a failed run leaves nothing behind.
-
-### desktop — Electron via Playwright
-
-`_electron.launch({ args: ["."] })` gives you the same `page` API, the same
-fixtures and the same trace as the web branch.
-
-Non-Electron native apps (Swift, Qt, WinUI) are **out of scope**: there is no
-equivalent driver, and OS-scripting them is too brittle to encode as a procedure.
-If `E2E.md` declares one, work it case by case with the OS's own tooling and say
-plainly that it is not a supported branch.
+- **Bug fix:** run the test on the base commit in a temporary worktree. Bringing
+  up a second stack may be too costly; then use the wrong-expected check below.
+- **New behaviour:** assert the before state, so the test is red until the action
+  happens. With no before state to assert, use the wrong-expected check.
+- **Wrong-expected check:** temporarily change the expected value, confirm the
+  test goes red for that reason, and restore it. Application code stays untouched.
 
 ## Helper discipline
 
@@ -175,15 +91,8 @@ waits and retries in there are exactly the knowledge that is expensive to rebuil
 
 ## Craft rules
 
-- **Never invent a selector.** Every locator in a spec comes from a
-  `playwright-cli` snapshot or from `generate-locator`. One look at the real tree
-  saves three blind runs against a selector you imagined.
 - **Module resolution is relative to the script's file.** A script written to a
   scratch directory cannot `require` the project's test deps. Write it inside the
   test directory and delete it afterwards.
-- **Fixed waits beat `networkidle`** under any dev server with an open HMR socket —
-  `waitForLoadState("networkidle")` never resolves there, it just times out at 30s.
-- **Verify the input took.** Forms with controlled state can silently re-seed from
-  their defaults; read the value back and retry before submitting.
 - **Fail early and loudly on a missing service.** A stack check that throws in two
   seconds is worth far more than a locator timing out at 40.

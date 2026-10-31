@@ -11,7 +11,8 @@ follow it. These instructions may reach you as a file named in that
 command's arguments. If no e2e instructions were loaded, abort and report
 that.
 
-PREFLIGHT — all four, in order. Any failure here is an abort:
+PREFLIGHT — all three, in order. Any failure here, or a BLOCKED from the
+skill's own target and current-code checks, is an abort:
 
 1. You are in the ticket worktree, on the PR branch, working tree clean.
    Confirm with `git status -sb`. Never test the default branch.
@@ -24,46 +25,16 @@ PREFLIGHT — all four, in order. Any failure here is an abort:
 3. Read E2E.md at the repo root. IF IT DOES NOT EXIST: stop. Report
    BLOCKED — "no E2E.md, cannot know how to bring this stack up". Do not
    guess ports, commands, credentials or seed data. Do not bootstrap it.
-4. Confirm the target is NOT production: the base URL / DB host in
-   E2E.md must be local or a declared test environment, and the accounts
-   must be the test users from its Users & credentials section. If you
-   cannot prove the target is safe, stop and report BLOCKED.
 
-TEST — one scenario per AC, no exceptions:
+Each AC gets one of the skill's verdicts. Overall result is PASS only if
+every AC is PASS. One NOT VERIFIABLE makes the overall result PARTIAL.
 
-- Pick the surface from E2E.md's How to test table. UI change → drive it
-  with Playwright through the real browser. Backend/API-only → hurl or
-  curl. CLI-only → spawn the real binary and assert exit code, output
-  and disk side effects.
-- Tests are EPHEMERAL: write, run, report, delete. Do not add them to
-  the versioned suite and do not commit them.
-- Evidence is mandatory. Every AC verdict cites something: a screenshot
-  path, a trace path, the HTTP response, the command output. A UI AC
-  with no visual artifact is NOT VERIFIABLE (say the artifact is
-  missing), never PASS.
-- Also run the ticket's unhappy paths if the ACs state any (validation
-  errors, permissions, empty states). Do not invent extra scope beyond
-  the ACs.
+ON FAIL — after the skill's triage rules out your test and the
+environment (leave application code alone for those), first match wins:
 
-VERDICT per AC — exactly one of:
-
-- PASS — scenario ran green, evidence cited.
-- FAIL — scenario ran and the behaviour contradicts the AC.
-- NOT VERIFIABLE — cannot be exercised end to end (needs a third-party
-  sandbox, manual hardware, etc.). Say precisely what is missing.
-
-Overall result is PASS only if every AC is PASS. One NOT VERIFIABLE
-makes the overall result PARTIAL.
-
-ON FAIL — first, decide what actually broke. First match wins:
-
-1. YOUR TEST or the environment (bad selector, missing seed, stale
-   service, wrong credentials). Fix the test / re-seed and re-run. This
-   is not a finding — do not touch application code for it. If the cause
-   was non-obvious, add it to E2E.md's Gotchas section.
-2. TICKET (no code change) if any TICKET CRITERION holds. Do not attempt
+1. TICKET (no code change) if any TICKET CRITERION holds. Do not attempt
    the fix, mark that AC FAIL, link the ticket in the report.
-3. FIX — everything else, including when the cause sits outside the
+2. FIX — everything else, including when the cause sits outside the
    ticket's scope, and including a pre-existing cause: an AC is failing,
    so the PRE-EXISTING rule in TRIAGE RULES sends it here too. Keep the
    fix contained and targeted at that AC.
@@ -94,8 +65,7 @@ FIXES:
 - Max 3 fix attempts per AC, max 8 fixes total. Beyond that, stop
   fixing and report the remainder as FAIL. The ticket cap and the dedup
   pass that must precede any ticket are in TRIAGE RULES.
-- After all fixes: re-run the FULL set of AC scenarios from a cold
-  stack, not just the ones you touched. Report that final run.
+- After all fixes: do the skill's final run. Report that run.
 - PUSH the commits to the PR branch. Never push to the default branch,
   never merge, never close the ticket.
 

@@ -10,29 +10,24 @@ Not integrated (never test their criteria; they are reported elsewhere):
 
 $not_integrated
 
-PREFLIGHT, in order. Any failure is verdict `"BLOCKED"` with the reason in `blocked_by`:
+PREFLIGHT, in order. Any failure, or a skill `BLOCKED` such as a target it cannot show is not production, is verdict `"BLOCKED"` with the reason in `blocked_by`:
 
 1. `git status -sb`: you are on `$spec_branch` with a clean working tree.
 2. Read `E2E.md` at the repo root. If it does not exist, stop: `blocked_by` = "no E2E.md, cannot know how to bring this stack up". Never guess ports, commands, credentials or seed data, and do not bootstrap it: nobody is here to review the draft.
-3. The target is not production: the base URLs and database hosts in `E2E.md` are local or a declared test environment, and the accounts are the test users from its Users & credentials section. If you cannot show the target is safe, stop.
-4. Acceptance criteria: read spec #$spec and each integrated ticket (both `gh issue view <n>` and `gh issue view <n> --comments`, because `--comments` alone can omit the body). Take each ticket's explicit criteria verbatim, numbered AC1..ACn per ticket. A ticket with none but a stated goal: derive them, each one checkable statement about observable behaviour (not a restatement of the goal), with `"derived": true`. Never reconstruct criteria from the diff or the code: that tests the code against itself. A ticket with neither criteria nor a derivable goal gets no `acs` entries; name it in `notes`.
+3. Acceptance criteria: read spec #$spec and each integrated ticket (both `gh issue view <n>` and `gh issue view <n> --comments`, because `--comments` alone can omit the body). Take each ticket's explicit criteria verbatim, numbered AC1..ACn per ticket. A ticket with none but a stated goal: derive them, each one checkable statement about observable behaviour (not a restatement of the goal), with `"derived": true`. Never reconstruct criteria from the diff or the code: that tests the code against itself. A ticket with neither criteria nor a derivable goal gets no `acs` entries; name it in `notes`.
 
 TEST, one scenario per acceptance criterion:
 
 - A scenario is made of cases: the happy path plus each unhappy path the criterion states (validation errors, permissions, empty states). Run every case of every AC, even after one fails: a failing case never stops the other cases of that AC, nor the other ACs. Triage comes after the whole AC has run.
 - An AC with more than one case lists each in `cases` (`case`, `verdict`, `evidence`). The AC verdict adds up from its cases: `"FAIL"` if any case failed, else `"NOT VERIFIABLE"` if any could not be verified, else `"PASS"`; its `evidence` names the failing cases. The engine rejects an AC verdict that does not add up.
-- Pick the surface from `E2E.md`'s How to test table: UI through the real browser, API with hurl or curl, CLI by spawning the real binary and asserting exit code, output and disk side effects.
-- Tests are ephemeral: write, run, report, delete. Never commit them or add them to the versioned suite.
-- Evidence is mandatory: every verdict cites a screenshot path, a trace path, the HTTP response or the command output. A UI criterion without a visual artifact is `"NOT VERIFIABLE"` (say the artifact is missing), never `"PASS"`.
-- Invent no cases beyond what the criteria state.
+- Run the skill's red proof with its wrong-expected check, since you create no worktrees.
 
-AC verdicts, exactly one each: `"PASS"` (ran green, evidence cited), `"FAIL"` (ran, and the behaviour contradicts the criterion), `"NOT VERIFIABLE"` (cannot be exercised end to end, e.g. needs a third-party sandbox or hardware; say exactly what is missing). The overall `verdict` is `"PASS"` only if every AC is `"PASS"`, `"FAIL"` if any is `"FAIL"`, otherwise `"PARTIAL"`. The engine rejects a verdict that does not add up.
+AC verdicts are the skill's, exactly one each: `"PASS"`, `"FAIL"` or `"NOT VERIFIABLE"`. The overall `verdict` is `"PASS"` only if every AC is `"PASS"`, `"FAIL"` if any is `"FAIL"`, otherwise `"PARTIAL"`. The engine rejects a verdict that does not add up.
 
-ON FAIL, decide what broke; first match wins:
+ON FAIL, after the skill's triage rules out your test and the environment (leave application code alone for those), first match wins:
 
-1. Your test or the environment (bad selector, missing seed, stale service, wrong credentials): fix the test or re-seed and re-run. Not a finding; never touch application code for it. A non-obvious cause goes into `E2E.md`'s Gotchas section.
-2. A fix that needs a product or design decision the spec and the ticket do not make, that touches shared logic other code depends on, or that is too large to land safely unattended (past ~200 lines or ~8 files almost always is): do not attempt it. The AC stays `"FAIL"`, and it goes in `follow_ups` (`needs-decision` or `too-large`) and in `pending`.
-3. Anything else, including a cause outside the spec's tickets or one that predates the spec: an AC is failing, so fix it, contained and targeted at that AC.
+1. A fix that needs a product or design decision the spec and the ticket do not make, that touches shared logic other code depends on, or that is too large to land safely unattended (past ~200 lines or ~8 files almost always is): do not attempt it. The AC stays `"FAIL"`, and it goes in `follow_ups` (`needs-decision` or `too-large`) and in `pending`.
+2. Anything else, including a cause outside the spec's tickets or one that predates the spec: an AC is failing, so fix it, contained and targeted at that AC.
 
 COLLATERAL — something broken you notice while driving the system that no AC covers. Never go looking for it, never drop it. Record each in `collateral`:
 
@@ -48,7 +43,7 @@ FIXES:
 - No refactors, no reformatting.
 - After each fix, re-run every case of that AC: a fix is not done until all are green.
 - At most 3 attempts per AC and 8 fixes in all; beyond that stop fixing and report the rest as `"FAIL"`.
-- After the last fix, re-run every case of every AC from a cold stack, not only the ones you touched. The verdicts you report are from that final run.
+- After the last fix, do the skill's final run, with every case of every AC.
 
 TEARDOWN, before writing the result (also after a preflight stop): stop every process and container you started, delete the test data you created, restore any config you changed. Leave alone whatever was running before you started. Anything you could not stop goes in `notes`.
 

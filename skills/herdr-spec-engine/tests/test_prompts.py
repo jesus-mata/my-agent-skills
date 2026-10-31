@@ -143,7 +143,7 @@ class ContentTest(unittest.TestCase):
                             "scope rule", "`out-of-scope`", "Never open issues yourself"],
             "fix_implement": ["/mattpocock-skills:tdd", "outward-denied", "denied_actions"],
             "e2e": ["/e2e", "E2E.md", "not production", "Never create worktrees",
-                    "/mattpocock-skills:tdd", "cold stack", "NOT VERIFIABLE", "TEARDOWN"],
+                    "/mattpocock-skills:tdd", "final run", "NOT VERIFIABLE", "TEARDOWN"],
         }
         for name, needles in expected.items():
             text = self.render(name)

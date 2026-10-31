@@ -60,7 +60,7 @@ $BODY
 
 $RULES"
     DIRECTION=down
-    # El stack se levanta en frío al menos dos veces (inicio y pasada final).
+    # El stack se levanta al menos dos veces (inicio y pasada final).
     : "${PHASE_WATCH_MS:=7200000}"
     ;;
   *) echo "fase inválida: '$PHASE'" >&2; usage ;;
