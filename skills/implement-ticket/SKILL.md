@@ -36,9 +36,9 @@ Ticket: #<n>   MR: <url or none>
 
 Develop: <PASS | FAIL | BLOCKED>
 E2E: <PASS | FAIL | BLOCKED | SKIPPED: reason | not run>
-Bugs: <n> fixed, <n> open
-Standards: <n> fixed, <n> open
-Spec: <n> fixed, <n> open
+Bugs: <n> fixed, <n> open | blocked: reason
+Standards: <n> fixed, <n> open | blocked: reason
+Spec: <n> fixed, <n> open | blocked: reason
 
 Open findings:
 - <axis> <severity> <file:line> <summary>

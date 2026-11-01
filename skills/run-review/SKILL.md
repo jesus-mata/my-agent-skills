@@ -20,14 +20,14 @@ Arguments: $ARGUMENTS (the target, empty meaning the current diff, plus an optio
    - Invoke `/mattpocock-skills:code-review` with `<start>` as the fixed point, and these instructions:
 
      ```
-     Review `<end>`, whatever HEAD is: use `git diff <start>...<end>` and `git log <start>..<end>`, and read files with `git show <end>:<path>`. Put this in both sub-agent briefs.
+     Review `<end>`, whatever HEAD is: use `git diff <start>...<end>` and `git log <start>..<end>`, and read files with `git show <end>:<path>`. Run git from the current directory, as `git <command>`, and name any denied command in your report. Put this in both sub-agent briefs.
      Spec: <the spec, "search for it", or "skip the Spec sub-agent">. If you find no spec, report "no spec available" for the Spec axis and carry on without asking.
      End both sub-agent briefs with: "Do not invoke /code-review or spawn additional agents: perform this review directly."
      ```
 
      Its report is input to step 3, so these steps continue after its summary line.
 
-   Done when every review started has finished or failed. A review that is unavailable or fails blocks its axes; the other review still runs to the end, and its findings go through steps 3 and 4.
+   Done when every review started has finished or failed. A review that is unavailable or fails blocks its axes; the other review still runs to the end, and its findings go through steps 3 and 4. A denied command that stopped a sub-agent reading what it needed blocks that axis too.
 3. **Classify every finding**, each under the axis that reported it. Read the code at its `file:line` as it stands in the target, and weigh its failure scenario or cited rule or spec line; review findings can be uncertain. For a PR target, read with `git show <sha>:<path>` and `git blame <sha>`. Give it exactly one outcome with a one-line justification, and keep every finding in the report. Done when each one has an outcome.
    - **Not an issue**: the code disproves the finding, or the cited rule or spec line does not say what it claims.
    - **Pre-existing**, for Bugs and Standards: `git blame` shows it predates the change, and the change does not make it worse. On the Spec axis, a requirement the change leaves unmet is a finding, however old the code around it.
