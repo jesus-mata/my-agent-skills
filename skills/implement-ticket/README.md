@@ -12,15 +12,15 @@ The stages run in this order, and the first one that can't be resolved ends the 
 3. **E2E:** runs `/e2e` in a new sub-agent against every acceptance criterion, then fixes what
    fails. It is skipped when the change has no visible behaviour on a web, API, CLI or desktop
    surface, or the repo has no `E2E.md`.
-4. **Spec review:** runs `/mattpocock-skills:code-review`.
-5. **Code review:** runs `/run-review`.
-6. **Fix:** fixes every Spec gap, hard Standards violation, Critical and High, then validates, and
-   re-runs `/e2e` if the fixes changed code, unless it was skipped.
-7. **Open the MR:** pushes the branch and opens a PR/MR with `Closes #<n>` and any criteria E2E
+4. **Review:** runs `/run-review` with the ticket as its spec, which covers bugs, standards and
+   spec.
+5. **Fix:** fixes every Critical and High, then validates, and re-runs `/e2e` if the fixes changed
+   code, unless it was skipped.
+6. **Open the MR:** pushes the branch and opens a PR/MR with `Closes #<n>` and any criteria E2E
    could not verify.
 
-E2E runs before the reviews because the reviews run only once, so this is the order in which the
-E2E fixes still get reviewed, and the E2E re-run in step 6 covers the review fixes.
+E2E runs before the review because the review runs only once, so this is the order in which the
+E2E fixes still get reviewed, and the E2E re-run in step 5 covers the review fixes.
 
 Every E2E run is a new sub-agent, so the tester has no memory of writing the code and its output
 stays out of the main context. It only tests and reports, editing nothing beyond `E2E.md`, its
@@ -38,7 +38,7 @@ confirms the target is not production.
 Only you can start it: the model never invokes it on its own. Inside a Herdr session, use
 `/work-ticket` instead.
 
-It needs an authenticated `gh` or `glab`, `/mattpocock-skills:code-review`, and Claude Code's
+It needs an authenticated `gh` or `glab`, plus `/mattpocock-skills:code-review` and Claude Code's
 built-in `/code-review`, which `/run-review` calls.
 
 The run ends with a report of each stage, any open findings and what needs you, and a last line
