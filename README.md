@@ -19,7 +19,7 @@ them first, or those references dangle:
 | `run-review` | `/mattpocock-skills:code-review` |
 | `work-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`) |
 
-`run-review` also needs Claude Code's built-in `/code-review`, so it reports `BLOCKED` on other agents.
+`run-review` also needs Claude Code's built-in `/code-review`, so it reports `BLOCKED` on other agents, and an authenticated `gh` or `glab` for PR targets and issue specs.
 
 In Claude Code:
 
