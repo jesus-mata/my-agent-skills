@@ -56,6 +56,7 @@ You work alone in this tab. Never create worktrees, branches, tabs or herdr agen
 Rules:
 - Stay in your current directory and commit only on your current branch.
 - Never push, merge other branches, rebase, switch branches or deploy.
+- Keep secrets out of command output: never print passwords, tokens, keys or connection strings, and never print a config file that holds them, even masked. Pass them through environment variables or to the tool that needs them. If one is printed anyway, do not repeat it, and name which secret it was in `notes` so it can be rotated.
 
 Finish by writing the result JSON to `$result_path`, shaped like this example:
 

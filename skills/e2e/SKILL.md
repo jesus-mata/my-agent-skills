@@ -100,3 +100,8 @@ waits and retries in there are exactly the knowledge that is expensive to rebuil
   test directory and delete it afterwards.
 - **Fail early and loudly on a missing service.** A stack check that throws in two
   seconds is worth far more than a locator timing out at 40.
+- **Keep secrets out of command output.** Never print passwords, tokens, keys or
+  connection strings, and never print a config file that holds them, even masked.
+  Pass them through environment variables or to the tool that needs them. If one
+  is printed anyway, do not repeat it, and name which secret it was in the report
+  so it can be rotated.

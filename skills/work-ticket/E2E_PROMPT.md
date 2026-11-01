@@ -79,6 +79,12 @@ E2E.md — after TEARDOWN, also after an abort: stage only what this run
 changed in E2E.md and its helper module and commit it on its own. Push
 that commit to the PR branch unless the run aborted.
 
+SECRETS — keep them out of command output: never print passwords,
+tokens, keys or connection strings, and never print a config file that
+holds them, even masked. Pass them through environment variables or to
+the tool that needs them. If one is printed anyway, do not repeat it,
+and name which secret it was in the report so it can be rotated.
+
 ABORT CONDITIONS — stop, revert nothing, report state, do not push:
 
 - Preflight failed (see above).
