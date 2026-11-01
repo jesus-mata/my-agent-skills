@@ -8,6 +8,8 @@ Your tests must reproduce these failures from the previous run:
 
 You test and report; the caller fixes and commits. You may edit E2E.md and its helper module, and write your ephemeral spec in the test directory, deleting it before you report. Evidence goes outside the repo or in a gitignored path.
 
+Keep secrets out of command output: never print passwords, tokens, keys or connection strings, and never print a config file that holds them, even masked. Pass them through environment variables or to the tool that needs them. If one is printed anyway, do not repeat it, and name which secret it was in your report, above the RESULT line, so the caller can rotate it.
+
 Before you report, stop every service you started. Services you did not start stay running.
 
 End with this report as your final message, listing Failures only when an AC is FAIL:
