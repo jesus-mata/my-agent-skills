@@ -1,10 +1,10 @@
 #!/bin/bash
 # Sends a ntfy push when Claude needs attention.
-# Reads the hook payload on stdin; config lives in ~/.claude/ntfy.conf.
+# Reads the hook payload on stdin; config lives in ~/.config/ping-me/ntfy.conf.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 NTFY_SERVER="https://ntfy.sh"
-conf="$HOME/.claude/ntfy.conf"
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/ping-me/ntfy.conf"
 [ -f "$conf" ] && . "$conf"
 [ -n "$NTFY_TOPIC" ] || exit 0
 

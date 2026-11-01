@@ -1,12 +1,12 @@
 #!/bin/bash
 # Usage: ping.sh <ok|fail> "<summary>"
-# Publishes to the topic in ~/.claude/ntfy.conf, titled with the current project.
+# Publishes to the topic in ~/.config/ping-me/ntfy.conf, titled with the current project.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 set -euo pipefail
 
 NTFY_SERVER="https://ntfy.sh"
 NTFY_TOPIC=""
-conf="$HOME/.claude/ntfy.conf"
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/ping-me/ntfy.conf"
 [ -f "$conf" ] && . "$conf"
 [ -n "$NTFY_TOPIC" ] || { echo "NTFY_TOPIC is not set in $conf" >&2; exit 1; }
 

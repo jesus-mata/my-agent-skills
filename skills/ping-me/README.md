@@ -1,15 +1,27 @@
 # ping-me
 
-Sends a [ntfy](https://ntfy.sh) push to your phone once Claude finishes what you asked. Say
+Sends a [ntfy](https://ntfy.sh) push to your phone once your coding agent finishes what you asked. Say
 "fix the test and ping me", or just "ping me" to get one right away.
 
-Works with Claude Code on macOS and Linux, and with ntfy servers that accept unauthenticated
-publishing. It needs `bash`, `curl` and `jq`.
+Works on macOS and Linux, with ntfy servers that accept unauthenticated publishing. It needs
+`bash`, `curl` and `jq`.
+
+| Agent | Status |
+| --- | --- |
+| Claude Code | Tested. Also has the optional attention hooks |
+| Codex | Tested with `codex exec`. See [Sandboxes](#sandboxes) |
+| Cursor, Gemini CLI, opencode | Expected to work, not tested yet |
+
+## Sandboxes
+
+A sandbox that blocks network access stops the ping: `ping.sh` fails with `Could not resolve host`.
+Codex's `workspace-write` sandbox does this by default. The skill then asks for approval to rerun
+outside the sandbox, so the ping goes out only once someone approves. Where nobody can approve,
+as in `codex exec`, the agent reports that the ping did not arrive.
 
 ## Setup
 
-These steps are written so a person or a Claude session on the new machine can follow them in
-order. Steps 1 to 4 install the skill. Step 5 is optional: ask the person before doing it.
+These steps are written so a person or an agent on the new machine can follow them in order. Steps 1 to 4 install the skill. Step 5 is optional: ask the person before doing it.
 
 ### 1. Check the dependencies
 
@@ -22,12 +34,12 @@ system's package manager on Linux (for example `sudo apt-get install -y curl jq`
 
 ### 2. Link the skill
 
-The skill must end up at `~/.claude/skills/ping-me`, because `SKILL.md` calls `ping.sh` by that
-path. Use `--target claude`: the skill runs only under Claude Code.
+This links the skill into every agent found on the machine. To pick agents, add for example
+`--target claude,codex`.
 
 ```sh
 git clone https://github.com/jesus-mata/my-agent-skills.git ~/.agent-skills
-~/.agent-skills/bin/agent-skills install ping-me --target claude
+~/.agent-skills/bin/agent-skills install ping-me
 ```
 
 If the machine already has a clone, run `git pull` there and use its `bin/agent-skills` instead.
@@ -37,14 +49,15 @@ If the install reports that `ping-me` is a real directory, an older copy is in t
 
 ### 3. Configure the topic
 
-The topic lives in `~/.claude/ntfy.conf`, outside the repo, so it is never committed. Leave the
-file alone if it already exists.
+The topic lives in `~/.config/ping-me/ntfy.conf`, outside the repo, so it is never committed and
+every agent reads the same one. Leave the file alone if it already exists.
 
 To get every machine's pings in one place, ask the person for the topic they already use and
 write it to `NTFY_TOPIC`. Otherwise generate a new one:
 
 ```sh
-[ -e ~/.claude/ntfy.conf ] || (umask 077; printf 'NTFY_TOPIC=claude-%s\n' "$(openssl rand -hex 12)" > ~/.claude/ntfy.conf)
+conf="${XDG_CONFIG_HOME:-$HOME/.config}/ping-me/ntfy.conf"
+[ -e "$conf" ] || (umask 077; mkdir -p "$(dirname "$conf")"; printf 'NTFY_TOPIC=ping-me-%s\n' "$(openssl rand -hex 12)" > "$conf")
 ```
 
 On ntfy.sh anyone who knows a topic's name can read it, so treat the name like a password and
@@ -57,18 +70,20 @@ To use your own server, add `NTFY_SERVER=https://ntfy.example.com` to the same f
 Subscribe to the topic in the ntfy app, on the server from step 3, then run:
 
 ```sh
-~/.claude/skills/ping-me/ping.sh ok "Test from $(hostname)"
+~/.agent-skills/skills/ping-me/ping.sh ok "Test from $(hostname)"
 ```
 
-The setup is done when this exits 0 and the push reaches the phone. Sessions that were already
-open may need a restart to see the skill.
+The setup is done when this exits 0 and the push reaches the phone. If a sandboxed agent runs it,
+see [Sandboxes](#sandboxes). Sessions that were already open may need a restart to see the skill.
 
-### 5. Optional: attention hooks
+### 5. Optional: attention hooks (Claude Code only)
+
+Skip this step on other agents: these hooks use Claude Code's own events.
 
 `ntfy-notify.sh` is separate from the skill: it needs no prompt, and pushes on its own whenever
 Claude stops to wait for you. It fires when Claude asks a question, when a plan is ready, and on
 Claude Code's attention notifications such as a permission prompt. It uses the same
-`~/.claude/ntfy.conf`, and skips the notifications that only mean a turn ended.
+`ntfy.conf`, and skips the notifications that only mean a turn ended.
 
 Merge this into `~/.claude/settings.json`, keeping every hook and setting already there:
 

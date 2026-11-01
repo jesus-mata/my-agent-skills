@@ -38,9 +38,8 @@ CLI and an authenticated `gh`; `herdr-spec-engine` also needs `python3` 3.11 or 
 worktrees through `herdr` (which also needs `python3`) and plain git worktrees with `git`, so herdr
 is optional. It delegates conflict resolution to a Sonnet subagent, which needs Claude Code.
 
-`ping-me` works only in Claude Code and needs `curl`, `jq` and a ntfy topic. Follow
-[its README](skills/ping-me/README.md) to set it up on a new machine, along with its optional
-attention hooks.
+`ping-me` needs `curl`, `jq` and a ntfy topic. Follow [its README](skills/ping-me/README.md) to set
+it up on a new machine, along with its optional attention hooks for Claude Code.
 
 ## Install
 
