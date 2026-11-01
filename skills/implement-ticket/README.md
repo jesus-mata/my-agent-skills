@@ -36,7 +36,7 @@ confirms the target is not production.
 ```
 
 Only you can start it: the model never invokes it on its own. Inside a Herdr session, use
-`/work-ticket` instead.
+`/work-ticket` instead. To run each stage in its own `hc` terminal, use `/hc-implement-ticket`.
 
 It needs an authenticated `gh` or `glab`, plus `/mattpocock-skills:code-review` and Claude Code's
 built-in `/code-review`, which `/run-review` calls.
