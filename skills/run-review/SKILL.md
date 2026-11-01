@@ -13,14 +13,14 @@ Arguments: $ARGUMENTS (the target, empty meaning the current diff, plus an optio
 ## Steps
 
 1. **Prepare the Standards and Spec inputs.**
-   - **Diff:** for a commit range, the range as given. For a PR target, take the base and head SHAs from `gh pr view` or `glab mr view`, by the origin remote, fetch both without checking out, and use `<base sha>...<head sha>`; if you cannot fetch them, report `RESULT: BLOCKED`. A path or an empty target has no range to review, so Standards and Spec report `skipped (not a commit range or PR)` and only `/code-review` runs in step 2.
-   - **Spec:** `--spec` if given, otherwise an issue the PR body closes. Read an issue's body and comments, by the origin remote: run both `gh issue view <n>` and `gh issue view <n> --comments`, or `glab issue view <n> --comments`. If a `--spec` cannot be read, or the target is a path or empty, report `RESULT: BLOCKED`.
+   - **Diff:** a `<start>` and `<end>`. For a commit range, its two ends. For a PR target, the base and head SHAs from `gh pr view` or `glab mr view`, by the origin remote, both fetched without checking out; if you cannot fetch them, report `RESULT: BLOCKED`. A path or an empty target has no range to review, so Standards and Spec report `skipped (not a commit range or PR)` and only `/code-review` runs in step 2.
+   - **Spec:** `--spec` if given, otherwise every issue the PR body closes. Read an issue's body and comments, by the origin remote: run both `gh issue view <n>` and `gh issue view <n> --comments`, because `--comments` alone can omit the body, or `glab issue view <n> --comments`. Report `RESULT: BLOCKED` if one of these specs cannot be read, or if `--spec` comes with a path or an empty target.
 2. **Start both reviews**, which already run in sub-agents.
    - Invoke `/code-review high <target>`, with the target as its only argument besides the level. It runs in the background and its findings arrive in a later notification.
-   - Invoke `/mattpocock-skills:code-review` with the fixed point, which is the start of the diff, and these instructions:
+   - Invoke `/mattpocock-skills:code-review` with `<start>` as the fixed point, and these instructions:
 
      ```
-     Review `<diff>`, whatever HEAD is: use `git diff <diff>` and `git log <diff>`, and read files at its end with `git show <end>:<path>`. Put this in both sub-agent briefs.
+     Review `<end>`, whatever HEAD is: use `git diff <start>...<end>` and `git log <start>..<end>`, and read files with `git show <end>:<path>`. Put this in both sub-agent briefs.
      Spec: <the spec, or "search for it">. If you find no spec, report "no spec available" for the Spec axis and carry on without asking.
      End both sub-agent briefs with: "Do not invoke /code-review or spawn additional agents: perform this review directly."
      ```
