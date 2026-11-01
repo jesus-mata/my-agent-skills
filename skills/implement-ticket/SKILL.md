@@ -14,7 +14,7 @@ Take ticket $ARGUMENTS through every stage in order. At the first stage you cann
 1. **Branch.** If you are in a worktree or on a feature branch, stay there. Otherwise create a worktree from the up to date default branch. `<base>` is `git merge-base HEAD origin/<default-branch>` after a fetch, so the reviews cover exactly what the MR will contain.
 2. **Develop.** Run `/develop-ticket <n>`. Continue only on `RESULT: PASS`.
 3. **E2E.** Follow _E2E run_ when the change alters behaviour visible through a web, API, CLI or desktop surface and the repo has an `E2E.md`. Otherwise record `SKIPPED: <reason>`.
-4. **Review.** Run `/run-review <base>...HEAD --spec <n>` and collect its findings. `RESULT: BLOCKED` ends the run.
+4. **Review.** Run `/run-review <base>...HEAD --spec <n>` and collect its findings. `RESULT: BLOCKED` ends the run, with those findings under _Open findings_.
 5. **Fix** every Critical and High. Then repeat `/develop-ticket`'s Validate and Commit steps. If this step changed code and E2E was not `SKIPPED`, follow _E2E run_ again. Done when none of those remain and validation and E2E are green on the final code; the review does not re-run.
 6. **Open the MR.** Push the branch and open a PR/MR against the default branch with `gh` or `glab`, by the origin remote, with `Closes #<n>` and any `NOT VERIFIABLE` criteria in its body.
 
