@@ -16,7 +16,7 @@ Arguments: $ARGUMENTS (the target, empty meaning the current diff, plus an optio
    - **Diff:** a `<start>` and `<end>`. For a commit range, its two ends. For a PR target, the base and head SHAs from `gh pr view` or `glab mr view`, by the origin remote, both fetched without checking out; if you cannot fetch them, Standards and Spec are blocked. A path or an empty target has no range to review, so Standards and Spec report `skipped (not a commit range or PR)` and only `/code-review` runs in step 2.
    - **Spec:** `--spec` if given, otherwise every issue the PR body closes. Read an issue's body and comments, by the origin remote: run both `gh issue view <n>` and `gh issue view <n> --comments`, because `--comments` alone can omit the body, or `glab issue view <n> --comments`. Spec is blocked if one of these specs cannot be read, or if `--spec` comes with a path or an empty target.
 2. **Start every review not blocked**; both already run in sub-agents.
-   - Invoke `/code-review high <target>`, with the target as its only argument besides the level. It runs in the background and its findings arrive in a later notification.
+   - Invoke `/code-review high <target>`, with the target as its only argument besides the level. It runs in the background and its findings arrive in a later notification. It reads the current checkout, so on a PR target with HEAD away from `<end>`, open the Bugs section with `Note: read checkout <HEAD sha>, not the PR head`.
    - Invoke `/mattpocock-skills:code-review` with `<start>` as the fixed point, and these instructions:
 
      ```
