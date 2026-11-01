@@ -38,6 +38,10 @@ CLI and an authenticated `gh`; `herdr-spec-engine` also needs `python3` 3.11 or 
 worktrees through `herdr` (which also needs `python3`) and plain git worktrees with `git`, so herdr
 is optional. It delegates conflict resolution to a Sonnet subagent, which needs Claude Code.
 
+`ping-me` works only in Claude Code and needs `curl`, `jq` and a ntfy topic. Follow
+[its README](skills/ping-me/README.md) to set it up on a new machine, along with its optional
+attention hooks.
+
 ## Install
 
 ```sh
@@ -70,6 +74,7 @@ behind the one you edit.
 | [`herdr-spec-engine`](skills/herdr-spec-engine/SKILL.md) | Implements every ticket of a spec, PRD or epic with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec; Claude only supervises its escalations. Use when the user hands over a spec or PRD (or its GitHub issue) and wants all its tickets or sub-issues implemented, not a single ticket. Default choice over herdr-implement-spec. |
 | [`implement-ticket`](skills/implement-ticket/SKILL.md) | Takes a ticket from code to MR: develops it, E2E-tests it, runs spec and code review, fixes what they find, then opens an MR against the default branch. |
 | [`merge-pr`](skills/merge-pr/SKILL.md) | Squash-merges a GitHub pull request once its checks pass, resolving only trivial conflicts (with a Sonnet subagent) and escalating anything that touches logic or scope, then deletes the remote branch, updates the main checkout and removes the PR's local branch and worktree — herdr or plain git. Use when the user types /merge-pr with a PR number, URL or branch, or none for the current branch's PR. |
+| [`ping-me`](skills/ping-me/SKILL.md) | Sends the user a ntfy push once their request is finished. Use when the user tells you to "ping me", alone or as part of a task (e.g. "fix the test and ping me"). Not for "ping me" inside quoted text, code or logs, or in questions about this skill. |
 | [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrites an existing ticket in place so it matches the /to-tickets format, after syncing the default branch and falsifying the ticket's technical claims against the latest code, sharpens its domain language with /domain-modeling, and labels it ready-for-agent once nothing is left open. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands over a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
 | [`run-review`](skills/run-review/SKILL.md) | Runs `/code-review high` and `/mattpocock-skills:code-review`, then classifies every finding per axis (Bugs, Standards, Spec) as Critical, High, Medium or Low, ending in a PASS/FAIL/BLOCKED verdict. Use when review findings need a severity or a verdict, by hand or from another skill. |
 | [`run-tests`](skills/run-tests/SKILL.md) | Runs the project's existing test suites on the current branch or worktree and reports a verdict per tier. Use to run the tests or check for regressions, by hand or from another skill. Not for writing tests or proving acceptance criteria (use /e2e). |
