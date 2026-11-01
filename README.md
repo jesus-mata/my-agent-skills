@@ -15,8 +15,8 @@ them first, or those references dangle:
 | Skill | Uses |
 | --- | --- |
 | `develop-ticket` | `/tdd` (`/mattpocock-skills:tdd`) |
-| `implement-ticket` | `/mattpocock-skills:code-review` |
 | `refine-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`), `/domain-modeling` (`/mattpocock-skills:domain-modeling`) |
+| `run-review` | `/mattpocock-skills:code-review` |
 | `work-ticket` | `/to-tickets` (`/mattpocock-skills:to-tickets`) |
 
 `run-review` also needs Claude Code's built-in `/code-review`, so it reports `BLOCKED` on other agents.
@@ -71,7 +71,7 @@ behind the one you edit.
 | [`implement-ticket`](skills/implement-ticket/SKILL.md) | Takes a ticket from code to MR: develops it, E2E-tests it, runs spec and code review, fixes what they find, then opens an MR against the default branch. |
 | [`merge-pr`](skills/merge-pr/SKILL.md) | Squash-merges a GitHub pull request once its checks pass, resolving only trivial conflicts (with a Sonnet subagent) and escalating anything that touches logic or scope, then deletes the remote branch, updates the main checkout and removes the PR's local branch and worktree — herdr or plain git. Use when the user types /merge-pr with a PR number, URL or branch, or none for the current branch's PR. |
 | [`refine-ticket`](skills/refine-ticket/SKILL.md) | Rewrites an existing ticket in place so it matches the /to-tickets format, after syncing the default branch and falsifying the ticket's technical claims against the latest code, sharpens its domain language with /domain-modeling, and labels it ready-for-agent once nothing is left open. Use whenever the user wants to update, refine, clean up, reformat or "fix" a ticket or issue, wants the open questions in a ticket resolved, mentions /to-tickets or the ticket template, or just hands over a ticket number and says it needs work — even when they never name the format. Also use when a ticket came out of an autonomous code review and needs to be made implementable. |
-| [`run-review`](skills/run-review/SKILL.md) | Runs `/code-review high` and classifies every finding as Critical, High, Medium or Low, ending in a PASS/FAIL/BLOCKED verdict. Use when review findings need a severity or a verdict, by hand or from another skill. |
+| [`run-review`](skills/run-review/SKILL.md) | Runs `/code-review high` and `/mattpocock-skills:code-review`, then classifies every finding per axis (Bugs, Standards, Spec) as Critical, High, Medium or Low, ending in a PASS/FAIL/BLOCKED verdict. Use when review findings need a severity or a verdict, by hand or from another skill. |
 | [`run-tests`](skills/run-tests/SKILL.md) | Runs the project's existing test suites on the current branch or worktree and reports a verdict per tier. Use to run the tests or check for regressions, by hand or from another skill. Not for writing tests or proving acceptance criteria (use /e2e). |
 | [`work-ticket`](skills/work-ticket/SKILL.md) | Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (the user runs /implement-ticket). |
 
