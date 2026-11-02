@@ -36,8 +36,32 @@ Run it from any `hc` terminal in the repo:
 ```
 
 Only you can start it. It needs the `coder`, `e2e-tester`, `reviewer` and `ticket-orchestrator`
-templates linked into `~/.config/herdr-core/templates`, the skills those templates run, and an
-authenticated `gh` or `glab`.
+templates linked into `~/.config/herdr-core/templates`, the skills those templates run, `jq`, and
+an authenticated `gh` or `glab`. Those templates start through `templates/lib`, which
+`bin/agent-skills install` or `update` links beside them once `~/.config/herdr-core` exists, so
+run one of those after pulling.
+
+## Choosing models
+
+Every stage runs Opus at `medium` effort unless you say otherwise. Set any stage with
+`<model>[:<effort>]`:
+
+```
+/hc-implement-ticket 42 --orchestrator sonnet --dev sonnet:high --review opus --e2e haiku:low
+```
+
+Models can be aliases or full IDs. Without an effort, Opus gets `medium`, Sonnet gets `high`, and
+any other model gets Claude's own default. Fix rounds run in `dev-42`, so they use the dev model.
+Before creating anything, the launcher rejects a bad effort and sends each distinct model one short
+Claude request, so a typo stops the launch.
+
+The choices are stored as labels on `ticket-42`. Each template starts Claude through
+`templates/lib/hc-claude`, which reads its terminal's `model` and `effort` labels, refuses an
+unknown effort, and records what it requested, so the same labels work on any Claude template:
+
+```
+hc run --bg --label model=sonnet --label effort=low reviewer "review src/x.rs"
+```
 
 Inside Herdr, the ticket gets its own space, `<repo> #42`, with the terminals as panes of one tab.
 Each E2E re-run gets its own tab. Elsewhere the terminals run hidden, so use `hc attach dev-42`.
@@ -55,8 +79,8 @@ Terminal names hold only the issue number, so the same number can't run in two r
 retry a ticket, or to reuse a number, run `hc kill ticket-42` and `hc rm ticket-42`, and remove any
 `fix/issue_42` branch and worktree. The launcher stops and says so if it finds one.
 
-The run ends with the same report as `/implement-ticket`, plus the worktree and terminal names, on
-a last line of `RESULT: PASS`, `FAIL` or `BLOCKED`.
+The run ends with the same report as `/implement-ticket`, plus the worktree, terminal names and
+each stage's requested model and effort, on a last line of `RESULT: PASS`, `FAIL` or `BLOCKED`.
 
 ## Pings
 

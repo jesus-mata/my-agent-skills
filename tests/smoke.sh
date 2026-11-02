@@ -86,9 +86,27 @@ echo "== status =="
 run status > "$FAKE/status.txt" 2>&1
 expect "status reports linked skills" yes grep -q linked "$FAKE/status.txt"
 
+echo "== hc template lib =="
+expect "no home is created for an absent hc"      no  test -d "$FAKE/.config/herdr-core"
+mkdir -p "$FAKE/.config/herdr-core"
+run install >/dev/null
+expect "links lib beside the templates"           yes links_to "$FAKE/.config/herdr-core/templates/lib" "$CLONE/templates/lib"
+run install >/dev/null
+expect "second install keeps the lib link"        yes links_to "$FAKE/.config/herdr-core/templates/lib" "$CLONE/templates/lib"
+run uninstall e2e >/dev/null
+expect "a narrowed uninstall keeps the lib link"  yes links_to "$FAKE/.config/herdr-core/templates/lib" "$CLONE/templates/lib"
+run install >/dev/null
+rm "$FAKE/.config/herdr-core/templates/lib"
+mkdir "$FAKE/.config/herdr-core/templates/lib"
+expect "a real lib folder fails the install"      no  run install
+expect "a real lib folder is left in place"       yes test -d "$FAKE/.config/herdr-core/templates/lib"
+rmdir "$FAKE/.config/herdr-core/templates/lib"
+run install >/dev/null
+
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
 run uninstall >/dev/null
+expect "uninstall removes the lib link"           no  test -L "$FAKE/.config/herdr-core/templates/lib"
 expect "uninstall removes our links"              no  test -L "$FAKE/.claude/skills/e2e"
 expect "uninstall leaves foreign content alone"   yes test -d "$FAKE/.claude/skills/someone-elses"
 
