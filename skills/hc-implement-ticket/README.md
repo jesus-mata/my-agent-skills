@@ -19,7 +19,8 @@ a guardrail, not a security boundary, because `hc run` can start any program. It
 5. Runs `e2e-42-1` from the `e2e-tester` template, which reports `SKIPPED` when there is nothing to
    test end to end.
 6. Pushes the branch and opens the PR/MR, listing unfixed Medium and Low findings, any
-   `NOT VERIFIABLE` criteria, and any E2E fixes, because those are not reviewed.
+   `NOT VERIFIABLE` criteria, and every commit after the reviewed one, because those are not
+   reviewed.
 
 E2E runs last so a `PASS` always covers the code that gets pushed, usually in one run. E2E failures
 go to `dev-42` too, and each re-run is a new terminal, up to 3 per ticket. Children

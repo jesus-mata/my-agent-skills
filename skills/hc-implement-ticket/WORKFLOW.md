@@ -18,7 +18,7 @@ Stay in this main checkout and name the branch where git needs it. `<repo>` is t
 3. **Review.** Start `review-<n>` from the `reviewer` template with the task `<base>...HEAD --spec <n>`. `RESULT: BLOCKED` ends the run, with its findings under _Open findings_.
 4. **Fix.** If the review left any finding undismissed, whatever its verdict, follow _Fix round_ with the review report's path. The review does not re-run.
 5. **E2E.** Follow _E2E run_, so it tests the final code.
-6. **Open the MR.** Run `git push -u origin fix/issue_<n>`. Open a PR/MR against `<default>` with `gh` or `glab`, by the origin remote, passing `--head fix/issue_<n>` to `gh` or `--source-branch fix/issue_<n>` to `glab`. Its body has `Closes #<n>`, any `NOT VERIFIABLE` criteria, the Medium and Low findings left unfixed, and any fixes for E2E failures, marked as not reviewed. Pass the body through a quoted heredoc, `--body-file - <<'HC_BODY_END'` for `gh`, because it holds text from reports.
+6. **Open the MR.** Run `git push -u origin fix/issue_<n>`. Open a PR/MR against `<default>` with `gh` or `glab`, by the origin remote, passing `--head fix/issue_<n>` to `gh` or `--source-branch fix/issue_<n>` to `glab`. Its body has `Closes #<n>`, any `NOT VERIFIABLE` criteria, the Medium and Low findings left unfixed, and every commit after the reviewed one, marked as not reviewed, naming the new behaviour from the fix reports and any commit after the tested one. Pass the body through a quoted heredoc, `--body-file - <<'HC_BODY_END'` for `gh`, because it holds text from reports.
 7. **Report,** then stay open for _Follow-ups_ and _Cleanup_.
 
 ## Child terminals
