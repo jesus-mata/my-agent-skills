@@ -6,7 +6,7 @@ Stay in this main checkout and name the branch where git needs it. `<repo>` is t
 
 ## Steps
 
-1. **Worktree.** Run `hc get ticket-<n>` and keep its `herdr.space` and `herdr.tab` labels, if any. If it is not found, the run is `BLOCKED`: this terminal must be named `ticket-<n>`. Run `git ls-remote --symref origin HEAD`: `<default>` is the branch after `refs/heads/`. Run `git fetch origin`, and record `git rev-parse origin/<default>` as `<base>`.
+1. **Worktree.** Run `hc get ticket-<n>` and keep its `herdr.space`, `herdr.tab`, `model.*` and `effort.*` labels, if any. If it is not found, the run is `BLOCKED`: this terminal must be named `ticket-<n>`. Run `git ls-remote --symref origin HEAD`: `<default>` is the branch after `refs/heads/`. Run `git fetch origin`, and record `git rev-parse origin/<default>` as `<base>`.
 
    Create nothing until all three are clear, and if one exists the run is `BLOCKED`, naming it:
    - the local branch: `git rev-parse --verify --quiet refs/heads/fix/issue_<n>`
@@ -23,7 +23,10 @@ Stay in this main checkout and name the branch where git needs it. `<repo>` is t
 
 ## Child terminals
 
-Start each child with `hc run --bg --name <name> --cwd <worktree> <labels> <template> "<task>"`, passing the labels from step 1 as `--label key=value`. An `e2e-<n>-<k>` with `k` above 1 gets only `herdr.space`, which puts it in its own tab.
+Start each child with `hc run --bg --name <name> --cwd <worktree> <labels> <template> "<task>"`, where `<labels>` are:
+
+- The `herdr.*` labels from step 1, as `--label key=value`. An `e2e-<n>-<k>` with `k` above 1 gets only `herdr.space`, which puts it in its own tab.
+- The labels for its stage: `dev` for `dev-<n>`, `review` for `review-<n>` and `e2e` for every `e2e-<n>-<k>`. Pass `model.<stage>=<value>` as `--label 'model=<value>'` and `effort.<stage>=<value>` as `--label 'effort=<value>'`, keeping the quotes because a model can hold brackets, and omit whichever step 1 did not find.
 
 If `first_message.sent` is false, read the terminal. A folder trust dialog for `<worktree>` is the one dialog to accept, with `hc keys <name> down enter`. If the task is not on its screen, `hc kill` and `hc rm` it, then start it once more. It holds the template's instructions, so a plain send cannot replace it.
 
@@ -63,6 +66,7 @@ Follow _Ping_. Then send your parent the `RESULT` line, the MR URL, `ticket-<n>`
 Ticket: #<n>   MR: <url or none>
 Worktree: <worktree>   Branch: fix/issue_<n>
 Terminals: <every child's name>
+Models: orchestrator <m>, dev <m>, review <m>, e2e <m>
 
 Develop: <PASS | FAIL | BLOCKED>
 E2E: <PASS | FAIL | BLOCKED | SKIPPED: reason | not run>
@@ -77,6 +81,8 @@ Needs human: <failing criteria and what was tried, NOT VERIFIABLE criteria, `ROT
 
 RESULT: PASS
 ```
+
+On the `Models` line, each `<m>` is the requested `<model> <effort>`, from the `model` and `effort` labels in `hc get` on `ticket-<n>` or that stage's terminal, using its latest run for E2E. Write `default` for a missing effort, and `not run` for a stage that started no terminal.
 
 The last line is `RESULT: PASS` if every stage passed or was `SKIPPED` and the MR exists, `RESULT: BLOCKED` if a stage could not run or the E2E cap was hit, otherwise `RESULT: FAIL`.
 

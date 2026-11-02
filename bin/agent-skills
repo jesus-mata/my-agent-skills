@@ -13,6 +13,9 @@ bin_dir=$(CDPATH='' cd -- "$(dirname -- "$0")" && pwd -P)
 CLONE=$(CDPATH='' cd -- "$bin_dir/.." && pwd -P)
 SKILLS_DIR="$CLONE/skills"
 BACKUP_ROOT="${AGENT_SKILLS_BACKUP_DIR:-$HOME/.agent-skills-backups}"
+HC_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core"
+HC_LIB_LINK="$HC_CONFIG/templates/lib"
+HC_LIB_SRC="$CLONE/templates/lib"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$(printf '\033[0m'); C_DIM=$(printf '\033[2m'); C_RED=$(printf '\033[31m')
@@ -211,6 +214,39 @@ do_install() {
 '
   done
   IFS=$_old
+  link_hc_lib
+}
+
+# ---------------------------------------------------------------- hc template lib
+
+# The hc templates start Claude through templates/lib, so it must sit beside them in hc's
+# config. Detected = herdr-core's own directory exists; we never create it.
+hc_lib_state() {
+  if [ ! -d "$HC_CONFIG" ]; then
+    printf 'absent\n'
+  elif [ -L "$HC_LIB_LINK" ]; then
+    if [ "$(readlink "$HC_LIB_LINK")" = "$HC_LIB_SRC" ]; then printf 'linked\n'; else printf 'foreign\n'; fi
+  elif [ -e "$HC_LIB_LINK" ]; then
+    printf 'foreign\n'
+  else
+    printf 'missing\n'
+  fi
+}
+
+link_hc_lib() {
+  _state=$(hc_lib_state)
+  [ "$_state" != absent ] || return 0
+  title "hc templates  ($HC_LIB_LINK)"
+  case $_state in
+    linked)  info "lib already linked" ;;
+    foreign) oops "$HC_LIB_LINK is not a link to this clone — move it away and rerun" ;;
+    missing)
+      if [ -n "$OPT_DRY" ]; then say "  would link lib"; return 0; fi
+      mkdir -p "$(dirname "$HC_LIB_LINK")"
+      ln -s "$HC_LIB_SRC" "$HC_LIB_LINK"
+      ok "lib linked"
+      ;;
+  esac
 }
 
 # ---------------------------------------------------------------- status
@@ -253,9 +289,22 @@ do_status() {
 '
   done
   IFS=$_old
+  case $(hc_lib_state) in
+    linked)  title "hc templates"; ok "lib linked" ;;
+    missing) title "hc templates"; warn "lib is not linked, so the templates cannot start (run: update)" ;;
+    foreign) title "hc templates"; warn "$HC_LIB_LINK is not a link to this clone" ;;
+  esac
 }
 
 # ---------------------------------------------------------------- uninstall / prune
+
+unlink_hc_lib() {
+  [ -z "$ARGS$OPT_TARGETS" ] && [ "$(hc_lib_state)" = linked ] || return 0
+  title "hc templates  ($HC_LIB_LINK)"
+  if [ -n "$OPT_DRY" ]; then say "  would unlink lib"; return 0; fi
+  rm "$HC_LIB_LINK"
+  ok "lib unlinked"
+}
 
 remove_links() {
   _mode=$1  # all | dangling
@@ -298,7 +347,7 @@ remove_links() {
   IFS=$_old
 }
 
-do_uninstall() { remove_links all; }
+do_uninstall() { remove_links all; unlink_hc_lib; }
 do_prune()     { remove_links dangling; }
 
 # ---------------------------------------------------------------- update
@@ -493,7 +542,7 @@ USAGE
   bin/agent-skills <command> [skill...] [flags]
 
 COMMANDS
-  install [skill...]    Link skills into every detected target.
+  install [skill...]    Link skills into every detected target, and the hc template lib if hc is here.
   update                git pull, relink, then prune links to skills that are gone.
   status                Show what is linked, missing, shadowed or dangling.
   uninstall [skill...]  Remove links that point into this clone. Nothing else is touched.

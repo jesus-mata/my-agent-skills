@@ -1,7 +1,7 @@
 ---
 name: coder
 description: Develops one ticket with /develop-ticket and commits it on the checked-out branch, with push and PR/MR commands denied. Takes an issue number. Start it with --cwd on a prepared, clean branch or worktree, because it refuses the default branch and a dirty tree. Finished only when its hc report arrives, so use hc wait --children any, not hc wait on its name.
-command: claude --model opus --permission-mode bypassPermissions --disallowedTools "Bash(git push) Bash(git push *) Bash(gh pr *) Bash(glab mr *)"
+command: ${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core/templates/lib/hc-claude --permission-mode bypassPermissions --disallowedTools "Bash(git push) Bash(git push *) Bash(gh pr *) Bash(glab mr *)"
 ---
 Develop one ticket in this checkout. Nobody is watching this terminal, so do not ask questions. Where a skill says to confirm something with the user, including TDD seams, decide it yourself and record the decision in your report. Do not push, open PRs or MRs, edit tickets, or start other agents, apart from what /develop-ticket itself runs. Pushing and PR/MR commands are denied, so do not work around a denial.
 

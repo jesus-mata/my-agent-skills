@@ -1,0 +1,49 @@
+#!/bin/sh
+# Starts Claude for an hc template, using this terminal's `model` and `effort` labels.
+# Any arguments pass through to Claude, so a template adds only its own permission flags.
+# The values it requests go back on the labels, so `hc get` shows them, defaults included.
+# Claude can still run another effort, such as with CLAUDE_CODE_EFFORT_LEVEL set.
+#
+#   hc run --label model=sonnet --label effort=low reviewer "review src/x.rs"
+#
+# With no model, it uses opus. With no effort, opus gets medium, sonnet gets high, and any
+# other model gets Claude's own default. Inside hc, unreadable labels stop the start: a
+# silent fallback could run a whole job on the wrong model.
+set -eu
+
+die() {
+  printf 'hc-claude: %s\n' "$1" >&2
+  exit 1
+}
+
+model=
+effort=
+if [ -n "${HC_TERMINAL_ID:-}" ]; then
+  command -v jq >/dev/null || die "jq is required to read terminal labels"
+  terminal=$(hc get "$HC_TERMINAL_ID" --json) || die "cannot read terminal $HC_TERMINAL_ID"
+  labels=$(printf '%s' "$terminal" | jq -er '"\(.labels.model // "")|\(.labels.effort // "")"') \
+    || die "cannot parse the labels of terminal $HC_TERMINAL_ID"
+  model=${labels%%|*}
+  effort=${labels#*|}
+fi
+
+model=${model:-opus}
+if [ -z "$effort" ]; then
+  case $model in
+    *opus*) effort=medium ;;
+    *sonnet*) effort=high ;;
+  esac
+fi
+
+# Claude only warns about a bad effort, then runs at its default.
+case $effort in
+  '' | low | medium | high | xhigh | max) ;;
+  *) die "unknown effort '$effort' (known: low medium high xhigh max)" ;;
+esac
+
+if [ -n "${HC_TERMINAL_ID:-}" ]; then
+  hc label "$HC_TERMINAL_ID" "model=$model" ${effort:+"effort=$effort"} >/dev/null \
+    || die "cannot label terminal $HC_TERMINAL_ID"
+fi
+
+exec claude --model "$model" ${effort:+--effort "$effort"} "$@"
