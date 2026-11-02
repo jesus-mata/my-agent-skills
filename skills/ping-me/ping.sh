@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: ping.sh <ok|fail> "<summary>"
+# Usage: ping.sh <ok|fail|attention> "<summary>"
 # Publishes to the topic in ~/.config/ping-me/ntfy.conf, titled with the current project.
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 set -euo pipefail
@@ -12,14 +12,17 @@ conf="${XDG_CONFIG_HOME:-$HOME/.config}/ping-me/ntfy.conf"
 
 status=${1:-}
 summary=${2:-}
+usage='usage: ping.sh <ok|fail|attention> "<summary>"'
+priority=3
 case "$status" in
   ok) state="listo"; tag="white_check_mark" ;;
   fail) state="falló"; tag="x" ;;
-  *) echo "usage: ping.sh <ok|fail> \"<summary>\"" >&2; exit 2 ;;
+  attention) state="necesita tu atención"; tag="bell"; priority=4 ;;
+  *) echo "$usage" >&2; exit 2 ;;
 esac
-[ -n "$summary" ] || { echo "usage: ping.sh <ok|fail> \"<summary>\"" >&2; exit 2; }
+[ -n "$summary" ] || { echo "$usage" >&2; exit 2; }
 
 jq -n --arg topic "$NTFY_TOPIC" --arg title "$(basename "$PWD"): $state" \
-  --arg message "$summary" --arg tag "$tag" \
-  '{topic: $topic, title: $title, message: $message[0:300], priority: 3, tags: [$tag]}' |
+  --arg message "$summary" --argjson priority "$priority" --arg tag "$tag" \
+  '{topic: $topic, title: $title, message: $message[0:300], priority: $priority, tags: [$tag]}' |
   curl -fsS -m 8 -H 'Content-Type: application/json' -d @- "$NTFY_SERVER/" >/dev/null
