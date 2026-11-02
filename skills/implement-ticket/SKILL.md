@@ -43,7 +43,7 @@ Spec: <n> fixed, <n> open | blocked: reason
 Open findings:
 - <axis> <severity> <file:line> <summary>
 
-Needs human: <failing criteria and what was tried, NOT VERIFIABLE criteria, or none>
+Needs human: <failing criteria and what was tried, NOT VERIFIABLE criteria, secrets the E2E report names for rotation, or none>
 
 RESULT: PASS
 ```

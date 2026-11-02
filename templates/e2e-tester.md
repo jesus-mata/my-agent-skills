@@ -37,5 +37,5 @@ Test one change end to end in this checkout. Nobody is watching this terminal, s
    ```
 
    The last line carries the reason unless it is PASS or FAIL. It is `RESULT: BLOCKED` if the skill's run is BLOCKED or an earlier step said so, `RESULT: SKIPPED` if step 3 said so, otherwise `RESULT: FAIL` if any criterion is FAIL, otherwise `RESULT: PASS`.
-7. Send your parent one line with `hc send`, to the address in the `hc` tag around this message: the `RESULT:` line, the counts of passed, failed and not verifiable criteria, the tested commit and the report path.
+7. Send your parent one line with `hc send`, to the address in the `hc` tag around this message: the `RESULT:` line, the counts of passed, failed and not verifiable criteria, the tested commit, the report path, and `ROTATE: <secret name>` for each secret named under Notes.
 8. Stay open to answer questions about this run. Do not test again here, because a re-run belongs in a new terminal.

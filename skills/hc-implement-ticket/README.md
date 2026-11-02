@@ -57,3 +57,19 @@ retry a ticket, or to reuse a number, run `hc kill ticket-42` and `hc rm ticket-
 
 The run ends with the same report as `/implement-ticket`, plus the worktree and terminal names, on
 a last line of `RESULT: PASS`, `FAIL` or `BLOCKED`.
+
+## Pings
+
+If [`ping-me`](../ping-me/README.md) is set up, `ticket-42` sends a push when the run ends, when a
+follow-up that ran a stage ends, and when cleanup stops at a failed check. `ok` means every stage
+passed or was skipped and the MR is open. Read the report before merging, because a skipped E2E and
+open Medium or Low findings still count as `ok`. `attention` means something is waiting on you,
+such as `NOT VERIFIABLE` criteria or a secret to rotate. `fail` means the run failed or is blocked.
+
+Pings hold the repo folder name, the ticket number, the outcome, the stage and the MR URL, which
+shows the org and repo, so read the report for the details. They never change the result: if one
+fails, the report says so on a `Ping: failed` line, and without `ping-me` that line appears on
+every run.
+
+The orchestrator sends the pings itself, so if `ticket-42` crashes or hits a rate limit, no ping
+arrives.

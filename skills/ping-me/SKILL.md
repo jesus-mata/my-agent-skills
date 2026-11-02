@@ -8,10 +8,10 @@ Do everything else the user asked first; the ping is the last action of the requ
 Send it by running `ping.sh`, which sits beside this `SKILL.md`, by its full path:
 
 ```bash
-<this-skill-directory>/ping.sh <ok|fail> "<summary>"
+<this-skill-directory>/ping.sh <ok|fail|attention> "<summary>"
 ```
 
-- `ok` when the request is done; `fail` when it failed or is blocked.
+- `ok` when the request is done; `fail` when it failed or is blocked; `attention` when it ended on something only the user can do.
 - `<summary>` is one or two sentences in the user's language: what was done and how it ended. Write for a phone screen, and leave out secrets, credentials and customer data, since the topic is readable by anyone who knows its name.
 
 The ping is done when `ping.sh` exits 0. If your sandbox blocks its network access, request approval to rerun the same command outside the sandbox. If it still fails, or fails for any other reason, tell the user the ping did not arrive and show the error.
