@@ -351,7 +351,7 @@ do_status() {
   status_hc_entry lib "the templates cannot start"
   each_hc_template status_hc_entry "hc cannot start it"
   for _e_link in "$HC_TEMPLATES_DIR"/*; do
-    [ -L "$_e_link" ] && [ ! -e "$_e_link" ] || continue
+    if [ ! -L "$_e_link" ] || [ -e "$_e_link" ]; then continue; fi
     case $(resolve_link "$_e_link") in
       "$HC_TEMPLATES_SRC"/*) warn "${_e_link##*/} is a dangling link into this clone (run: update)" ;;
     esac
@@ -378,7 +378,7 @@ remove_hc_templates() {
         ok "$_e_base unlinked"
         ;;
       *)
-        [ "$1" = dangling ] && [ ! -e "$_e_link" ] || continue
+        if [ "$1" != dangling ] || [ -e "$_e_link" ]; then continue; fi
         warn "$_e_link is a dangling link outside this clone's templates — left in place"
         ;;
     esac
