@@ -14,8 +14,9 @@ CLONE=$(CDPATH='' cd -- "$bin_dir/.." && pwd -P)
 SKILLS_DIR="$CLONE/skills"
 BACKUP_ROOT="${AGENT_SKILLS_BACKUP_DIR:-$HOME/.agent-skills-backups}"
 HC_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core"
-HC_TEMPLATES="$HC_CONFIG/templates"
+HC_TEMPLATES_DIR="$HC_CONFIG/templates"
 HC_TEMPLATES_SRC="$CLONE/templates"
+HC_LIB_LINK="$HC_TEMPLATES_DIR/lib"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$(printf '\033[0m'); C_DIM=$(printf '\033[2m'); C_RED=$(printf '\033[31m')
@@ -221,9 +222,10 @@ do_install() {
 
 # Entries of herdr-core's templates folder (templates/<name>) are links into this clone's
 # templates/. Detected = herdr-core's own directory exists; we never create it.
-# Locals are prefixed _e_ so callers' _state/_name/_dir survive.
+# Shell functions share globals, so their variables are prefixed _e_ to leave the callers'
+# _state/_name/_dir alone.
 hc_entry_state() {
-  _e_link="$HC_TEMPLATES/$1"
+  _e_link="$HC_TEMPLATES_DIR/$1"
   if [ ! -d "$HC_CONFIG" ]; then
     printf 'absent\n'
   elif [ -L "$_e_link" ]; then
@@ -235,15 +237,16 @@ hc_entry_state() {
   fi
 }
 
-# link_hc_entry <name>: prints one line for the entry; the caller prints the heading.
+# link_hc_entry <name>: prints one line for the entry, or nothing when herdr-core is absent;
+# the caller prints the heading.
 link_hc_entry() {
-  _e_link="$HC_TEMPLATES/$1"
+  _e_link="$HC_TEMPLATES_DIR/$1"
   case $(hc_entry_state "$1") in
     linked)  info "$1 already linked" ;;
     foreign) oops "$_e_link is not a link to this clone — move it away and rerun" ;;
     missing)
       if [ -n "$OPT_DRY" ]; then say "  would link $1"; return 0; fi
-      mkdir -p "$HC_TEMPLATES"
+      mkdir -p "$HC_TEMPLATES_DIR"
       ln -s "$HC_TEMPLATES_SRC/$1" "$_e_link"
       ok "$1 linked"
       ;;
@@ -254,14 +257,15 @@ link_hc_entry() {
 unlink_hc_entry() {
   [ "$(hc_entry_state "$1")" = linked ] || return 0
   if [ -n "$OPT_DRY" ]; then say "  would unlink $1"; return 0; fi
-  rm "$HC_TEMPLATES/$1"
+  _e_link="$HC_TEMPLATES_DIR/$1"
+  rm "$_e_link"
   ok "$1 unlinked"
 }
 
 # The hc templates start Claude through templates/lib, so it must sit beside them.
 link_hc_lib() {
   [ "$(hc_entry_state lib)" != absent ] || return 0
-  title "hc templates  ($HC_TEMPLATES/lib)"
+  title "hc templates  ($HC_LIB_LINK)"
   link_hc_entry lib
 }
 
@@ -308,7 +312,7 @@ do_status() {
   case $(hc_entry_state lib) in
     linked)  title "hc templates"; ok "lib linked" ;;
     missing) title "hc templates"; warn "lib is not linked, so the templates cannot start (run: update)" ;;
-    foreign) title "hc templates"; warn "$HC_TEMPLATES/lib is not a link to this clone" ;;
+    foreign) title "hc templates"; warn "$HC_LIB_LINK is not a link to this clone" ;;
   esac
 }
 
@@ -316,7 +320,7 @@ do_status() {
 
 unlink_hc_lib() {
   [ -z "$ARGS$OPT_TARGETS" ] && [ "$(hc_entry_state lib)" = linked ] || return 0
-  title "hc templates  ($HC_TEMPLATES/lib)"
+  title "hc templates  ($HC_LIB_LINK)"
   unlink_hc_entry lib
 }
 
