@@ -92,7 +92,7 @@ behind the one you edit.
 
 ```
 bin/agent-skills install [skill...]    Link skills into every detected agent
-bin/agent-skills update                git pull, relink, prune links to skills that are gone
+bin/agent-skills update                git pull, relink, prune links to skills and templates that are gone
 bin/agent-skills status                What is linked, missing, shadowed or dangling
 bin/agent-skills uninstall [skill...]  Remove links pointing into this clone — nothing else
 bin/agent-skills adopt <skill>         Move a skill out of an agent into this clone, link it back
