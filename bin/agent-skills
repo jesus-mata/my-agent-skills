@@ -16,7 +16,6 @@ BACKUP_ROOT="${AGENT_SKILLS_BACKUP_DIR:-$HOME/.agent-skills-backups}"
 HC_CONFIG="${XDG_CONFIG_HOME:-$HOME/.config}/herdr-core"
 HC_TEMPLATES_DIR="$HC_CONFIG/templates"
 HC_TEMPLATES_SRC="$CLONE/templates"
-HC_LIB_LINK="$HC_TEMPLATES_DIR/lib"
 
 if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
   C_RESET=$(printf '\033[0m'); C_DIM=$(printf '\033[2m'); C_RED=$(printf '\033[31m')
@@ -224,12 +223,25 @@ do_install() {
 # templates/. Detected = herdr-core's own directory exists; we never create it.
 # Shell functions share globals, so their variables are prefixed _e_ to leave the callers'
 # _state/_name/_dir alone.
+# resolve_link <link>: where the link points, with its folder spelled as a physical path, so a
+# relative link or one made through a symlinked path to the clone compares equal to ours. A
+# folder that is gone leaves the text as read.
+resolve_link() {
+  _r_dst=$(readlink "$1")
+  case $_r_dst in /*) ;; *) _r_dst="$(dirname "$1")/$_r_dst" ;; esac
+  if _r_dir=$(CDPATH='' cd -- "$(dirname "$_r_dst")" 2>/dev/null && pwd -P); then
+    printf '%s/%s\n' "$_r_dir" "${_r_dst##*/}"
+  else
+    printf '%s\n' "$_r_dst"
+  fi
+}
+
 hc_entry_state() {
   _e_link="$HC_TEMPLATES_DIR/$1"
   if [ ! -d "$HC_CONFIG" ]; then
     printf 'absent\n'
   elif [ -L "$_e_link" ]; then
-    if [ "$(readlink "$_e_link")" = "$HC_TEMPLATES_SRC/$1" ]; then printf 'linked\n'; else printf 'foreign\n'; fi
+    if [ "$(resolve_link "$_e_link")" = "$HC_TEMPLATES_SRC/$1" ]; then printf 'linked\n'; else printf 'foreign\n'; fi
   elif [ -e "$_e_link" ]; then
     printf 'foreign\n'
   else
@@ -271,7 +283,7 @@ unlink_hc_entry() {
 # herdr-core can still start the others.
 link_hc_templates() {
   [ "$(hc_entry_state lib)" != absent ] || return 0
-  title "hc templates  ($HC_LIB_LINK)"
+  title "hc templates  ($HC_TEMPLATES_DIR)"
   link_hc_entry lib fail
   each_hc_template link_hc_entry keep
 }
@@ -350,7 +362,7 @@ remove_hc_templates() {
     [ -L "$_e_link" ] || continue
     _e_base=${_e_link##*/}
     [ "$_e_base" != lib ] || continue
-    _e_dst=$(readlink "$_e_link")
+    _e_dst=$(resolve_link "$_e_link")
     case $_e_dst in
       "$HC_TEMPLATES_SRC"/*)
         [ "$1" = all ] || [ ! -e "$_e_dst" ] || continue
@@ -371,7 +383,7 @@ hc_in_scope() { [ -z "$ARGS$OPT_TARGETS" ] && [ -d "$HC_CONFIG" ]; }
 
 uninstall_hc() {
   hc_in_scope || return 0
-  title "hc templates  ($HC_LIB_LINK)"
+  title "hc templates  ($HC_TEMPLATES_DIR)"
   unlink_hc_entry lib
   remove_hc_templates all
 }

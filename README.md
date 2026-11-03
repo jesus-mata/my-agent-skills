@@ -129,7 +129,8 @@ If herdr-core is installed (`~/.config/herdr-core` exists), `install` and `updat
 `templates/lib` and every `templates/*.md` into `~/.config/herdr-core/templates`, so a template
 added upstream is ready after `update`. `status` reports each one as linked, missing or foreign,
 and says when to run `update`. Without herdr-core nothing is created. A real file or a link that
-points elsewhere is left alone and reported, as with skills.
+points elsewhere is left alone and reported, even with `--force`: unlike skills, an hc template
+entry is never replaced. A hand-made link to this clone's template already counts as linked.
 
 ## How it behaves when things collide
 

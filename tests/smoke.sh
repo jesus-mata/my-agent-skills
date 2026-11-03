@@ -210,6 +210,26 @@ expect "uninstall removes the lib link"           no  test -L "$FAKE/.config/her
 expect "uninstall removes our links"              no  test -L "$FAKE/.claude/skills/e2e"
 expect "uninstall leaves foreign content alone"   yes test -d "$FAKE/.claude/skills/someone-elses"
 
+echo "== a hand-made template link into this clone counts as ours =="
+# spelled through a symlinked path to the clone, absolute and relative
+ln -s "$CLONE" "$FAKE/.config/herdr-core/clone-alias"
+run install >/dev/null
+rm "$HC_TEMPLATES/coder.md" "$HC_TEMPLATES/reviewer.md"
+ln -s ../clone-alias/templates/coder.md "$HC_TEMPLATES/coder.md"
+ln -s "$FAKE/.config/herdr-core/clone-alias/templates/reviewer.md" "$HC_TEMPLATES/reviewer.md"
+run status > "$FAKE/hand-status.txt" 2>&1
+expect "status counts a relative hand-made link as linked" yes grep -q " coder.md linked" "$FAKE/hand-status.txt"
+expect "status counts a hand-made link via a symlink as linked" yes grep -q " reviewer.md linked" "$FAKE/hand-status.txt"
+run install > "$FAKE/hand-install.txt" 2>&1
+expect "install does not report a hand-made link"  no  grep -q "is not a link to this clone" "$FAKE/hand-install.txt"
+run uninstall >/dev/null
+expect "uninstall removes a relative hand-made link" no test -L "$HC_TEMPLATES/coder.md"
+expect "uninstall removes a hand-made link via a symlink" no test -L "$HC_TEMPLATES/reviewer.md"
+ln -s "$COPY" "$FAKE/copy-alias"
+ln -s "$FAKE/copy-alias/templates/gone.md" "$COPY_TEMPLATES/gone.md"
+run_copy update >/dev/null 2>&1
+expect "update prunes a dangling hand-made link via a symlink" no test -L "$COPY_TEMPLATES/gone.md"
+
 echo ""
 echo "$pass passed, $fail failed"
 [ "$fail" -eq 0 ]
