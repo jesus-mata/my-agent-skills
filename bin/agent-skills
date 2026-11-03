@@ -319,11 +319,22 @@ do_status() {
 '
   done
   IFS=$_old
+  [ "$(hc_entry_state lib)" != absent ] || return 0
+  title "hc templates"
   case $(hc_entry_state lib) in
-    linked)  title "hc templates"; ok "lib linked" ;;
-    missing) title "hc templates"; warn "lib is not linked, so the templates cannot start (run: update)" ;;
-    foreign) title "hc templates"; warn "$HC_LIB_LINK is not a link to this clone" ;;
+    linked)  ok "lib linked" ;;
+    missing) warn "lib is not linked, so the templates cannot start (run: update)" ;;
+    foreign) warn "$HC_LIB_LINK is not a link to this clone" ;;
   esac
+  for _e_src in "$HC_TEMPLATES_SRC"/*.md; do
+    [ -e "$_e_src" ] || continue
+    _e_name=${_e_src##*/}
+    case $(hc_entry_state "$_e_name") in
+      linked)  ok "$_e_name linked" ;;
+      missing) warn "$_e_name is not linked, so hc cannot start it (run: update)" ;;
+      foreign) warn "$HC_TEMPLATES_DIR/$_e_name is not a link to this clone" ;;
+    esac
+  done
 }
 
 # ---------------------------------------------------------------- uninstall / prune

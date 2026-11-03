@@ -86,6 +86,7 @@ rm -rf "$FAKE/.claude/skills/adoptable"
 echo "== status =="
 run status > "$FAKE/status.txt" 2>&1
 expect "status reports linked skills" yes grep -q linked "$FAKE/status.txt"
+expect "status says nothing about templates without hc" no grep -q "template\|coder.md" "$FAKE/status.txt"
 
 echo "== hc template lib =="
 expect "no home is created for an absent hc"      no  test -d "$FAKE/.config/herdr-core"
@@ -153,6 +154,19 @@ cp -R "$CLONE/bin" "$CLONE/skills" "$CLONE/templates" "$COPY/"
 echo "a template added upstream" > "$COPY/templates/added.md"
 expect "update succeeds"                           yes env HOME="$FAKE/copy-home" XDG_CONFIG_HOME="$FAKE/copy-home/.config" NO_COLOR=1 "$COPY/bin/agent-skills" update
 expect "update links a template added to the clone" yes links_file_to "$FAKE/copy-home/.config/herdr-core/templates/added.md" "$COPY/templates/added.md"
+rm "$HC_TEMPLATES/coder.md"
+echo "my own reviewer" > "$FAKE/reviewer.md"
+rm "$HC_TEMPLATES/reviewer.md"
+mv "$FAKE/reviewer.md" "$HC_TEMPLATES/reviewer.md"
+run status > "$FAKE/status.txt" 2>&1
+expect "status reports a linked template"          yes grep -q "e2e-tester.md linked" "$FAKE/status.txt"
+expect "status reports a missing template"         yes grep -q "coder.md is not linked" "$FAKE/status.txt"
+expect "a missing template names its fix"          yes grep -q "coder.md is not linked.*(run: update)" "$FAKE/status.txt"
+expect "status reports a foreign template"         yes grep -q "templates/reviewer.md is not a link to this clone" "$FAKE/status.txt"
+expect "status lists every template once"          yes test "$(grep -c '\.md' "$FAKE/status.txt")" -eq "$(ls "$CLONE"/templates/*.md | wc -l)"
+expect "status prints the hc templates heading once" yes test "$(grep -c '^hc templates' "$FAKE/status.txt")" -eq 1
+rm "$HC_TEMPLATES/reviewer.md"
+run install >/dev/null
 
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
