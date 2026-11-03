@@ -86,6 +86,8 @@ rm -rf "$FAKE/.claude/skills/adoptable"
 echo "== status =="
 run status > "$FAKE/status.txt" 2>&1
 expect "status reports linked skills" yes grep -q linked "$FAKE/status.txt"
+mentions_templates() { grep -v '^clone:' "$1" | grep -q -e template -e coder.md; }
+expect "status says nothing about templates without hc" no mentions_templates "$FAKE/status.txt"
 
 echo "== hc template lib =="
 expect "no home is created for an absent hc"      no  test -d "$FAKE/.config/herdr-core"
@@ -170,6 +172,23 @@ expect "update reports a dangling link elsewhere"  yes grep -q "vanished.md.*dan
 ln -s "$COPY/templates/removed.md" "$COPY_TEMPLATES/removed.md"
 run_copy prune --target claude >/dev/null 2>&1
 expect "a narrowed prune keeps the template links" yes test -L "$COPY_TEMPLATES/removed.md"
+rm "$HC_TEMPLATES/coder.md"
+rm "$HC_TEMPLATES/reviewer.md"
+echo "my own reviewer" > "$HC_TEMPLATES/reviewer.md"
+run status > "$FAKE/status.txt" 2>&1
+expect "status reports a linked template"          yes grep -q "e2e-tester.md linked" "$FAKE/status.txt"
+expect "status reports a missing template"         yes grep -q "coder.md is not linked" "$FAKE/status.txt"
+expect "a missing template names its fix"          yes grep -q "coder.md is not linked.*(run: update)" "$FAKE/status.txt"
+expect "status reports a foreign template"         yes grep -q "templates/reviewer.md is not a link to this clone" "$FAKE/status.txt"
+each_template_once() {
+  for _f in "$CLONE"/templates/*.md; do
+    [ "$(grep -cE "^  . (.*/)?$(basename "$_f") " "$1")" -eq 1 ] || return 1
+  done
+}
+expect "status lists every template once"          yes each_template_once "$FAKE/status.txt"
+expect "status prints the hc templates heading once" yes test "$(grep -c '^hc templates' "$FAKE/status.txt")" -eq 1
+rm "$HC_TEMPLATES/reviewer.md"
+run install >/dev/null
 
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
