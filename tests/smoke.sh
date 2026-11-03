@@ -6,7 +6,8 @@ set -eu
 
 CLONE=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 FAKE=$(mktemp -d)
-trap 'rm -rf "$FAKE"' EXIT INT TERM
+ADDED="$CLONE/templates/smoke-added-$$.md"
+trap 'rm -rf "$FAKE" "$ADDED"' EXIT INT TERM
 
 pass=0
 fail=0
@@ -105,15 +106,15 @@ rmdir "$FAKE/.config/herdr-core/templates/lib"
 run install >/dev/null
 
 echo "== hc templates =="
-HCT="$FAKE/.config/herdr-core/templates"
+HC_TEMPLATES="$FAKE/.config/herdr-core/templates"
 every_template_linked() {
   for _f in "$CLONE"/templates/*.md; do
-    links_file_to "$HCT/$(basename "$_f")" "$_f" || return 1
+    links_file_to "$HC_TEMPLATES/$(basename "$_f")" "$_f" || return 1
   done
 }
 no_template_linked() {
   for _f in "$CLONE"/templates/*.md; do
-    [ ! -e "$HCT/$(basename "$_f")" ] && [ ! -L "$HCT/$(basename "$_f")" ] || return 1
+    [ ! -e "$HC_TEMPLATES/$(basename "$_f")" ] && [ ! -L "$HC_TEMPLATES/$(basename "$_f")" ] || return 1
   done
 }
 rm -rf "$FAKE/.config/herdr-core"
@@ -125,27 +126,30 @@ expect "install --dry-run names the templates"     yes grep -q "would link coder
 expect "install --dry-run links no template"       yes no_template_linked
 run install >/dev/null
 expect "install links every template"              yes every_template_linked
-ls -l "$HCT" > "$FAKE/before.txt"
+ls -li "$HC_TEMPLATES" > "$FAKE/before.txt"
 run install >/dev/null
-ls -l "$HCT" > "$FAKE/after.txt"
+ls -li "$HC_TEMPLATES" > "$FAKE/after.txt"
 expect "second install keeps the template links"   yes every_template_linked
 expect "second install changes nothing"            yes cmp -s "$FAKE/before.txt" "$FAKE/after.txt"
-rm "$HCT/coder.md"
-echo "my own coder" > "$HCT/coder.md"
-rm "$HCT/reviewer.md"
+rm "$HC_TEMPLATES/coder.md"
+echo "my own coder" > "$HC_TEMPLATES/coder.md"
+rm "$HC_TEMPLATES/reviewer.md"
 mkdir -p "$FAKE/elsewhere"
 echo "another clone's reviewer" > "$FAKE/elsewhere/reviewer.md"
-ln -s "$FAKE/elsewhere/reviewer.md" "$HCT/reviewer.md"
+ln -s "$FAKE/elsewhere/reviewer.md" "$HC_TEMPLATES/reviewer.md"
 if run install > "$FAKE/foreign.txt" 2>&1; then _rc=0; else _rc=1; fi
 expect "a foreign template does not fail the install" yes test "$_rc" -eq 0
-expect "a real template file is left in place"     yes grep -q "my own coder" "$HCT/coder.md"
+expect "a real template file is left in place"     yes grep -q "my own coder" "$HC_TEMPLATES/coder.md"
 expect "a real template file is reported"          yes grep -q "templates/coder.md is not a link" "$FAKE/foreign.txt"
-expect "a template link elsewhere is left alone"   yes links_file_to "$HCT/reviewer.md" "$FAKE/elsewhere/reviewer.md"
+expect "a template link elsewhere is left alone"   yes links_file_to "$HC_TEMPLATES/reviewer.md" "$FAKE/elsewhere/reviewer.md"
 expect "a template link elsewhere is reported"     yes grep -q "templates/reviewer.md is not a link" "$FAKE/foreign.txt"
-rm "$HCT/coder.md" "$HCT/reviewer.md"
-# a template the links do not know about yet; GIT_DIR keeps update from pulling the clone
-GIT_DIR="$FAKE/no-git" run update >/dev/null 2>&1 || true
-expect "update links a template added to the clone" yes every_template_linked
+rm "$HC_TEMPLATES/coder.md" "$HC_TEMPLATES/reviewer.md"
+echo "a template added upstream" > "$ADDED"
+# GIT_DIR points git at nothing, so update's pull fails with a warning instead of pulling the clone
+expect "update succeeds"                           yes env GIT_DIR="$FAKE/no-git" HOME="$FAKE" XDG_CONFIG_HOME="$FAKE/.config" NO_COLOR=1 "$CLONE/bin/agent-skills" update
+expect "update links a template added to the clone" yes links_file_to "$HC_TEMPLATES/${ADDED##*/}" "$ADDED"
+expect "update relinks every template"             yes every_template_linked
+rm "$ADDED" "$HC_TEMPLATES/${ADDED##*/}"
 
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
