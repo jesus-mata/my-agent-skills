@@ -273,10 +273,24 @@ link_hc_templates() {
   [ "$(hc_entry_state lib)" != absent ] || return 0
   title "hc templates  ($HC_LIB_LINK)"
   link_hc_entry lib fail
+  each_hc_template link_hc_entry keep
+}
+
+# each_hc_template <fn> <arg>: runs <fn> <name> <arg> for every templates/*.md of the clone.
+each_hc_template() {
   for _e_src in "$HC_TEMPLATES_SRC"/*.md; do
     [ -e "$_e_src" ] || continue
-    link_hc_entry "${_e_src##*/}" keep
+    "$1" "${_e_src##*/}" "$2"
   done
+}
+
+# status_hc_entry <name> <what breaks while it is missing>: prints the entry's status line.
+status_hc_entry() {
+  case $(hc_entry_state "$1") in
+    linked)  ok "$1 linked" ;;
+    missing) warn "$1 is not linked, so $2 (run: update)" ;;
+    foreign) warn "$HC_TEMPLATES_DIR/$1 is not a link to this clone" ;;
+  esac
 }
 
 # ---------------------------------------------------------------- status
@@ -321,20 +335,8 @@ do_status() {
   IFS=$_old
   [ "$(hc_entry_state lib)" != absent ] || return 0
   title "hc templates"
-  case $(hc_entry_state lib) in
-    linked)  ok "lib linked" ;;
-    missing) warn "lib is not linked, so the templates cannot start (run: update)" ;;
-    foreign) warn "$HC_LIB_LINK is not a link to this clone" ;;
-  esac
-  for _e_src in "$HC_TEMPLATES_SRC"/*.md; do
-    [ -e "$_e_src" ] || continue
-    _e_name=${_e_src##*/}
-    case $(hc_entry_state "$_e_name") in
-      linked)  ok "$_e_name linked" ;;
-      missing) warn "$_e_name is not linked, so hc cannot start it (run: update)" ;;
-      foreign) warn "$HC_TEMPLATES_DIR/$_e_name is not a link to this clone" ;;
-    esac
-  done
+  status_hc_entry lib "the templates cannot start"
+  each_hc_template status_hc_entry "hc cannot start it"
 }
 
 # ---------------------------------------------------------------- uninstall / prune
