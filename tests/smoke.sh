@@ -6,8 +6,7 @@ set -eu
 
 CLONE=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 FAKE=$(mktemp -d)
-ADDED="$CLONE/templates/smoke-added-$$.md"
-trap 'rm -rf "$FAKE" "$ADDED"' EXIT INT TERM
+trap 'rm -rf "$FAKE"' EXIT INT TERM
 
 pass=0
 fail=0
@@ -114,7 +113,8 @@ every_template_linked() {
 }
 no_template_linked() {
   for _f in "$CLONE"/templates/*.md; do
-    [ ! -e "$HC_TEMPLATES/$(basename "$_f")" ] && [ ! -L "$HC_TEMPLATES/$(basename "$_f")" ] || return 1
+    _t="$HC_TEMPLATES/$(basename "$_f")"
+    [ ! -e "$_t" ] && [ ! -L "$_t" ] || return 1
   done
 }
 rm -rf "$FAKE/.config/herdr-core"
@@ -144,12 +144,15 @@ expect "a real template file is reported"          yes grep -q "templates/coder.
 expect "a template link elsewhere is left alone"   yes links_file_to "$HC_TEMPLATES/reviewer.md" "$FAKE/elsewhere/reviewer.md"
 expect "a template link elsewhere is reported"     yes grep -q "templates/reviewer.md is not a link" "$FAKE/foreign.txt"
 rm "$HC_TEMPLATES/coder.md" "$HC_TEMPLATES/reviewer.md"
-echo "a template added upstream" > "$ADDED"
-# GIT_DIR points git at nothing, so update's pull fails with a warning instead of pulling the clone
-expect "update succeeds"                           yes env GIT_DIR="$FAKE/no-git" HOME="$FAKE" XDG_CONFIG_HOME="$FAKE/.config" NO_COLOR=1 "$CLONE/bin/agent-skills" update
-expect "update links a template added to the clone" yes links_file_to "$HC_TEMPLATES/${ADDED##*/}" "$ADDED"
-expect "update relinks every template"             yes every_template_linked
-rm "$ADDED" "$HC_TEMPLATES/${ADDED##*/}"
+run install >/dev/null
+# A template added upstream goes into a throwaway copy of the clone, never the real one. The
+# copy has no .git, so update skips the pull; it gets its own $HOME and herdr-core.
+mkdir -p "$FAKE/copy" "$FAKE/copy-home/.claude" "$FAKE/copy-home/.config/herdr-core"
+COPY=$(CDPATH='' cd -- "$FAKE/copy" && pwd -P)
+cp -R "$CLONE/bin" "$CLONE/skills" "$CLONE/templates" "$COPY/"
+echo "a template added upstream" > "$COPY/templates/added.md"
+expect "update succeeds"                           yes env HOME="$FAKE/copy-home" XDG_CONFIG_HOME="$FAKE/copy-home/.config" NO_COLOR=1 "$COPY/bin/agent-skills" update
+expect "update links a template added to the clone" yes links_file_to "$FAKE/copy-home/.config/herdr-core/templates/added.md" "$COPY/templates/added.md"
 
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"

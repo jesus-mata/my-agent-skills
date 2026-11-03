@@ -215,7 +215,7 @@ do_install() {
 '
   done
   IFS=$_old
-  link_hc_lib
+  link_hc_templates
 }
 
 # ---------------------------------------------------------------- hc templates
@@ -237,14 +237,17 @@ hc_entry_state() {
   fi
 }
 
-# link_hc_entry <name> <oops|warn>: prints one line for the entry, or nothing when herdr-core
-# is absent; the caller prints the heading. The second argument reports a foreign entry, so
-# oops fails the run and warn does not.
+# link_hc_entry <name> <fail|keep>: prints one line for the entry, or nothing when herdr-core
+# is absent; the caller prints the heading. A foreign entry fails the run with fail, and is
+# only reported with keep.
 link_hc_entry() {
   _e_link="$HC_TEMPLATES_DIR/$1"
   case $(hc_entry_state "$1") in
     linked)  info "$1 already linked" ;;
-    foreign) "$2" "$_e_link is not a link to this clone — move it away and rerun" ;;
+    foreign)
+      if [ "$2" = fail ]; then oops "$_e_link is not a link to this clone — move it away and rerun"
+      else warn "$_e_link is not a link to this clone — left in place"; fi
+      ;;
     missing)
       if [ -n "$OPT_DRY" ]; then say "  would link $1"; return 0; fi
       mkdir -p "$HC_TEMPLATES_DIR"
@@ -266,13 +269,13 @@ unlink_hc_entry() {
 # The hc templates start Claude through templates/lib, so it must sit beside them; then every
 # templates/*.md. A foreign template is reported, but unlike lib it does not fail the run:
 # herdr-core can still start the others.
-link_hc_lib() {
+link_hc_templates() {
   [ "$(hc_entry_state lib)" != absent ] || return 0
   title "hc templates  ($HC_LIB_LINK)"
-  link_hc_entry lib oops
+  link_hc_entry lib fail
   for _e_src in "$HC_TEMPLATES_SRC"/*.md; do
     [ -e "$_e_src" ] || continue
-    link_hc_entry "${_e_src##*/}" warn
+    link_hc_entry "${_e_src##*/}" keep
   done
 }
 
