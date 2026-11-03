@@ -216,6 +216,7 @@ do_install() {
   done
   IFS=$_old
   link_hc_lib
+  link_hc_templates
 }
 
 # ---------------------------------------------------------------- hc templates
@@ -267,6 +268,21 @@ link_hc_lib() {
   [ "$(hc_entry_state lib)" != absent ] || return 0
   title "hc templates  ($HC_LIB_LINK)"
   link_hc_entry lib
+}
+
+# Every templates/*.md, linked beside lib after it. A foreign template is reported, but unlike
+# lib it does not fail the run: herdr-core can still start the others.
+link_hc_templates() {
+  [ "$(hc_entry_state lib)" != absent ] || return 0
+  for _e_src in "$HC_TEMPLATES_SRC"/*.md; do
+    [ -e "$_e_src" ] || continue
+    _e_name=$(basename "$_e_src")
+    if [ "$(hc_entry_state "$_e_name")" = foreign ]; then
+      warn "$HC_TEMPLATES_DIR/$_e_name is not a link to this clone — left in place"
+    else
+      link_hc_entry "$_e_name"
+    fi
+  done
 }
 
 # ---------------------------------------------------------------- status

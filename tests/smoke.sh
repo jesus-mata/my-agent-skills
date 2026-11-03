@@ -27,6 +27,7 @@ expect() {
 }
 
 links_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ] && [ -d "$1" ]; }
+links_file_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ] && [ -f "$1" ]; }
 
 run() { HOME="$FAKE" XDG_CONFIG_HOME="$FAKE/.config" NO_COLOR=1 "$CLONE/bin/agent-skills" "$@"; }
 
@@ -102,6 +103,49 @@ expect "a real lib folder fails the install"      no  run install
 expect "a real lib folder is left in place"       yes test -d "$FAKE/.config/herdr-core/templates/lib"
 rmdir "$FAKE/.config/herdr-core/templates/lib"
 run install >/dev/null
+
+echo "== hc templates =="
+HCT="$FAKE/.config/herdr-core/templates"
+every_template_linked() {
+  for _f in "$CLONE"/templates/*.md; do
+    links_file_to "$HCT/$(basename "$_f")" "$_f" || return 1
+  done
+}
+no_template_linked() {
+  for _f in "$CLONE"/templates/*.md; do
+    [ ! -e "$HCT/$(basename "$_f")" ] && [ ! -L "$HCT/$(basename "$_f")" ] || return 1
+  done
+}
+rm -rf "$FAKE/.config/herdr-core"
+run install >/dev/null
+expect "no herdr-core folder is created for the templates" no test -e "$FAKE/.config/herdr-core"
+mkdir -p "$FAKE/.config/herdr-core"
+run install --dry-run > "$FAKE/dry.txt" 2>&1
+expect "install --dry-run names the templates"     yes grep -q "would link coder.md" "$FAKE/dry.txt"
+expect "install --dry-run links no template"       yes no_template_linked
+run install >/dev/null
+expect "install links every template"              yes every_template_linked
+ls -l "$HCT" > "$FAKE/before.txt"
+run install >/dev/null
+ls -l "$HCT" > "$FAKE/after.txt"
+expect "second install keeps the template links"   yes every_template_linked
+expect "second install changes nothing"            yes cmp -s "$FAKE/before.txt" "$FAKE/after.txt"
+rm "$HCT/coder.md"
+echo "my own coder" > "$HCT/coder.md"
+rm "$HCT/reviewer.md"
+mkdir -p "$FAKE/elsewhere"
+echo "another clone's reviewer" > "$FAKE/elsewhere/reviewer.md"
+ln -s "$FAKE/elsewhere/reviewer.md" "$HCT/reviewer.md"
+if run install > "$FAKE/foreign.txt" 2>&1; then _rc=0; else _rc=1; fi
+expect "a foreign template does not fail the install" yes test "$_rc" -eq 0
+expect "a real template file is left in place"     yes grep -q "my own coder" "$HCT/coder.md"
+expect "a real template file is reported"          yes grep -q "templates/coder.md is not a link" "$FAKE/foreign.txt"
+expect "a template link elsewhere is left alone"   yes links_file_to "$HCT/reviewer.md" "$FAKE/elsewhere/reviewer.md"
+expect "a template link elsewhere is reported"     yes grep -q "templates/reviewer.md is not a link" "$FAKE/foreign.txt"
+rm "$HCT/coder.md" "$HCT/reviewer.md"
+# a template the links do not know about yet; GIT_DIR keeps update from pulling the clone
+GIT_DIR="$FAKE/no-git" run update >/dev/null 2>&1 || true
+expect "update links a template added to the clone" yes every_template_linked
 
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
