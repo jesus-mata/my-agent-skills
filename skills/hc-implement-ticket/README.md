@@ -37,9 +37,9 @@ Run it from any `hc` terminal in the repo:
 
 Only you can start it. It needs the `coder`, `e2e-tester`, `reviewer` and `ticket-orchestrator`
 templates linked into `~/.config/herdr-core/templates`, the skills those templates run, `jq`, and
-an authenticated `gh` or `glab`. Those templates start through `templates/lib`, which
-`bin/agent-skills install` or `update` links beside them once `~/.config/herdr-core` exists, so
-run one of those after pulling.
+an authenticated `gh` or `glab`. `bin/agent-skills install` or `update` links every template,
+and the `templates/lib` they start through, once `~/.config/herdr-core` exists, so run one of
+those after pulling. `bin/agent-skills status` shows any template that is missing.
 
 ## Choosing models
 
