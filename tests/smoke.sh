@@ -27,6 +27,7 @@ expect() {
 }
 
 links_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ] && [ -d "$1" ]; }
+links_file_to() { [ -L "$1" ] && [ "$(readlink "$1")" = "$2" ] && [ -f "$1" ]; }
 
 run() { HOME="$FAKE" XDG_CONFIG_HOME="$FAKE/.config" NO_COLOR=1 "$CLONE/bin/agent-skills" "$@"; }
 
@@ -85,6 +86,8 @@ rm -rf "$FAKE/.claude/skills/adoptable"
 echo "== status =="
 run status > "$FAKE/status.txt" 2>&1
 expect "status reports linked skills" yes grep -q linked "$FAKE/status.txt"
+mentions_templates() { grep -v '^clone:' "$1" | grep -q -e template -e coder.md; }
+expect "status says nothing about templates without hc" no mentions_templates "$FAKE/status.txt"
 
 echo "== hc template lib =="
 expect "no home is created for an absent hc"      no  test -d "$FAKE/.config/herdr-core"
@@ -103,12 +106,138 @@ expect "a real lib folder is left in place"       yes test -d "$FAKE/.config/her
 rmdir "$FAKE/.config/herdr-core/templates/lib"
 run install >/dev/null
 
+echo "== hc templates =="
+HC_TEMPLATES="$FAKE/.config/herdr-core/templates"
+every_template_linked() {
+  for _f in "$CLONE"/templates/*.md; do
+    links_file_to "$HC_TEMPLATES/$(basename "$_f")" "$_f" || return 1
+  done
+}
+no_template_linked() {
+  for _f in "$CLONE"/templates/*.md; do
+    _t="$HC_TEMPLATES/$(basename "$_f")"
+    [ ! -e "$_t" ] && [ ! -L "$_t" ] || return 1
+  done
+}
+rm -rf "$FAKE/.config/herdr-core"
+run install >/dev/null
+expect "no herdr-core folder is created for the templates" no test -e "$FAKE/.config/herdr-core"
+mkdir -p "$FAKE/.config/herdr-core"
+run install --dry-run > "$FAKE/dry.txt" 2>&1
+expect "install --dry-run names the templates"     yes grep -q "would link coder.md" "$FAKE/dry.txt"
+expect "install --dry-run links no template"       yes no_template_linked
+run install >/dev/null
+expect "install links every template"              yes every_template_linked
+ls -li "$HC_TEMPLATES" > "$FAKE/before.txt"
+run install >/dev/null
+ls -li "$HC_TEMPLATES" > "$FAKE/after.txt"
+expect "second install keeps the template links"   yes every_template_linked
+expect "second install changes nothing"            yes cmp -s "$FAKE/before.txt" "$FAKE/after.txt"
+rm "$HC_TEMPLATES/coder.md"
+echo "my own coder" > "$HC_TEMPLATES/coder.md"
+rm "$HC_TEMPLATES/reviewer.md"
+mkdir -p "$FAKE/elsewhere"
+echo "another clone's reviewer" > "$FAKE/elsewhere/reviewer.md"
+ln -s "$FAKE/elsewhere/reviewer.md" "$HC_TEMPLATES/reviewer.md"
+if run install > "$FAKE/foreign.txt" 2>&1; then _rc=0; else _rc=1; fi
+expect "a foreign template does not fail the install" yes test "$_rc" -eq 0
+expect "a real template file is left in place"     yes grep -q "my own coder" "$HC_TEMPLATES/coder.md"
+expect "a real template file is reported"          yes grep -q "templates/coder.md is not a link" "$FAKE/foreign.txt"
+expect "a template link elsewhere is left alone"   yes links_file_to "$HC_TEMPLATES/reviewer.md" "$FAKE/elsewhere/reviewer.md"
+expect "a template link elsewhere is reported"     yes grep -q "templates/reviewer.md is not a link" "$FAKE/foreign.txt"
+rm "$HC_TEMPLATES/coder.md" "$HC_TEMPLATES/reviewer.md"
+run install >/dev/null
+# A template added upstream goes into a throwaway copy of the clone, never the real one. The
+# copy has no .git, so update skips the pull; it gets its own $HOME and herdr-core.
+mkdir -p "$FAKE/copy" "$FAKE/copy-home/.claude" "$FAKE/copy-home/.config/herdr-core"
+COPY=$(CDPATH='' cd -- "$FAKE/copy" && pwd -P)
+cp -R "$CLONE/bin" "$CLONE/skills" "$CLONE/templates" "$COPY/"
+echo "a template added upstream" > "$COPY/templates/added.md"
+run_copy() { HOME="$FAKE/copy-home" XDG_CONFIG_HOME="$FAKE/copy-home/.config" NO_COLOR=1 "$COPY/bin/agent-skills" "$@"; }
+COPY_TEMPLATES="$FAKE/copy-home/.config/herdr-core/templates"
+mkdir -p "$COPY_TEMPLATES"
+# a template removed upstream, and a dangling link that belongs to someone else
+ln -s "$COPY/templates/removed.md" "$COPY_TEMPLATES/removed.md"
+ln -s "$FAKE/elsewhere/vanished.md" "$COPY_TEMPLATES/vanished.md"
+if run_copy update --dry-run > "$FAKE/dry-update.txt" 2>&1; then _rc=0; else _rc=1; fi
+expect "update --dry-run succeeds"                 yes test "$_rc" -eq 0
+expect "update --dry-run names the template to prune" yes grep -q "would unlink removed.md" "$FAKE/dry-update.txt"
+expect "update --dry-run prunes no template link"  yes test -L "$COPY_TEMPLATES/removed.md"
+if run_copy update > "$FAKE/update.txt" 2>&1; then _rc=0; else _rc=1; fi
+expect "update succeeds"                           yes test "$_rc" -eq 0
+expect "update links a template added to the clone" yes links_file_to "$COPY_TEMPLATES/added.md" "$COPY/templates/added.md"
+expect "update prunes a template whose source is gone" no test -L "$COPY_TEMPLATES/removed.md"
+expect "update leaves a dangling link elsewhere alone" yes test -L "$COPY_TEMPLATES/vanished.md"
+expect "update reports a dangling link elsewhere"  yes grep -q "vanished.md.*dangling" "$FAKE/update.txt"
+ln -s "$COPY/templates/removed.md" "$COPY_TEMPLATES/removed.md"
+run_copy prune e2e >/dev/null 2>&1
+expect "a prune naming skills keeps the template links" yes test -L "$COPY_TEMPLATES/removed.md"
+run_copy prune --target claude >/dev/null 2>&1
+expect "prune --target still prunes a template whose source is gone" no test -L "$COPY_TEMPLATES/removed.md"
+rm "$COPY/templates/added.md"
+run_copy update --target claude >/dev/null 2>&1
+expect "update --target prunes a template deleted upstream" no test -L "$COPY_TEMPLATES/added.md"
+rm "$HC_TEMPLATES/coder.md"
+rm "$HC_TEMPLATES/reviewer.md"
+echo "my own reviewer" > "$HC_TEMPLATES/reviewer.md"
+run status > "$FAKE/status.txt" 2>&1
+expect "status reports a linked template"          yes grep -q "e2e-tester.md linked" "$FAKE/status.txt"
+expect "status reports a missing template"         yes grep -q "coder.md is not linked" "$FAKE/status.txt"
+expect "a missing template names its fix"          yes grep -q "coder.md is not linked.*(run: update)" "$FAKE/status.txt"
+expect "status reports a foreign template"         yes grep -q "templates/reviewer.md is not a link to this clone" "$FAKE/status.txt"
+each_template_once() {
+  for _f in "$CLONE"/templates/*.md; do
+    [ "$(grep -cE "^  . (.*/)?$(basename "$_f") " "$1")" -eq 1 ] || return 1
+  done
+}
+expect "status lists every template once"          yes each_template_once "$FAKE/status.txt"
+ln -s "$CLONE/templates/renamed.md" "$HC_TEMPLATES/renamed.md"
+run status > "$FAKE/status.txt" 2>&1
+rm "$HC_TEMPLATES/renamed.md"
+expect "status reports a dangling template link"   yes grep -q "renamed.md is a dangling link into this clone (run: update)" "$FAKE/status.txt"
+expect "status prints the hc templates heading once" yes test "$(grep -c '^hc templates' "$FAKE/status.txt")" -eq 1
+rm "$HC_TEMPLATES/reviewer.md"
+run install >/dev/null
+
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
+echo "my own template" > "$HC_TEMPLATES/mine.md"
+ln -s "$FAKE/elsewhere/reviewer.md" "$HC_TEMPLATES/theirs.md"
+run uninstall e2e >/dev/null
+expect "a narrowed uninstall keeps the template links" yes every_template_linked
+run uninstall --target claude >/dev/null
+expect "uninstall --target keeps the template links" yes every_template_linked
+run install >/dev/null
+run uninstall --dry-run >/dev/null
+expect "uninstall --dry-run removes no template"  yes every_template_linked
+expect "uninstall --dry-run keeps the lib link"   yes links_to "$HC_TEMPLATES/lib" "$CLONE/templates/lib"
 run uninstall >/dev/null
+expect "uninstall removes every template link"    yes no_template_linked
+expect "uninstall leaves a real template file"    yes grep -q "my own template" "$HC_TEMPLATES/mine.md"
+expect "uninstall leaves a template link elsewhere" yes links_file_to "$HC_TEMPLATES/theirs.md" "$FAKE/elsewhere/reviewer.md"
 expect "uninstall removes the lib link"           no  test -L "$FAKE/.config/herdr-core/templates/lib"
 expect "uninstall removes our links"              no  test -L "$FAKE/.claude/skills/e2e"
 expect "uninstall leaves foreign content alone"   yes test -d "$FAKE/.claude/skills/someone-elses"
+
+echo "== a hand-made template link into this clone counts as ours =="
+# spelled through a symlinked path to the clone, absolute and relative
+ln -s "$CLONE" "$FAKE/.config/herdr-core/clone-alias"
+run install >/dev/null
+rm "$HC_TEMPLATES/coder.md" "$HC_TEMPLATES/reviewer.md"
+ln -s ../clone-alias/templates/coder.md "$HC_TEMPLATES/coder.md"
+ln -s "$FAKE/.config/herdr-core/clone-alias/templates/reviewer.md" "$HC_TEMPLATES/reviewer.md"
+run status > "$FAKE/hand-status.txt" 2>&1
+expect "status counts a relative hand-made link as linked" yes grep -q " coder.md linked" "$FAKE/hand-status.txt"
+expect "status counts a hand-made link via a symlink as linked" yes grep -q " reviewer.md linked" "$FAKE/hand-status.txt"
+run install > "$FAKE/hand-install.txt" 2>&1
+expect "install does not report a hand-made link"  no  grep -q "is not a link to this clone" "$FAKE/hand-install.txt"
+run uninstall >/dev/null
+expect "uninstall removes a relative hand-made link" no test -L "$HC_TEMPLATES/coder.md"
+expect "uninstall removes a hand-made link via a symlink" no test -L "$HC_TEMPLATES/reviewer.md"
+ln -s "$COPY" "$FAKE/copy-alias"
+ln -s "$FAKE/copy-alias/templates/gone.md" "$COPY_TEMPLATES/gone.md"
+run_copy update >/dev/null 2>&1
+expect "update prunes a dangling hand-made link via a symlink" no test -L "$COPY_TEMPLATES/gone.md"
 
 echo ""
 echo "$pass passed, $fail failed"

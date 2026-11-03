@@ -55,11 +55,9 @@ Run it from any `hc` terminal in the repo:
 Only you can start it. It needs the `spec-orchestrator`, `spec-coder` and `e2e-tester` templates
 linked into `~/.config/herdr-core/templates`, the skills those templates run, `jq`, and an
 authenticated `gh` or `glab`. The tickets must live in the issue tracker, because `/develop-ticket`
-reads them from there. Link the new templates once:
-
-```sh
-ln -s "$PWD/templates/spec-orchestrator.md" "$PWD/templates/spec-coder.md" ~/.config/herdr-core/templates/
-```
+reads them from there. `bin/agent-skills install` or `update` links every template, and
+`templates/lib` beside them, once `~/.config/herdr-core` exists, so run one of those after
+pulling. `bin/agent-skills status` shows any template that is missing.
 
 Models work as in [`hc-implement-ticket`](../hc-implement-ticket/README.md#choosing-models).
 Integration rounds and spec fixes run in the dev and review terminals, so they use those models.

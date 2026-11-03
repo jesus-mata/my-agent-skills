@@ -30,9 +30,10 @@ In Claude Code:
 `herdr-implement-spec` and `herdr-spec-engine` also need the [herdr](https://github.com/herdrdev/herdr)
 CLI and an authenticated `gh`; `herdr-spec-engine` also needs `python3` 3.11 or newer.
 
-`hc-implement-spec` needs `hc` (herdr-core), `jq` and an authenticated `gh` or `glab`, and the
-`spec-orchestrator`, `spec-coder` and `e2e-tester` templates linked into
-`~/.config/herdr-core/templates`. Herdr is optional; with it, every terminal gets its own named tab.
+`hc-implement-ticket` and `hc-implement-spec` need `hc` (herdr-core), `jq` and an authenticated
+`gh` or `glab`, plus the hc templates in [`templates/`](templates), which the installer links for
+you (see [hc templates](#hc-templates)). Herdr is optional; with it, every terminal gets its own
+named tab.
 
 `work-ticket` runs only inside a herdr session and only from Claude Code: it calls
 `~/.claude/skills/work-ticket/start-ticket.sh` and its agents use Claude Code's built-in
@@ -91,7 +92,7 @@ behind the one you edit.
 
 ```
 bin/agent-skills install [skill...]    Link skills into every detected agent
-bin/agent-skills update                git pull, relink, prune links to skills that are gone
+bin/agent-skills update                git pull, relink, prune links to skills and templates that are gone
 bin/agent-skills status                What is linked, missing, shadowed or dangling
 bin/agent-skills uninstall [skill...]  Remove links pointing into this clone — nothing else
 bin/agent-skills adopt <skill>         Move a skill out of an agent into this clone, link it back
@@ -121,6 +122,17 @@ progressive disclosure, so "installing" a skill there means pasting its whole bo
 prompt.
 
 macOS and Linux. POSIX `sh`, no runtime dependencies beyond `git`.
+
+## hc templates
+
+If herdr-core is installed (`~/.config/herdr-core` exists), `install` and `update` also link
+`templates/lib` and every `templates/*.md` into `~/.config/herdr-core/templates`, so a template
+added upstream is ready after `update`. `status` reports each one as linked, missing or foreign,
+and says when to run `update`. Without herdr-core nothing is created. A real file or a link that
+points elsewhere is left alone and reported, even with `--force`: unlike skills, an hc template
+entry is never replaced. A hand-made link to this clone's template already counts as linked.
+herdr-core has one templates folder, so `--target` does not narrow linking or pruning it; an
+`uninstall` that names skills or targets keeps the template links.
 
 ## How it behaves when things collide
 
