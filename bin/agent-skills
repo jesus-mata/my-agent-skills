@@ -347,22 +347,24 @@ remove_hc_templates() {
         ;;
       *)
         [ "$1" = dangling ] && [ ! -e "$_e_link" ] || continue
-        warn "$_e_link is a dangling link outside this clone — left in place"
+        warn "$_e_link is a dangling link outside this clone's templates — left in place"
         ;;
     esac
   done
 }
 
-# A narrowed uninstall (skills or targets named) leaves lib and the templates alone.
-unlink_hc_templates() {
-  [ -z "$ARGS$OPT_TARGETS" ] && [ "$(hc_entry_state lib)" != absent ] || return 0
+# A narrowed run (skills or targets named) leaves lib and the templates alone.
+hc_in_scope() { [ -z "$ARGS$OPT_TARGETS" ] && [ -d "$HC_CONFIG" ]; }
+
+uninstall_hc() {
+  hc_in_scope || return 0
   title "hc templates  ($HC_LIB_LINK)"
   unlink_hc_entry lib
   remove_hc_templates all
 }
 
-prune_hc_templates() {
-  [ "$(hc_entry_state lib)" != absent ] || return 0
+prune_hc() {
+  hc_in_scope || return 0
   title "hc templates  ($HC_TEMPLATES_DIR)"
   remove_hc_templates dangling
 }
@@ -408,8 +410,8 @@ remove_links() {
   IFS=$_old
 }
 
-do_uninstall() { remove_links all; unlink_hc_templates; }
-do_prune()     { remove_links dangling; prune_hc_templates; }
+do_uninstall() { remove_links all; uninstall_hc; }
+do_prune()     { remove_links dangling; prune_hc; }
 
 # ---------------------------------------------------------------- update
 
