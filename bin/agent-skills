@@ -385,18 +385,19 @@ remove_hc_templates() {
   done
 }
 
-# A narrowed run (skills or targets named) leaves lib and the templates alone.
-hc_in_scope() { [ -z "$ARGS$OPT_TARGETS" ] && [ -d "$HC_CONFIG" ]; }
-
+# herdr-core has one templates folder, not one per target, so --target never narrows linking
+# or pruning it: install and update link every entry, and prune removes the dangling ones.
+# Naming skills narrows prune, and a narrowed uninstall (skills or targets named) keeps the
+# live links, so uninstalling from one agent does not break hc.
 uninstall_hc() {
-  hc_in_scope || return 0
+  [ -z "$ARGS$OPT_TARGETS" ] && [ -d "$HC_CONFIG" ] || return 0
   title "hc templates  ($HC_TEMPLATES_DIR)"
   unlink_hc_entry lib
   remove_hc_templates all
 }
 
 prune_hc() {
-  hc_in_scope || return 0
+  [ -z "$ARGS" ] && [ -d "$HC_CONFIG" ] || return 0
   title "hc templates  ($HC_TEMPLATES_DIR)"
   remove_hc_templates dangling
 }

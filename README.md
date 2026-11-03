@@ -131,6 +131,8 @@ added upstream is ready after `update`. `status` reports each one as linked, mis
 and says when to run `update`. Without herdr-core nothing is created. A real file or a link that
 points elsewhere is left alone and reported, even with `--force`: unlike skills, an hc template
 entry is never replaced. A hand-made link to this clone's template already counts as linked.
+herdr-core has one templates folder, so `--target` does not narrow linking or pruning it; an
+`uninstall` that names skills or targets keeps the template links.
 
 ## How it behaves when things collide
 

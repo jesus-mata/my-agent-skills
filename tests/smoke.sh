@@ -170,8 +170,13 @@ expect "update prunes a template whose source is gone" no test -L "$COPY_TEMPLAT
 expect "update leaves a dangling link elsewhere alone" yes test -L "$COPY_TEMPLATES/vanished.md"
 expect "update reports a dangling link elsewhere"  yes grep -q "vanished.md.*dangling" "$FAKE/update.txt"
 ln -s "$COPY/templates/removed.md" "$COPY_TEMPLATES/removed.md"
+run_copy prune e2e >/dev/null 2>&1
+expect "a prune naming skills keeps the template links" yes test -L "$COPY_TEMPLATES/removed.md"
 run_copy prune --target claude >/dev/null 2>&1
-expect "a narrowed prune keeps the template links" yes test -L "$COPY_TEMPLATES/removed.md"
+expect "prune --target still prunes a template whose source is gone" no test -L "$COPY_TEMPLATES/removed.md"
+rm "$COPY/templates/added.md"
+run_copy update --target claude >/dev/null 2>&1
+expect "update --target prunes a template deleted upstream" no test -L "$COPY_TEMPLATES/added.md"
 rm "$HC_TEMPLATES/coder.md"
 rm "$HC_TEMPLATES/reviewer.md"
 echo "my own reviewer" > "$HC_TEMPLATES/reviewer.md"
