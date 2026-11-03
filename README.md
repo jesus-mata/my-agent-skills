@@ -30,6 +30,10 @@ In Claude Code:
 `herdr-implement-spec` and `herdr-spec-engine` also need the [herdr](https://github.com/herdrdev/herdr)
 CLI and an authenticated `gh`; `herdr-spec-engine` also needs `python3` 3.11 or newer.
 
+`hc-implement-spec` needs `hc` (herdr-core), `jq` and an authenticated `gh` or `glab`, and the
+`spec-orchestrator`, `spec-coder` and `e2e-tester` templates linked into
+`~/.config/herdr-core/templates`. Herdr is optional; with it, every terminal gets its own named tab.
+
 `work-ticket` runs only inside a herdr session and only from Claude Code: it calls
 `~/.claude/skills/work-ticket/start-ticket.sh` and its agents use Claude Code's built-in
 `/code-review`. It needs `git`, `python3`, and an authenticated `gh` (GitHub) or `glab` (GitLab).
@@ -69,6 +73,7 @@ behind the one you edit.
 | --- | --- |
 | [`develop-ticket`](skills/develop-ticket/SKILL.md) | Develops a ticket or issue on the current branch: reads it, codes it test-first, validates and commits. Use when a ticket's code must be written on an assigned branch, by hand or from an orchestrator. For the full pipeline to an MR, use /implement-ticket. |
 | [`e2e`](skills/e2e/SKILL.md) | Bring up the local stack and end-to-end test a change — web app, HTTP API, CLI, or desktop app — driven by the project's root E2E.md. Use it when you need to verify that something actually works, not just that it compiles or that the unit tests pass. |
+| [`hc-implement-spec`](skills/hc-implement-spec/SKILL.md) | Implements every ticket of a spec made by /to-spec and /to-tickets with an hc orchestrator: each ticket is developed and reviewed in its own terminal in dependency order, merged into an integration branch, then the whole spec is reviewed, E2E-tested and opened as one PR. Terminals show up named in herdr-app. |
 | [`hc-implement-ticket`](skills/hc-implement-ticket/SKILL.md) | Takes a ticket from code to MR with an hc orchestrator: develop, review and E2E each run in their own terminal, which stay open for follow-ups. |
 | [`herdr-implement-spec`](skills/herdr-implement-spec/SKILL.md) | Implement every ticket of a spec/PRD by orchestrating parallel Claude instances in herdr worktrees, wave by wave, merging each into a spec branch, then code-review and E2E-test the whole spec. Use when the user hands you a spec or PRD (or its GitHub issue) and wants its linked issues or slices implemented, not just a single ticket. Use only when the user explicitly asks for it instead of herdr-spec-engine. |
 | [`herdr-spec-engine`](skills/herdr-spec-engine/SKILL.md) | Implements every ticket of a spec, PRD or epic with parallel Claude agents in herdr worktrees, driven by a deterministic engine that schedules, reviews, gates and merges each ticket into a spec branch, then code-reviews and E2E-tests the whole spec; Claude only supervises its escalations. Use when the user hands over a spec or PRD (or its GitHub issue) and wants all its tickets or sub-issues implemented, not a single ticket. Default choice over herdr-implement-spec. |
