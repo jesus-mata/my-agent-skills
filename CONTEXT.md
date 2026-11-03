@@ -43,6 +43,7 @@ back — turning what would become a shadow into a link.
 _Avoid_: Import, migrate
 
 **Prune**:
-To remove links in targets that resolve into the clone but no longer name a skill that exists
-there — the residue of a skill deleted or renamed upstream.
+To remove links in targets, or in herdr-core's templates folder, that resolve into the clone but
+no longer name a skill or template that exists there — the residue of one deleted or renamed
+upstream.
 _Avoid_: Clean, gc

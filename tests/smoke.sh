@@ -153,8 +153,25 @@ mkdir -p "$FAKE/copy" "$FAKE/copy-home/.claude" "$FAKE/copy-home/.config/herdr-c
 COPY=$(CDPATH='' cd -- "$FAKE/copy" && pwd -P)
 cp -R "$CLONE/bin" "$CLONE/skills" "$CLONE/templates" "$COPY/"
 echo "a template added upstream" > "$COPY/templates/added.md"
-expect "update succeeds"                           yes env HOME="$FAKE/copy-home" XDG_CONFIG_HOME="$FAKE/copy-home/.config" NO_COLOR=1 "$COPY/bin/agent-skills" update
-expect "update links a template added to the clone" yes links_file_to "$FAKE/copy-home/.config/herdr-core/templates/added.md" "$COPY/templates/added.md"
+run_copy() { HOME="$FAKE/copy-home" XDG_CONFIG_HOME="$FAKE/copy-home/.config" NO_COLOR=1 "$COPY/bin/agent-skills" "$@"; }
+COPY_TEMPLATES="$FAKE/copy-home/.config/herdr-core/templates"
+mkdir -p "$COPY_TEMPLATES"
+# a template removed upstream, and a dangling link that belongs to someone else
+ln -s "$COPY/templates/removed.md" "$COPY_TEMPLATES/removed.md"
+ln -s "$FAKE/elsewhere/vanished.md" "$COPY_TEMPLATES/vanished.md"
+if run_copy update --dry-run > "$FAKE/dry-update.txt" 2>&1; then _rc=0; else _rc=1; fi
+expect "update --dry-run succeeds"                 yes test "$_rc" -eq 0
+expect "update --dry-run names the template to prune" yes grep -q "would unlink removed.md" "$FAKE/dry-update.txt"
+expect "update --dry-run prunes no template link"  yes test -L "$COPY_TEMPLATES/removed.md"
+if run_copy update > "$FAKE/update.txt" 2>&1; then _rc=0; else _rc=1; fi
+expect "update succeeds"                           yes test "$_rc" -eq 0
+expect "update links a template added to the clone" yes links_file_to "$COPY_TEMPLATES/added.md" "$COPY/templates/added.md"
+expect "update prunes a template whose source is gone" no test -L "$COPY_TEMPLATES/removed.md"
+expect "update leaves a dangling link elsewhere alone" yes test -L "$COPY_TEMPLATES/vanished.md"
+expect "update reports a dangling link elsewhere"  yes grep -q "vanished.md.*dangling" "$FAKE/update.txt"
+ln -s "$COPY/templates/removed.md" "$COPY_TEMPLATES/removed.md"
+run_copy prune --target claude >/dev/null 2>&1
+expect "a narrowed prune keeps the template links" yes test -L "$COPY_TEMPLATES/removed.md"
 rm "$HC_TEMPLATES/coder.md"
 rm "$HC_TEMPLATES/reviewer.md"
 echo "my own reviewer" > "$HC_TEMPLATES/reviewer.md"
@@ -175,7 +192,20 @@ run install >/dev/null
 
 echo "== uninstall touches only our links =="
 mkdir -p "$FAKE/.claude/skills/someone-elses"
+echo "my own template" > "$HC_TEMPLATES/mine.md"
+ln -s "$FAKE/elsewhere/reviewer.md" "$HC_TEMPLATES/theirs.md"
+run uninstall e2e >/dev/null
+expect "a narrowed uninstall keeps the template links" yes every_template_linked
+run uninstall --target claude >/dev/null
+expect "uninstall --target keeps the template links" yes every_template_linked
+run install >/dev/null
+run uninstall --dry-run >/dev/null
+expect "uninstall --dry-run removes no template"  yes every_template_linked
+expect "uninstall --dry-run keeps the lib link"   yes links_to "$HC_TEMPLATES/lib" "$CLONE/templates/lib"
 run uninstall >/dev/null
+expect "uninstall removes every template link"    yes no_template_linked
+expect "uninstall leaves a real template file"    yes grep -q "my own template" "$HC_TEMPLATES/mine.md"
+expect "uninstall leaves a template link elsewhere" yes links_file_to "$HC_TEMPLATES/theirs.md" "$FAKE/elsewhere/reviewer.md"
 expect "uninstall removes the lib link"           no  test -L "$FAKE/.config/herdr-core/templates/lib"
 expect "uninstall removes our links"              no  test -L "$FAKE/.claude/skills/e2e"
 expect "uninstall leaves foreign content alone"   yes test -d "$FAKE/.claude/skills/someone-elses"

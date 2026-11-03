@@ -341,10 +341,45 @@ do_status() {
 
 # ---------------------------------------------------------------- uninstall / prune
 
-unlink_hc_lib() {
-  [ -z "$ARGS$OPT_TARGETS" ] && [ "$(hc_entry_state lib)" = linked ] || return 0
+# remove_hc_templates <all|dangling>: removes the template links that point into this clone's
+# templates/ (all, or only those whose source is gone). lib is left to its own handling. A
+# dangling link that points elsewhere is reported in dangling mode and never removed; real
+# files and live links elsewhere are not ours, so they are passed over.
+remove_hc_templates() {
+  for _e_link in "$HC_TEMPLATES_DIR"/*; do
+    [ -L "$_e_link" ] || continue
+    _e_base=${_e_link##*/}
+    [ "$_e_base" != lib ] || continue
+    _e_dst=$(readlink "$_e_link")
+    case $_e_dst in
+      "$HC_TEMPLATES_SRC"/*)
+        [ "$1" = all ] || [ ! -e "$_e_dst" ] || continue
+        if [ -n "$OPT_DRY" ]; then say "  would unlink $_e_base"; continue; fi
+        rm "$_e_link"
+        ok "$_e_base unlinked"
+        ;;
+      *)
+        [ "$1" = dangling ] && [ ! -e "$_e_link" ] || continue
+        warn "$_e_link is a dangling link outside this clone's templates — left in place"
+        ;;
+    esac
+  done
+}
+
+# A narrowed run (skills or targets named) leaves lib and the templates alone.
+hc_in_scope() { [ -z "$ARGS$OPT_TARGETS" ] && [ -d "$HC_CONFIG" ]; }
+
+uninstall_hc() {
+  hc_in_scope || return 0
   title "hc templates  ($HC_LIB_LINK)"
   unlink_hc_entry lib
+  remove_hc_templates all
+}
+
+prune_hc() {
+  hc_in_scope || return 0
+  title "hc templates  ($HC_TEMPLATES_DIR)"
+  remove_hc_templates dangling
 }
 
 remove_links() {
@@ -388,8 +423,8 @@ remove_links() {
   IFS=$_old
 }
 
-do_uninstall() { remove_links all; unlink_hc_lib; }
-do_prune()     { remove_links dangling; }
+do_uninstall() { remove_links all; uninstall_hc; }
+do_prune()     { remove_links dangling; prune_hc; }
 
 # ---------------------------------------------------------------- update
 
@@ -403,7 +438,7 @@ do_update() {
     info "not a git clone — skipping pull"
   fi
   do_install
-  title "pruning links to skills that no longer exist"
+  title "pruning links to skills and templates that no longer exist"
   _saved_args=$ARGS
   ARGS=''
   do_prune
@@ -584,7 +619,7 @@ USAGE
 
 COMMANDS
   install [skill...]    Link skills into every detected target, and the hc templates if hc is here.
-  update                git pull, relink, then prune links to skills that are gone.
+  update                git pull, relink, then prune links to skills and templates that are gone.
   status                Show what is linked, missing, shadowed or dangling.
   uninstall [skill...]  Remove links that point into this clone. Nothing else is touched.
   adopt <skill>         Move a real skill directory out of an agent into this clone, then link it back.
