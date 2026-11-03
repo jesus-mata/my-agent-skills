@@ -221,8 +221,9 @@ do_install() {
 
 # Entries of herdr-core's templates folder (templates/<name>) are links into this clone's
 # templates/. Detected = herdr-core's own directory exists; we never create it.
-# Shell functions share globals, so their variables are prefixed _e_ to leave the callers'
-# _state/_name/_dir alone.
+# Shell functions share globals, so their variables are prefixed _e_ (_r_ in resolve_link) to
+# leave the callers' _state/_name/_dir alone.
+
 # resolve_link <link>: where the link points, with its folder spelled as a physical path, so a
 # relative link or one made through a symlinked path to the clone compares equal to ours. A
 # folder that is gone leaves the text as read.
@@ -282,7 +283,7 @@ unlink_hc_entry() {
 # templates/*.md. A foreign template is reported, but unlike lib it does not fail the run:
 # herdr-core can still start the others.
 link_hc_templates() {
-  [ "$(hc_entry_state lib)" != absent ] || return 0
+  [ -d "$HC_CONFIG" ] || return 0
   title "hc templates  ($HC_TEMPLATES_DIR)"
   link_hc_entry lib fail
   each_hc_template link_hc_entry keep
@@ -345,10 +346,16 @@ do_status() {
 '
   done
   IFS=$_old
-  [ "$(hc_entry_state lib)" != absent ] || return 0
+  [ -d "$HC_CONFIG" ] || return 0
   title "hc templates"
   status_hc_entry lib "the templates cannot start"
   each_hc_template status_hc_entry "hc cannot start it"
+  for _e_link in "$HC_TEMPLATES_DIR"/*; do
+    [ -L "$_e_link" ] && [ ! -e "$_e_link" ] || continue
+    case $(resolve_link "$_e_link") in
+      "$HC_TEMPLATES_SRC"/*) warn "${_e_link##*/} is a dangling link into this clone (run: update)" ;;
+    esac
+  done
 }
 
 # ---------------------------------------------------------------- uninstall / prune

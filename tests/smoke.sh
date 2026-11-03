@@ -186,6 +186,10 @@ each_template_once() {
   done
 }
 expect "status lists every template once"          yes each_template_once "$FAKE/status.txt"
+ln -s "$CLONE/templates/renamed.md" "$HC_TEMPLATES/renamed.md"
+run status > "$FAKE/status.txt" 2>&1
+rm "$HC_TEMPLATES/renamed.md"
+expect "status reports a dangling template link"   yes grep -q "renamed.md is a dangling link into this clone (run: update)" "$FAKE/status.txt"
 expect "status prints the hc templates heading once" yes test "$(grep -c '^hc templates' "$FAKE/status.txt")" -eq 1
 rm "$HC_TEMPLATES/reviewer.md"
 run install >/dev/null
