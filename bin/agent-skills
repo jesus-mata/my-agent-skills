@@ -273,10 +273,24 @@ link_hc_templates() {
   [ "$(hc_entry_state lib)" != absent ] || return 0
   title "hc templates  ($HC_LIB_LINK)"
   link_hc_entry lib fail
+  each_hc_template link_hc_entry keep
+}
+
+# each_hc_template <fn> <arg>: runs <fn> <name> <arg> for every templates/*.md of the clone.
+each_hc_template() {
   for _e_src in "$HC_TEMPLATES_SRC"/*.md; do
     [ -e "$_e_src" ] || continue
-    link_hc_entry "${_e_src##*/}" keep
+    "$1" "${_e_src##*/}" "$2"
   done
+}
+
+# status_hc_entry <name> <what breaks while it is missing>: prints the entry's status line.
+status_hc_entry() {
+  case $(hc_entry_state "$1") in
+    linked)  ok "$1 linked" ;;
+    missing) warn "$1 is not linked, so $2 (run: update)" ;;
+    foreign) warn "$HC_TEMPLATES_DIR/$1 is not a link to this clone" ;;
+  esac
 }
 
 # ---------------------------------------------------------------- status
@@ -319,11 +333,10 @@ do_status() {
 '
   done
   IFS=$_old
-  case $(hc_entry_state lib) in
-    linked)  title "hc templates"; ok "lib linked" ;;
-    missing) title "hc templates"; warn "lib is not linked, so the templates cannot start (run: update)" ;;
-    foreign) title "hc templates"; warn "$HC_LIB_LINK is not a link to this clone" ;;
-  esac
+  [ "$(hc_entry_state lib)" != absent ] || return 0
+  title "hc templates"
+  status_hc_entry lib "the templates cannot start"
+  each_hc_template status_hc_entry "hc cannot start it"
 }
 
 # ---------------------------------------------------------------- uninstall / prune
