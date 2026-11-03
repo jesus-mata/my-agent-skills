@@ -31,9 +31,13 @@ tab. Merging the PR stays with you.
 6. **E2E-tests the spec** in `s7-e2e-1`, against the spec's criteria plus every ticket's, each
    tagged with its ticket. Failures go to `s7-review`; each re-run is a new terminal, up to 3.
 7. **Pushes `spec/7` and opens the PR,** closing the spec and every merged ticket.
+8. **Waits for CI.** A failing check goes to `s7-review` with its log, gets pushed and re-checked,
+   up to 3 rounds. The plan already warned you about gate checks whose tool is missing on this
+   machine, because those run only in CI.
 
 A HITL ticket gets a plain Claude session, `s7-hitl-14` in its own worktree, and a ping. Work there,
-commit, and tell the orchestrator `#14 done`; it merges your work like any other ticket.
+commit, and end the session with `/exit`: the orchestrator wakes at once, checks the commit and
+merges your work like any other ticket. If nothing is committed, it pings you and reopens the session.
 
 Children and the orchestrator exchange only one-line `hc send` messages that name a report file.
 The orchestrator's memory is `~/.cache/hc-spec/<repo>-7/state.md`, written after every change, so a
@@ -70,8 +74,9 @@ no tab. Outside Herdr the terminals run hidden, so use `hc attach s7-dev-12`.
 
 ## Talking to it
 
-Write in the `orquestador` tab, or from anywhere with `hc send spec-7 "<message>"`. It reads you
-between waits, so a reply can take up to nine minutes. Each escalation lists the replies that fit:
+Send `hc send spec-7 "<message>"` from any terminal: it wakes the orchestrator at once. Typing in
+the `orquestador` tab works too, but Claude Code holds it until the orchestrator's current wait
+returns, up to nine minutes. Each escalation lists the replies that fit:
 
 | Reply | Effect |
 | --- | --- |
@@ -79,7 +84,7 @@ between waits, so a reply can take up to nine minutes. Each escalation lists the
 | `retry #12` | run the failed ticket's last step again |
 | `skip #12` | drop the ticket and everything it blocks |
 | `unblocked #12` | an outside blocker is closed |
-| `retry review`, `retry e2e` | run that spec stage again |
+| `retry review`, `retry e2e`, `retry ci` | run that spec stage again |
 | `open pr` | open the PR despite an open escalation |
 | `cleanup` | remove worktrees, branches and terminals after the PR merged |
 
