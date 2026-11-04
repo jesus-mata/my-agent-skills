@@ -11,6 +11,11 @@ the human, using the report as context, so the grilling spends its time deciding
 researching. The spike delivers knowledge, not product: everything it produces lives on a
 throwaway branch.
 
+Run a spike in a full session: the main conversation, or a background terminal such as an hc
+or herdr agent. The report file is the deliverable, and a subagent started with an Agent tool
+is expected to return findings as text instead of writing files. An orchestrator that wants a
+spike should start it in a terminal of its own.
+
 Copy this checklist and tick it off:
 
 ```
@@ -79,6 +84,15 @@ spends budget:
   `<spike folder>/poc/`. When the PoC has to run inside the real app, edit the app's code in
   place in the worktree.
 
+A prototype or PoC is done once it has proven or disproven its exit criterion with one recorded
+run. Bugs it uncovers along the way that don't block that run (a library quirk, a flaky
+teardown) go under "Still unknown / risks" with their symptom, not debugged to the root.
+
+Local services a PoC needs (databases, emulators, containers) are named after the spike, for
+example `spike-<slug>-pg`, so they never collide with anything else on the machine. Put the
+bring-up, run and teardown commands in one script, `poc/run.sh`, so anyone can rerun the PoC
+with a single command. Tear the services down before step 4.
+
 Spike code is **throwaway**: no tests, no polish, only enough error handling to run it. Commit
 it to `spike/<slug>` as you go. Where subagents are available, run independent research threads
 in parallel in the background while you build the PoC. Otherwise work through them in sequence.
@@ -117,9 +131,12 @@ links to the branch and the report.
 Stop here and tell the human:
 
 - the exit, and the recommendation in one or two lines
-- where the report is, both on the branch and as a path in the worktree
+- the report path in the worktree, plus the command to read it from the branch, which still
+  works after the worktree is removed:
+  `git show spike/<slug>:docs/spikes/<date>-<slug>/report.md`
 - the next command: `/grilling <worktree>/docs/spikes/<date>-<slug>/report.md`
   (`/mattpocock-skills:grilling`)
 
-Leave the worktree in place: the grilling reads from it. The human removes it later with
-`git worktree remove`. Starting the grilling is the human's call, since it needs them present.
+Leave the worktree in place for the grilling. The human removes it later with
+`git worktree remove`, and the branch keeps the report. Starting the grilling is the human's
+call, since it needs them present.

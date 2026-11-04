@@ -53,8 +53,9 @@ response shapes), a data model or schema. Mark each as a proposal.>
 
 ## Prototype / PoC
 
-<for each one: what it tried, where it lives (folder or files on the branch), the exact command
-to run it, and what the run proved or disproved>
+<for each one: what it tried, where it lives (folder or files on the branch), the rerun command
+(`poc/run.sh`, which brings up, runs and tears down its services), and what the run proved or
+disproved>
 
 ## Recommendation
 
