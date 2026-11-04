@@ -6,7 +6,9 @@
       "name": "feasibility-poc",
       "prompt": "spike this: can we stream large CSV exports (1GB+) straight to S3 with our current Node backend without loading the whole file in memory? we need to decide before planning the export feature",
       "expected_output": "Isolated worktree on spike/<slug>. The frame states the question, the decision it unblocks (planning the export feature), measurable exit criteria (for example bounded memory on a large file), and budget M. Evidence comes from a feasibility PoC run against the real SDK, with the command and output recorded, backed by research on the SDK's streaming upload API. The report follows the template and ends in Decisions for grilling. The branch is pushed and not merged, and the handoff names the /grilling command.",
-      "files": [],
+      "files": [
+        "evals/fixtures/orders-api"
+      ],
       "expectations": [
         "Creates a git worktree on a new spike/<slug> branch from the latest default branch and works inside it, leaving the original checkout untouched",
         "States the question, the decision unblocked, observable exit criteria, and a budget (M by default) before gathering evidence",
@@ -24,7 +26,9 @@
       "name": "architecture-options",
       "prompt": "we need to add multi-tenant support. run a spike on whether to use row-level tenant_id, schema-per-tenant or database-per-tenant for our postgres setup. budget S, no code",
       "expected_output": "Budget S: research threads only (up to 2), no prototype or PoC. An options-compared table covers all three approaches with evidence tied to this repo's actual data layer. A design artifact sketches the recommended data model. The recommendation carries a confidence level, and the choice itself is left to /grilling as decisions with recommended answers.",
-      "files": [],
+      "files": [
+        "evals/fixtures/invoicing"
+      ],
       "expectations": [
         "Respects budget S: no more than 2 research threads and no prototype or PoC code",
         "Grounds the analysis in this repo's current data layer, citing file paths",
@@ -39,14 +43,18 @@
       "id": 2,
       "name": "vague-input-intake",
       "prompt": "do a spike on websockets",
-      "expected_output": "The input is too vague to frame, so the skill runs a short intake: one round of at most three questions, each with a recommended answer, to pin down the question, the decision it unblocks, exit criteria and budget. It gathers no evidence until the frame is settled.",
-      "files": [],
+      "expected_output": "The input names a topic, not a question, so the skill runs a short intake grounded in the repo: one round of at most three questions, each with a recommended answer. The answers propose the question and the decision it unblocks, an observable exit criterion, and a budget on the S/M/L scale. It gathers no evidence until the frame is settled.",
+      "files": [
+        "evals/fixtures/orders-api"
+      ],
       "expectations": [
         "Recognises that the input names a topic, not a question",
         "Asks a single round of at most three questions, each with a recommended answer",
-        "The questions target the missing frame: the question, the decision unblocked, exit criteria, budget",
-        "Gathers no evidence, creates no worktree and writes no code before the frame is settled",
-        "Does not turn the intake into a full grilling of design decisions"
+        "The recommended question is grounded in the repo, citing the code that motivates it (for example the order-status polling in src/routes/orders.js)",
+        "Proposes an observable exit criterion: a measurable result a PoC or research could show, not a deliverable like 'a findings note'",
+        "Proposes a budget on the S/M/L scale",
+        "Gathers no evidence, creates no worktree or branch and writes no code before the frame is settled",
+        "Leaves design choices (transport, scaling, auth) out of the intake, as scope or report material, rather than asking about them"
       ]
     }
   ]
