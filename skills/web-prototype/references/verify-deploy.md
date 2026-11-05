@@ -18,7 +18,7 @@ Run every check before every deploy, and fix what fails before going on.
    This gets **two fix passes per page**. Whatever still differs after that goes into
    `docs/DECISIONS.md` as a known gap, with the reason.
 5. **Quality**: before each version goes to the client, run Lighthouse (the `lighthouse` npm CLI,
-   mobile) on the home page and one inner page. Accessibility should be at least 95, with WCAG AA
+   mobile, with `CHROME_PATH` pointing at Playwright's Chromium if there is no Chrome) on the home page and one inner page. Accessibility should be at least 95, with WCAG AA
    contrast, keyboard reachable nav and forms, visible focus, `alt` on every image, and
    `prefers-reduced-motion` respected. Fix accessibility failures. Log performance scores below 90
    with their cause. The SEO score fails `is-crawlable` by design while `noindex` is on; ignore
@@ -39,8 +39,9 @@ Look up current `wrangler` usage in the docs before the first deploy.
    the Cloudflare API or MCP if available; otherwise give the user the dashboard steps.
 4. **Learn the URL.** The hub, the changelog and Astro's `site` all need the final URL before the
    build that ships them. With a custom domain you already have it. On `workers.dev`, read the
-   account's subdomain from the Cloudflare API (`GET /accounts/<id>/workers/subdomain`), or deploy
-   once and read the URL wrangler prints.
+   account's subdomain from the Cloudflare API (`GET /accounts/<id>/workers/subdomain`), or ask the
+   user (dashboard → Workers & Pages shows it). As a last resort, deploy once, read the URL
+   wrangler prints, and deploy again after step 5.
 5. Set `site`, write the `v1` entry in `docs/CHANGELOG.md` with the URL, save the page exports to
    `design/exports/v1/`, and commit.
 6. `vp run deploy`. Load the URL and the hub and confirm both render, the hub lists `v1`, and the
@@ -56,7 +57,8 @@ and commit first, then upload:
 vp run build && wrangler versions upload --preview-alias v<N>
 ```
 
-Check that the printed preview URL matches the changelog, then `git tag v<N>`. The client can
+Check that the printed preview URL matches the changelog, load it, and confirm the hub lists
+`v<N>` and the response carries `X-Robots-Tag: noindex`. Then `git tag v<N>`. The client can
 compare versions side by side.
 
 **Promote**: when the client approves a version, confirm with the user first, then send all

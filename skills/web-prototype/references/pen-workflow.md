@@ -22,11 +22,17 @@ Use the first channel that works and keep it for the whole run:
    node <skill-dir>/scripts/pen-run.mjs design/<slug>.pen --read-only check.js 'read_skill({path:"execute.md"})'
    ```
 
-   Steps in one call share globals; separate calls do not, so read node ids back with `Get` at the
-   start of each batch. Use `--read-only` for queries so they never rewrite the design file.
-   `TakeScreenshot` images are not visible here: verify by `Export`ing the section to PNG in a
-   temp folder and viewing the file. The `browser` tool needs the app, so skip the current-site
-   import and compare against Playwright screenshots only.
+   Steps in one call share **data** globals (`heroId = Insert(…)`); functions do not survive, so
+   put shared helpers in a file passed with `--prelude helpers.js`, which is prepended to every
+   snippet. Separate calls share nothing, so read node ids back with `Get` at the start of each
+   batch. Use `--read-only` for queries so they never rewrite the design file. Headless differences
+   from pen's own docs:
+   - A failed snippet cannot be patched with `edits`/`editId`; fix the file and resend it.
+   - `TakeScreenshot` images are not visible; `Export` the section to PNG in a temp folder and view
+     the file.
+   - `Generate` lands after the call returns; read its result in the next call.
+   - The `browser` tool needs the app, so skip the current-site import and compare against
+     Playwright screenshots only.
 
 None of them works (`pen` missing, or `pen status` not logged in) → stop and ask the user to run
 `npm i -g @pen.dev/cli` and `pen login`, or to open the pen.dev app with the MCP enabled. Use the
@@ -42,8 +48,10 @@ pen.dev's guides are written for generic designs; for client prototypes these ru
 
 - **The brief's palette and fonts win** over any `get_style` rule. Its archetypes ban cream or
   beige backgrounds and some hero layouts; when the client's brand uses them, use them.
-- **`get_style` takes named palette presets, not hex values.** Pick the nearest preset to get the
-  archetype's type, spacing and imagery rules, then recolour with the brief's tokens.
+- **`get_style` takes named palette presets, not hex values.** Call `get_style({name})` to list the
+  required params, then `get_style({name, params: {…}})` with them nested under `params`. Pick the
+  nearest palette preset to get the archetype's type, spacing and imagery rules, then recolour with
+  the brief's tokens.
 - **Tokens go in Tailwind `@theme`**, not `:root` as pen's `tailwind.md` suggests, and font tokens
   carry a fallback stack.
 - **Components are Astro**, not the React `.tsx` that pen's `code.md` assumes; its per-component
@@ -64,7 +72,8 @@ For each of 2–3 directions:
 2. Build one frame `Direction <A|B|C> · <name>` at 1440 wide: the home hero with the brief's real
    copy and primary CTA, then a strip showing palette swatches, the type scale, a button pair and one
    card.
-3. `Export` the frames as PNG to `docs/directions/`.
+3. `Export` the frames as PNG to `docs/directions/`, then rename each file (exports are named by
+   node id) to `direction-<a|b|c>-<name>.png`. The same renaming applies to every export.
 
 After the gate, move the rejected frames into a group named **Directions (archived)**, record the
 choice and the reason in `docs/DECISIONS.md` and the brief, and carry the winner forward.
@@ -91,7 +100,8 @@ Work in this order, verifying each section before the next.
    with layout variants gets one component per variant used, named `<Block> · <variant>`
    (`Hero · split`); in code that is one component with a `variant` prop. pen.dev has no
    responsive components, so build a `<Block> · mobile` component for each block the mobile frames
-   use. Place components at the top of the canvas. Build them yourself; use a `.lib.pen` library
+   use. Build each block with one scripted builder that takes a `mobile` flag, so the two stay in
+   step. Place components at the top of the canvas. Build them yourself; use a `.lib.pen` library
    such as `pencil:shadcn.lib.pen` only when the brief describes an app-like UI.
 
 3. **Pages.** One top-level frame per page, named `Page · <path>` (`Page · /`, `Page · /about`),
@@ -100,14 +110,21 @@ Work in this order, verifying each section before the next.
    code derives the other breakpoints from these patterns.
 
 4. **Images.** Fill image slots with `Generate("stock", …)`, or `"ai"` when stock cannot express
-   it. Look at every result and re-query any that shows a third-party brand, contradicts the copy
+   it. Prefer `ai` for people and named places, with "no text, no logos" in the prompt. Look at
+   every result and re-query any that shows a third-party brand, contradicts the copy
    (the wrong person for a named team member, the wrong product) or clashes with the direction.
    Copy the chosen fill to the mobile frame instead of generating again, so both use the same
    photo. Generate a wordmark with `Generate("svg", …)` when the client has no logo. Every
    generated image is a placeholder in the code too.
 
-Done check, per page: `Get(page, (n,c) => c.problems && Print(n.name, c.problems))` prints nothing,
-and a visual check shows no collapsed layout, no clipped text, and readable contrast.
+Done check, per page:
+
+- `Get(page, (n,c) => n.enabled !== false && c.problems && Print(n.name, c.problems), {resolveInstances: true})`
+  prints nothing. Without `resolveInstances` it never looks inside the block instances.
+- Every text colour sits on a background pair the brief's contrast table passes. The visual check
+  misses pairs like accent text on primary, so list them: `Get(page, n => n.type === "text" && Print(n.name, n.fill), {resolveInstances: true})`
+  and compare against each node's container fill.
+- A visual check shows no collapsed layout and no clipped text.
 
 ## Design to code
 
@@ -121,9 +138,10 @@ Follow pen.dev's `guide/code.md` and `guide/tailwind.md` (via `read_skill`), wit
 - Text comes from the content entry passed as props, never from the design file. The design's copy
   is representative, except facts (contact details, prices, names), which are kept in sync with the
   content so exports never show wrong data.
-- Generated images: take the image fill's source URL (`Get` the node, read its `fill`) and download
-  the file into `src/assets/generated/`. Exporting the node instead bakes any text on top into the
-  picture.
+- Generated images: `Get` the node and read its image fill. Stock fills are remote URLs: download
+  them. `ai` fills are local files next to the `.pen` (`generated-N.png`, sometimes JPEG data under
+  that name): copy them and fix the extension from the file's real type. Put both in
+  `src/assets/generated/`. Exporting the node instead bakes any text on top into the picture.
 - `Export([...], "html-tailwind", …)` is a reference for tricky layouts only; rewrite its output as
   Astro, never paste it in.
 - Save PNG exports of every page frame to `design/exports/<version>/` at each tagged version.

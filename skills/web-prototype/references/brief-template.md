@@ -14,7 +14,8 @@ any later change the client asks for that touches what the site is gets written 
 - **Goal of the site** (required): the one outcome a visit should produce.
 
 ## Calls to action
-- **Primary CTA** (required): label + where it leads (e.g. "Book a demo" → contact form).
+- **Primary CTA** (required): label + where it leads (e.g. "Book a demo" → contact form, or the
+  client's existing booking or shop tool).
 - **Secondary CTA**: default: none.
 
 ## Sitemap (required)
@@ -22,11 +23,13 @@ any later change the client asks for that touches what the site is gets written 
 | --- | --- | --- | --- |
 | Home | / | | |
 
-Always added: 404. Added when the site has a form: Privacy (/privacy), Terms (/terms).
+Always added: 404. Added when the site has a form: privacy and terms pages, with paths in the site's
+language (`/privacidad`, `/terminos`).
 
 ## Look and feel
 - **Palette** (required, or "recommend"): hex values with roles (primary, accent, background, text).
-- **Contrast check**: each text/background pair, AA pass/fail, proposed fix for each fail.
+- **Contrast check**: AA pass/fail and a proposed fix for each of text/bg, muted/bg, muted/surface,
+  primary-fg/primary, primary as link/bg, accent-fg/accent, accent as text/bg.
 - **Style / tone** (required, or "recommend"): a few adjectives + reference sites the client likes.
 - **Chosen direction**: filled at the directions gate — name + `get_style` archetype it started from.
 - **Fonts**: default: picked with the direction.
@@ -44,7 +47,8 @@ Always added: 404. Added when the site has a form: Privacy (/privacy), Terms (/t
 | Contact form | UI + validation, "Prototype — not sent" | Workers Action, Turnstile, email |
 
 ## Delivery
-- **Slug**: kebab-case project name.
+- **Slug** (required): kebab-case project name, derived from the brand; names the folder, the Worker
+  and the repo.
 - **Cloudflare account**: name + id (filled at the deploy gate).
 - **Worker**: `<slug>-prototype`.
 - **URL**: workers.dev (default) or a custom domain on a zone in the account.

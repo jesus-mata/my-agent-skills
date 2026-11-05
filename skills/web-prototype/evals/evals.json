@@ -39,13 +39,13 @@
       "id": 2,
       "name": "iterate-round",
       "prompt": "The client reviewed v1 of the prototype in this folder. Feedback from the call: the hero is too dark, they want the green warmer; add a FAQ section on the home page; the phone number in the footer is wrong, it's +34 961 234 567; and they'd like the contact form to send to their HubSpot.",
-      "expected_output": "Detects the existing prototype (docs/BRIEF.md and design/*.pen) and enters Iterate mode. Logs the four items in FEEDBACK.md under v2, classified as visual, scope, copy and backend. The green change and the FAQ block go into the .pen file first and then into code. The phone fix touches only the content files. HubSpot is deferred to TODO-BACKEND.md. It verifies, ships v2 with wrangler versions upload --preview-alias v2, tags v2, updates the changelog and hub, and reports both URLs without promoting.",
+      "expected_output": "Detects the existing prototype (docs/BRIEF.md and design/*.pen) and enters Iterate mode. Logs the four items in FEEDBACK.md under v2, classified as visual, scope, copy and backend. The green change and the FAQ block go into the .pen file first and then into code. The phone fix goes into the content files, and into the .pen only where a frame shows the number. HubSpot is deferred to TODO-BACKEND.md. It verifies, ships v2 with wrangler versions upload --preview-alias v2, tags v2, updates the changelog and hub, and reports both URLs without promoting.",
       "files": [],
       "expectations": [
         "Enters Iterate mode instead of starting a new prototype",
         "Logs each feedback item in docs/FEEDBACK.md with a kind: visual, scope, copy or backend",
         "Changes the primary colour token and adds the FAQ component in pen.dev before changing any code",
-        "Fixes the phone number in the content files only",
+        "Fixes the phone number in the content files, touching the .pen only to sync that fact where a frame shows it",
         "Defers the HubSpot integration to docs/TODO-BACKEND.md and does not build it",
         "Deploys v2 as a preview with a v2 alias, not over the main URL, and tags v2",
         "Reports the v2 preview URL next to the v1 URL and waits for the user before promoting"

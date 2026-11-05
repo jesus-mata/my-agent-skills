@@ -59,7 +59,8 @@ the blocks in [references/blocks.md](references/blocks.md)) when the user has no
 palette, given or recommended, for WCAG AA contrast and propose the nearest passing shades for
 any failing pair, rather than altering it silently.
 
-**Gate:** show the full brief and wait. Done when every required field is filled and the user
+With a thin request, the first message is just the questions round. **Gate:** once the answers are
+in, show the full brief and wait. Done when every required field is filled and the user
 confirms it. Then create the project folder `<slug>/` with `docs/BRIEF.md`, `docs/DECISIONS.md`
 and an empty `design/`; everything from here on is written inside it.
 

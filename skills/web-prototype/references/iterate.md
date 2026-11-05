@@ -39,15 +39,18 @@ Source: <call notes / email / crit>
 Each item has one **kind**: `visual` (layout, style, components), `copy` (text and data),
 `scope` (pages, blocks or features added or removed), or `backend` (deferred to
 `TODO-BACKEND.md` with what it needs and what to ask the client for; it is designed, not built,
-so a short plan is enough). Ask the user in one round about any item that is ambiguous or contradicts the
-brief, before changing anything.
+so a short plan is enough). Check each item against the current site first: it may already be true (a phone number that differs
+only in formatting) or point at a different cause (a light background with a dark photo). Ask the
+user in one round about any item that is ambiguous, already true, or contradicts the brief, before
+changing anything.
 
 ## 3. Design changes
 
 `visual` and `scope` items change the `.pen` file first: tokens, components, page frames. Change a
 block's desktop and `· mobile` components together. After any colour token change, re-run the
 brief's contrast table on every pair that uses it and fix new failures the same way as in the
-brief. `copy` items do not touch the design, except facts (contact details, prices, names) shown
+brief. A changed brand colour also updates the brief's palette; archived direction frames keep their
+old colours. `copy` items do not touch the design, except facts (contact details, prices, names) shown
 in a frame, which are synced so the exports stay correct.
 
 ## 4. Code and content changes
@@ -59,12 +62,13 @@ in `src/content/` only. When a client supplies real copy or assets, clear the ma
 
 ## 5. Verify
 
-Run all of [verify-deploy.md#verify](verify-deploy.md#verify). The design comparison covers every page
+Export the page frames to `design/exports/v<N>/` first, since the comparison needs them. Run all of
+[verify-deploy.md#verify](verify-deploy.md#verify). The design comparison covers every page
 when a token or shared component changed, and only the changed pages otherwise.
 
 ## 6. Ship
 
-Export the page frames to `design/exports/v<N>/`, update the changelog (with the predictable preview
+Update the changelog (with the predictable preview
 URL), the hub and the README, commit, then deploy `v<N>` as a preview and tag it
 ([verify-deploy.md#deploy](verify-deploy.md#deploy)).
 

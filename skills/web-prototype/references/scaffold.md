@@ -4,7 +4,11 @@ Scaffold fresh every time so the project starts on current versions, into the pr
 already holds `docs/` and `design/` (if the create CLI refuses a non-empty folder, scaffold into a
 sibling temp folder and move the files in). Before running anything,
 look up the current commands in the docs (Astro, `@astrojs/cloudflare`, Tailwind, Vite+) with the
-docs tool you have. The shape below is stable; exact flags and versions are not.
+docs tool you have, and check the installed major against them: docs can trail npm by a major. The
+shape below is stable; exact flags and versions are not.
+
+pnpm 10 blocks dependency build scripts; list `esbuild`, `workerd` and `sharp` under
+`pnpm.onlyBuiltDependencies` in `package.json`, since `pnpm approve-builds` is interactive.
 
 ## Stack
 
@@ -45,9 +49,14 @@ forbids KV.
 | `dev` | `astro dev` |
 | `build` | `astro build` |
 | `check` | `astro check` then `vp check` |
-| `shots` | `scripts/screenshots.ts` (Playwright) |
-| `links` | `scripts/links.ts` (Playwright crawl from `/`) |
+| `shots` | `node --import tsx scripts/screenshots.ts` (Playwright) |
+| `links` | `node --import tsx scripts/links.ts` (Playwright crawl from `/`) |
 | `deploy` | build then `wrangler deploy` |
+
+Both check scripts start their own `astro preview` on a free port and stop it when done, and fail if
+the page they load is not from the build they just made. A preview server left running serves the
+previous build and makes the checks lie (recent Astro versions can keep `astro preview` running in
+the background; stop it explicitly).
 
 Preview versions are uploaded with the command in verify-deploy.md, since each needs its own alias.
 
@@ -74,15 +83,16 @@ src/
   pages/[...slug].astro       renders a pages entry
   pages/404.astro
   pages/styleguide.astro      tokens + every built block
-  pages/prototype/index.astro the hub, at /prototype
   styles/global.css           @import "tailwindcss"; @theme { … }
+  prototype/                  the hub page, badge and integration (deleted whole for production)
 wrangler.jsonc
 README.md
 ```
 
-The hub (`/prototype`) and `PrototypeBadge` sit behind one `PROTOTYPE` flag (an env var read in
-the Astro config), so turning them off for production is one change. The hub lives in one folder
-that is deleted whole. (Astro skips `_`-prefixed folders when routing, so the hub cannot be `/_prototype`.)
+The hub and badge live in `src/prototype/`, outside `src/pages/`, because a page there always
+routes. A small integration in that folder calls `injectRoute` to serve the hub at `/prototype`
+only when the `PROTOTYPE` flag is on, and adds the noindex header (below). Production turns the
+flag off, then deletes the folder.
 
 ## Prototype-only behaviour
 
@@ -91,12 +101,16 @@ that is deleted whole. (Astro skips `_`-prefixed folders when routing, so the hu
   `_headers` file into the build, so add the header by appending to that file in an
   `astro:build:done` hook, never by shipping a `public/_headers` that replaces it. All three are
   switched by the `PROTOTYPE` flag.
-- **Version**: `PROTOTYPE_VERSION` (env var, `v1`, `v2`…) feeds the badge, the hub and the
-  screenshot folder; bump it at the start of every version.
+- **Version**: `PROTOTYPE_VERSION` (`v1`, `v2`…) lives in a committed `.env` file, the only place it
+  is set, and feeds the badge, the hub and the screenshot folder. Bump it at the start of every
+  version.
 - **Badge**: a small fixed "Prototype vN" pill linking to the hub.
-- **Hub**: page list with links; versions with preview URLs and changelog entries (read from
-  `docs/CHANGELOG.md` at build time, so the entry must exist before the build); every `placeholder: true` item grouped by page; missing assets; stubbed
+- **Hub**: page list with links; versions with preview URLs and changelog entries (imported from
+  `docs/CHANGELOG.md` with `?raw` at build time, since prerendering runs in workerd without file
+  access; the entry must exist before the build); every `placeholder: true` item grouped by page; missing assets; stubbed
   features from `TODO-BACKEND.md`.
+- **Language**: the hub and badge are in the brief's language, since the client reads them. The
+  `docs/` files are in the user's language.
 - **Stubs**: forms validate client-side and show "Prototype — not sent" on submit; maps are a static
   image or a styled block with the address.
 
