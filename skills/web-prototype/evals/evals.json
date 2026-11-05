@@ -1,0 +1,55 @@
+{
+  "skill_name": "web-prototype",
+  "evals": [
+    {
+      "id": 0,
+      "name": "full-brief",
+      "prompt": "Make a web prototype for Huerta Viva, an organic vegetable box delivery in Valencia. Audience: young families who cook at home. Primary CTA 'Pide tu caja' to a /cajas page, secondary 'Cómo funciona'. Pages: home, cajas (3 box sizes with prices), cómo funciona, sobre nosotros, contacto with a form and a map. Palette: #2F5D3A green, #F4EBD9 cream, #E07A2E orange, #1E1E1E text. Style: warm, artisanal, lots of produce photography. Content in Spanish. Public URL is fine.",
+      "expected_output": "Runs the pen.dev preflight first. Fills the brief with almost no questions, since the required fields are given, and flags any palette pair that fails AA (orange on cream) with a nearby passing shade. Stops for brief confirmation. Designs 2-3 distinct directions in pen.dev from get_style archetypes and stops for a choice. Then designs tokens with the fixed names, one component per block and every page, and scaffolds Astro + Cloudflare adapter + Tailwind v4 + Vite+ + pnpm. Content is block-shaped Spanish copy, with the form and map stubbed and logged in TODO-BACKEND.md, and privacy and terms pages added because of the form. It verifies with screenshots, a link crawl and a design comparison, and stops at the deploy gate before deploying <slug>-prototype.",
+      "files": [],
+      "expectations": [
+        "Checks for a pen.dev channel (Pencil MCP, then the pen CLI) before designing anything",
+        "Asks no question whose answer the prompt already gives",
+        "Reports the contrast of the given palette pairs and proposes a passing shade for each failing pair, without changing them silently",
+        "Stops for the user to confirm the brief before designing",
+        "Designs 2-3 directions in pen.dev, exports them to docs/directions/, and stops for a choice before full design",
+        "Uses the fixed token names (bg, surface, text, muted, primary, primary-fg, accent, border, font-display, font-body) in pen.dev and in Tailwind @theme",
+        "Names each pen.dev component the same as its Astro block component and its blockType",
+        "Content lives in content collections as pages with a layout array of blockType entries, and the copy is Spanish",
+        "The contact form validates but does not send, and the map is static; both appear in docs/TODO-BACKEND.md",
+        "Adds privacy and terms pages because the site has a form",
+        "Stops at the deploy gate to confirm the account, Worker name, URL and access before the first deploy"
+      ]
+    },
+    {
+      "id": 1,
+      "name": "thin-brief",
+      "prompt": "I need a prototype website for my client's physiotherapy clinic, can you do it?",
+      "expected_output": "Recognises that most required brief fields are missing. Runs the pen.dev preflight. Asks one numbered round for the missing required fields (clinic name and what makes it different, audience, goal, primary CTA, sitemap, palette, style, language, sources or an existing site), each with a recommended answer. It recommends a style and tone suited to a physiotherapy clinic and a typical sitemap. It designs and scaffolds nothing before the answers come back.",
+      "files": [],
+      "expectations": [
+        "Asks for the missing required fields in a single numbered round",
+        "Gives a recommended answer for each question, including a recommended style and a sitemap suited to a clinic",
+        "Asks for sources, including whether the clinic has an existing website to reuse copy from",
+        "Asks for the content language",
+        "Creates no pen.dev design, no project folder and no code before the brief is answered"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "iterate-round",
+      "prompt": "The client reviewed v1 of the prototype in this folder. Feedback from the call: the hero is too dark, they want the green warmer; add a FAQ section on the home page; the phone number in the footer is wrong, it's +34 961 234 567; and they'd like the contact form to send to their HubSpot.",
+      "expected_output": "Detects the existing prototype (docs/BRIEF.md and design/*.pen) and enters Iterate mode. Logs the four items in FEEDBACK.md under v2, classified as visual, scope, copy and backend. The green change and the FAQ block go into the .pen file first and then into code. The phone fix goes into the content files, and into the .pen only where a frame shows the number. HubSpot is deferred to TODO-BACKEND.md. It verifies, ships v2 with wrangler versions upload --preview-alias v2, tags v2, updates the changelog and hub, and reports both URLs without promoting.",
+      "files": [],
+      "expectations": [
+        "Enters Iterate mode instead of starting a new prototype",
+        "Logs each feedback item in docs/FEEDBACK.md with a kind: visual, scope, copy or backend",
+        "Changes the primary colour token and adds the FAQ component in pen.dev before changing any code",
+        "Fixes the phone number in the content files, touching the .pen only to sync that fact where a frame shows it",
+        "Defers the HubSpot integration to docs/TODO-BACKEND.md and does not build it",
+        "Deploys v2 as a preview with a v2 alias, not over the main URL, and tags v2",
+        "Reports the v2 preview URL next to the v1 URL and waits for the user before promoting"
+      ]
+    }
+  ]
+}

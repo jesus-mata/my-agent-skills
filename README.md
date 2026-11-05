@@ -44,6 +44,11 @@ named tab.
 worktrees through `herdr` (which also needs `python3`) and plain git worktrees with `git`, so herdr
 is optional. It delegates conflict resolution to a Sonnet subagent, which needs Claude Code.
 
+`web-prototype` needs pen.dev: the Pencil MCP (the pen.dev app with its MCP enabled) or the `pen`
+CLI (`npm i -g @pen.dev/cli`, then `pen login`). It also needs Node, `pnpm`, and `wrangler` logged in
+to your Cloudflare account. `gh` is optional, for creating the project's repo.
+`/frontend-design` (`frontend-design:frontend-design`) is optional for stronger style directions.
+
 `ping-me` needs `curl`, `jq` and a ntfy topic. Follow [its README](skills/ping-me/README.md) to set
 it up on a new machine, along with its optional attention hooks for Claude Code.
 
@@ -86,6 +91,7 @@ behind the one you edit.
 | [`run-review`](skills/run-review/SKILL.md) | Runs `/code-review high` and `/mattpocock-skills:code-review`, then classifies every finding per axis (Bugs, Standards, Spec) as Critical, High, Medium or Low, ending in a PASS/FAIL/BLOCKED verdict. Use when review findings need a severity or a verdict, by hand or from another skill. |
 | [`run-tests`](skills/run-tests/SKILL.md) | Runs the project's existing test suites on the current branch or worktree and reports a verdict per tier. Use to run the tests or check for regressions, by hand or from another skill. Not for writing tests or proving acceptance criteria (use /e2e). |
 | [`spike`](skills/spike/SKILL.md) | Runs a time-boxed spike on one technical unknown. It gathers evidence through research, prototypes or a feasibility PoC on a throwaway branch, and writes a report of options and recommendations for /grilling to decide on. Use when a decision is blocked on a question like "can X do Y here", "which architecture or API contract fits", or "is this feasible", or when the user asks for a spike, investigation or proof of concept before committing to a direction. |
+| [`web-prototype`](skills/web-prototype/SKILL.md) | Designs a client website in pen.dev and builds it as a navigable Astro + Tailwind prototype deployed to a Cloudflare Worker, which then becomes the foundation for real development. Use when the user wants a web design prototype, mockup or landing page to show a client, or wants to apply client feedback to an existing prototype. |
 | [`work-ticket`](skills/work-ticket/SKILL.md) | Runs one ticket end to end from inside Herdr. Spawns a Claude agent in its own git worktree that implements the ticket and opens a PR/MR, then code-reviews it and E2E-tests it against the ticket's acceptance criteria, and reports the verdict back. Use when the user, in a Herdr session, wants to work on, implement or ship a single GitHub or GitLab ticket or issue, or validate an implementation against its acceptance criteria. Not for a whole spec or PRD (use herdr-spec-engine) nor outside Herdr (the user runs /implement-ticket). |
 
 <!-- skills:end -->
