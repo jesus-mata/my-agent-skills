@@ -21,9 +21,13 @@ drifts from the design makes the design file worthless.
 
 ## Delegation
 
-Design, code and every decision stay in the main session. Hand exploration and research to
-Sonnet subagents (`model: "sonnet"`, when the agent has them) so file dumps and page reads stay
-out of the main context, and keep only their summaries:
+The main session keeps the pen.dev design, the gates, every decision, the shared contracts and
+integration. When the agent has subagents, it hands out two kinds of work and keeps only the
+summaries, so file dumps stay out of its context. Without subagents, do the same work inline.
+
+### Exploration (Sonnet)
+
+Use `model: "sonnet"` for:
 
 - reading the sources and an existing site into `## Sources` facts
 - looking up current setup commands and APIs in the docs
@@ -32,6 +36,34 @@ out of the main context, and keep only their summaries:
 They read and report only: no edits, no `.pen` changes, no questions to the user. Brief each one
 with the paths or URLs to read, the question to answer, and the shape of the summary to send back
 (facts with their source, usable copy, open questions). Run independent ones in parallel.
+
+### Parallel implementation (Opus)
+
+Fan out with `model: "opus"` when there are **3 or more independent units of real size** that
+write disjoint files: blocks (`src/components/blocks/<Block>.astro`), page content entries
+(`src/content/pages/<page>.json`), or Iterate items touching separate files. Run at most 4 at a
+time. Fewer units → do them inline in order. The scaffold, the pen.dev design, Verify and deploy
+never fan out.
+
+1. **Contracts first.** Before fanning out, write and commit what the units share: the `@theme`
+   tokens, the Zod schema in `content.config.ts` with every `blockType`, `BlockRenderer`,
+   `Button`, `Header`/`Footer`, the layout, and a stub for every file you hand out, so the project
+   type-checks while the subagents work. Shared files are read-only for subagents.
+2. **Design input.** Export each handed-out component as PNG and as `html-tailwind` to
+   `design/exports/<version>/blocks/`. Subagents never call pen.dev.
+3. **Brief** each subagent with: the project folder; the absolute paths to
+   [references/pen-workflow.md#design-to-code](references/pen-workflow.md#design-to-code) and
+   [references/blocks.md](references/blocks.md); its export paths, content entry and generated
+   images; the files it owns; and the done-criterion (the unit renders from its props or entry,
+   using tokens only). pen.dev's own guides stay with the main session; subagents follow this
+   skill's design-to-code rules minus their `read_skill` line. Same tree, own files only: no
+   commits, no `build`/`dev`/`preview`, no package installs, no edits to shared files, no questions
+   to the user. Integration is the verification, so subagents report their work as unchecked.
+4. **Report back**: files created, differences from the design and why, placeholder copy added,
+   what it needs from shared files or new packages, anything left undone.
+5. **Integrate.** Apply the reported shared-file and package needs, run `vp run check` and look
+   at each unit's screenshot against its export, fix, log the differences in `DECISIONS.md`, and
+   commit.
 
 ## Mode
 
@@ -108,8 +140,9 @@ using the rules in [references/pen-workflow.md#design-to-code](references/pen-wo
 Build components block by block, then compose pages from content entries. Copy comes from
 `## Sources` first; write realistic copy in the brief's language where none exists and mark it
 `placeholder: true`. Forms, maps and other backend features get a working UI and a stub, each
-logged in `docs/TODO-BACKEND.md`. Done when every page renders from content, every nav link
-resolves, and the hub page lists everything.
+logged in `docs/TODO-BACKEND.md`. With 3 or more blocks or pages to build, fan them out per
+[Parallel implementation](#parallel-implementation-opus). Done when every page renders from
+content, every nav link resolves, and the hub page lists everything.
 
 ## 6. Verify
 

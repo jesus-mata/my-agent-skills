@@ -58,7 +58,8 @@ in a frame, which are synced so the exports stay correct.
 Carry each design change into the matching Astro component or `@theme` token. Apply `copy` items
 in `src/content/` only. When a client supplies real copy or assets, clear the matching
 `placeholder: true` flags. Update `BRIEF.md` for anything that changes what the site is, and
-`CMS-MAPPING.md` for new or changed blocks.
+`CMS-MAPPING.md` for new or changed blocks. With 3 or more items touching separate files, fan
+them out per [Parallel implementation](../SKILL.md#parallel-implementation-opus).
 
 ## 5. Verify
 
