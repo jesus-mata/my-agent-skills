@@ -33,13 +33,17 @@ const pages = defineCollection({
 ```
 
 - `media` is `{ src, alt, placeholder }`, never a bare string, because Payload stores media as an upload reference.
+  Declare `src` with the schema's `image()` helper and a path relative to the content file, so
+  `astro:assets` optimises it.
 - `cta` is `{ label, href }`.
 - Data repeated across pages (services, team, testimonials, FAQs, posts) is its own collection, and
   blocks reference entries by id, the way Payload uses relationship fields.
 - Long text (about copy, posts, legal pages) is Markdown rendered only through `<RichText>`. Payload
   stores rich text as Lexical JSON, so on migration only `RichText.astro` changes, and the Markdown
   needs converting on import. Note this in `CMS-MAPPING.md`.
-- `placeholder: true` marks invented copy and generated images, at the field or block level.
+- `placeholder: true` marks invented copy and generated images. On a block or entry it covers the
+  whole thing; for single fields of a shared entry such as `site.json`, list them in
+  `placeholderFields: ["contact.email", "address"]`.
 - `BlockRenderer.astro` maps `blockType` to the component and renders `layout` in order.
 
 ## Catalogue
@@ -52,7 +56,7 @@ const pages = defineCollection({
 | `LogoCloud` | heading?, logos[] media |
 | `Stats` | heading?, items[] { value, label } |
 | `Testimonials` | heading?, testimonials → collection refs |
-| `Pricing` | heading, intro?, plans[] { name, price, period, features[], cta, featured } |
+| `Pricing` | heading, intro?, plans → collection refs { name, price, period, features[], cta, featured } |
 | `FAQ` | heading, faqs → collection refs |
 | `Team` | heading, intro?, members → collection refs |
 | `Gallery` | heading?, images[] media |

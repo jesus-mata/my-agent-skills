@@ -18,7 +18,8 @@ Iterate progress:
 
 Run the pen.dev access check ([pen-workflow.md#access](pen-workflow.md#access)). Read `BRIEF.md`,
 `DECISIONS.md`, the last `FEEDBACK.md` round and the last `CHANGELOG.md` entry. `N` is the last
-tag plus one.
+tag plus one: set `PROTOTYPE_VERSION` to `v<N>` now, so the badge, hub and screenshot folders
+follow.
 
 ## 2. Log the feedback
 
@@ -37,14 +38,17 @@ Source: <call notes / email / crit>
 
 Each item has one **kind**: `visual` (layout, style, components), `copy` (text and data),
 `scope` (pages, blocks or features added or removed), or `backend` (deferred to
-`TODO-BACKEND.md`). Ask the user in one round about any item that is ambiguous or contradicts the
+`TODO-BACKEND.md` with what it needs and what to ask the client for; it is designed, not built,
+so a short plan is enough). Ask the user in one round about any item that is ambiguous or contradicts the
 brief, before changing anything.
 
 ## 3. Design changes
 
-`visual` and `scope` items change the `.pen` file first: tokens, components, page frames. A token
-or component change propagates to every instance, so screenshot every affected page. `copy`
-items do not touch the design.
+`visual` and `scope` items change the `.pen` file first: tokens, components, page frames. Change a
+block's desktop and `· mobile` components together. After any colour token change, re-run the
+brief's contrast table on every pair that uses it and fix new failures the same way as in the
+brief. `copy` items do not touch the design, except facts (contact details, prices, names) shown
+in a frame, which are synced so the exports stay correct.
 
 ## 4. Code and content changes
 
@@ -55,13 +59,14 @@ in `src/content/` only. When a client supplies real copy or assets, clear the ma
 
 ## 5. Verify
 
-Run all of [verify-deploy.md#verify](verify-deploy.md#verify). The design comparison only needs to
-cover the pages that changed.
+Run all of [verify-deploy.md#verify](verify-deploy.md#verify). The design comparison covers every page
+when a token or shared component changed, and only the changed pages otherwise.
 
 ## 6. Ship
 
-Deploy `v<N>` as a preview ([verify-deploy.md#deploy](verify-deploy.md#deploy)), export the changed
-frames to `design/exports/v<N>/`, update the changelog, the hub and the README, then commit and tag.
+Export the page frames to `design/exports/v<N>/`, update the changelog (with the predictable preview
+URL), the hub and the README, commit, then deploy `v<N>` as a preview and tag it
+([verify-deploy.md#deploy](verify-deploy.md#deploy)).
 
 ## 7. Report
 

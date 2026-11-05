@@ -46,20 +46,22 @@ user's answer. Commit at the end of every step from 4 on.
 Find a pen.dev channel in the order given in
 [references/pen-workflow.md#access](references/pen-workflow.md#access). If none works, stop and
 tell the user exactly what to install or log in to. There is no code-first fallback. Done when you
-know which channel the whole run will use.
+know which channel the whole run will use; name it to the user in your first message.
 
 ## 1. Brief
 
 Fill [references/brief-template.md](references/brief-template.md) from what the user gave you. Read
 every source they pass (URLs, PDFs, docs, an existing site) and extract facts, copy and claims
 into `## Sources`, each attributed. Ask for every **required** field still empty in one
-numbered round, each with your recommended answer. Recommend the style and tone from the product
-description when the user has none. Check the palette for WCAG AA contrast and propose the
-nearest passing shades for any failing pair, rather than altering it silently.
+numbered round, each with your recommended answer; ask for sources and an existing site
+whenever none were given, since they feed the copy. Recommend a style, palette and sitemap (from
+the blocks in [references/blocks.md](references/blocks.md)) when the user has none. Check every
+palette, given or recommended, for WCAG AA contrast and propose the nearest passing shades for
+any failing pair, rather than altering it silently.
 
-The brief is written to `docs/BRIEF.md` once the project folder exists (step 4); until then keep
-it in the conversation. **Gate:** done when every required field is filled and the user confirms
-the brief.
+**Gate:** show the full brief and wait. Done when every required field is filled and the user
+confirms it. Then create the project folder `<slug>/` with `docs/BRIEF.md`, `docs/DECISIONS.md`
+and an empty `design/`; everything from here on is written inside it.
 
 ## 2. Style directions
 
@@ -79,10 +81,10 @@ reports layout problems.
 
 ## 4. Scaffold the project
 
-Follow [references/scaffold.md](references/scaffold.md). Look up current setup commands in the
-docs before running them; versions move fast. Move the `.pen` file into `design/`, write
-`docs/BRIEF.md` and the other docs files, `git init`, and commit. Done when `astro dev` serves
-an empty layout styled with the design's tokens.
+Follow [references/scaffold.md](references/scaffold.md) to scaffold into the project folder. Look
+up current setup commands in the docs before running them; versions move fast. Add the remaining
+docs files, `git init`, and commit. Done when `astro dev` serves the base layout styled with the
+design's tokens. Steps 4 and 5 may run as one stretch; commit at least once in between.
 
 ## 5. Build from the design
 
@@ -96,9 +98,10 @@ resolves, and the hub page lists everything.
 
 ## 6. Verify
 
-Run the checks in [references/verify-deploy.md#verify](references/verify-deploy.md#verify). Done when
-the build is green, there are no broken links, and each page passed the design comparison or has
-its leftover gaps logged in `docs/DECISIONS.md`.
+Run the checks in [references/verify-deploy.md#verify](references/verify-deploy.md#verify). A fix that
+changes the look (contrast, spacing, an image) goes into the `.pen` file first, like any visual
+change. Done when the build is green, there are no broken links, and each page passed the design
+comparison or has its leftover gaps logged in `docs/DECISIONS.md`.
 
 ## 7. Deploy v1
 
@@ -106,8 +109,8 @@ Follow [references/verify-deploy.md#deploy](references/verify-deploy.md#deploy).
 first deploy, confirm the Cloudflare account, the Worker name `<slug>-prototype`, the URL
 (`workers.dev` or a custom domain) and who can open it (public with `noindex`, or Cloudflare
 Access). Offer to create a private GitHub repo and run `gh repo create` only on a yes. Done
-when the URL loads, the hub is reachable, and `v1` is tagged with its preview URL in
-`docs/CHANGELOG.md`.
+when the URL loads, the hub on it lists `v1`, and the commit holding the `v1` changelog entry is
+tagged `v1`.
 
 ## 8. Hand off
 

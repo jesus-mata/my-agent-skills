@@ -1,6 +1,8 @@
 # Scaffold
 
-Scaffold fresh every time so the project starts on current versions. Before running anything,
+Scaffold fresh every time so the project starts on current versions, into the project folder that
+already holds `docs/` and `design/` (if the create CLI refuses a non-empty folder, scaffold into a
+sibling temp folder and move the files in). Before running anything,
 look up the current commands in the docs (Astro, `@astrojs/cloudflare`, Tailwind, Vite+) with the
 docs tool you have. The shape below is stable; exact flags and versions are not.
 
@@ -28,7 +30,13 @@ search…), and log the library and the reason in `docs/DECISIONS.md`.
 Put lint, format and test settings in a small root `vite.config.ts` from `vite-plus`. On the first
 run, check whether Oxfmt formats `.astro` files; when it does not, format them with Prettier and
 `prettier-plugin-astro`, and record which one you used in `DECISIONS.md`. Keep `astro check`, since
-`vp check` does not type-check `.astro` files.
+`vp check` does not type-check `.astro` files; pin `typescript` to a version `astro check`
+supports. Add `.wrangler/**` and `dist/**` to Vite+'s ignore lists.
+
+**Astro config for Workers.** Set `build.format: 'file'` and `trailingSlash: 'never'`, so
+`/about` is served as is instead of redirecting to `/about/`. The adapter adds a `SESSION` KV
+binding even for a static site; wrangler provisions it on deploy, so leave it unless the account
+forbids KV.
 
 ## Scripts
 
@@ -40,7 +48,8 @@ run, check whether Oxfmt formats `.astro` files; when it does not, format them w
 | `shots` | `scripts/screenshots.ts` (Playwright) |
 | `links` | `scripts/links.ts` (Playwright crawl from `/`) |
 | `deploy` | build then `wrangler deploy` |
-| `deploy:preview` | build then `wrangler versions upload` |
+
+Preview versions are uploaded with the command in verify-deploy.md, since each needs its own alias.
 
 ## Layout
 
@@ -77,11 +86,16 @@ that is deleted whole. (Astro skips `_`-prefixed folders when routing, so the hu
 
 ## Prototype-only behaviour
 
-- **`noindex`**: `robots.txt` disallows everything, and the Worker sends `X-Robots-Tag: noindex`.
-  Both are switched by the same `PROTOTYPE` flag.
+- **`noindex`**: `robots.txt` disallows everything, every page has `<meta name="robots"
+  content="noindex">`, and the response carries `X-Robots-Tag: noindex`. The adapter writes its own
+  `_headers` file into the build, so add the header by appending to that file in an
+  `astro:build:done` hook, never by shipping a `public/_headers` that replaces it. All three are
+  switched by the `PROTOTYPE` flag.
+- **Version**: `PROTOTYPE_VERSION` (env var, `v1`, `v2`…) feeds the badge, the hub and the
+  screenshot folder; bump it at the start of every version.
 - **Badge**: a small fixed "Prototype vN" pill linking to the hub.
-- **Hub**: page list with links; versions with preview URLs and changelog entries (from
-  `docs/CHANGELOG.md`); every `placeholder: true` item grouped by page; missing assets; stubbed
+- **Hub**: page list with links; versions with preview URLs and changelog entries (read from
+  `docs/CHANGELOG.md` at build time, so the entry must exist before the build); every `placeholder: true` item grouped by page; missing assets; stubbed
   features from `TODO-BACKEND.md`.
 - **Stubs**: forms validate client-side and show "Prototype — not sent" on submit; maps are a static
   image or a styled block with the address.
