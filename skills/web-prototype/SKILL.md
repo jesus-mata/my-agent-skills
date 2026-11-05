@@ -19,6 +19,20 @@ Three files decide who is right about what:
 A visual change always lands in the `.pen` file first and is then carried into code. Code that
 drifts from the design makes the design file worthless.
 
+## Delegation
+
+Design, code and every decision stay in the main session. Hand exploration and research to
+Sonnet subagents (`model: "sonnet"`, when the agent has them) so file dumps and page reads stay
+out of the main context, and keep only their summaries:
+
+- reading the sources and an existing site into `## Sources` facts
+- looking up current setup commands and APIs in the docs
+- mapping an existing prototype's files before an Iterate round
+
+They read and report only: no edits, no `.pen` changes, no questions to the user. Brief each one
+with the paths or URLs to read, the question to answer, and the shape of the summary to send back
+(facts with their source, usable copy, open questions). Run independent ones in parallel.
+
 ## Mode
 
 - `docs/BRIEF.md` and `design/*.pen` exist in the current directory → **Iterate**: follow
