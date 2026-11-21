@@ -1,11 +1,11 @@
 ---
-name: full-ticket-impl
+name: rex-implement-ticket
 description: Launches a GitHub issue to a PR in a fresh worktree, from an Opus agent in its own Rex tab that develops, reviews, fixes, opens the PR and pings you.
 argument-hint: <issue-number>
 disable-model-invocation: true
 ---
 
-# Full ticket implementation
+# Rex implement ticket
 
 Launch ticket $ARGUMENTS into its own worktree and Rex tab, then return. The agent in the tab owns the pipeline through the ping.
 

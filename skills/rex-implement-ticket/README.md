@@ -1,9 +1,9 @@
-# full-ticket-impl
+# rex-implement-ticket
 
 Fire-and-forget: one GitHub issue in, one PR and a phone ping out. Merging stays with you.
 
 ```
-/full-ticket-impl 42
+/rex-implement-ticket 42
 ```
 
 ## What it does
